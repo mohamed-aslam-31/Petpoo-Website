@@ -78,7 +78,15 @@ router.get("/customers", async (req, res): Promise<void> => {
   const [countResult] = await db.select({ count: sql<number>`cast(count(*) as int)` }).from(customersTable).where(where);
   const rows = await db.select().from(customersTable).where(where).orderBy(customersTable.name).limit(limit).offset(offset);
 
-  res.json({ data: rows.map(parseCustomer), total: countResult.count, page, limit });
+  // Compute real-time outstanding for each customer so it's always accurate regardless of DB state
+  const data = await Promise.all(
+    rows.map(async (row) => ({
+      ...parseCustomer(row),
+      outstanding: await computeOutstanding(row.id),
+    })),
+  );
+
+  res.json({ data, total: countResult.count, page, limit });
 });
 
 router.post("/customers", async (req, res): Promise<void> => {
