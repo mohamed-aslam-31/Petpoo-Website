@@ -14,6 +14,8 @@ import { Categories } from "./pages/inventory/categories";
 import { Brands } from "./pages/inventory/brands";
 import { Stock } from "./pages/inventory/stock";
 import { Invoices } from "./pages/billing/invoices";
+import { Quotations } from "./pages/billing/quotations";
+import { CreditNotes } from "./pages/billing/credit-notes";
 import { Orders } from "./pages/orders";
 import { Customers } from "./pages/customers";
 import { CustomerDetail } from "./pages/customers/detail";
@@ -60,7 +62,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Login} />
-      
+
       {/* Protected Routes */}
       <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} />} />
       <Route path="/inventory/products" component={() => <ProtectedRoute component={Products} />} />
@@ -68,6 +70,8 @@ function Router() {
       <Route path="/inventory/brands" component={() => <ProtectedRoute component={Brands} />} />
       <Route path="/inventory/stock" component={() => <ProtectedRoute component={Stock} />} />
       <Route path="/billing/invoices" component={() => <ProtectedRoute component={Invoices} />} />
+      <Route path="/billing/quotations" component={() => <ProtectedRoute component={Quotations} />} />
+      <Route path="/billing/credit-notes" component={() => <ProtectedRoute component={CreditNotes} />} />
       <Route path="/orders" component={() => <ProtectedRoute component={Orders} />} />
       <Route path="/customers" component={() => <ProtectedRoute component={Customers} />} />
       <Route path="/customers/:id" component={() => <ProtectedRoute component={CustomerDetail} />} />

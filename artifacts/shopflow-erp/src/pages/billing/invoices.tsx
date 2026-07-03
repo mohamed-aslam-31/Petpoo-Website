@@ -157,7 +157,7 @@ export function Invoices() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Invoices</h2>
-          <p className="text-muted-foreground mt-1">Manage billing, estimates, and quotations.</p>
+          <p className="text-muted-foreground mt-1">Manage GST and Non-GST billing invoices.</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2" onClick={() => setShowFilters((v) => !v)}>
@@ -200,9 +200,6 @@ export function Invoices() {
                     <SelectItem value="all">All Types</SelectItem>
                     <SelectItem value="gst">GST Invoice</SelectItem>
                     <SelectItem value="non_gst">Non-GST</SelectItem>
-                    <SelectItem value="estimate">Estimate</SelectItem>
-                    <SelectItem value="quotation">Quotation</SelectItem>
-                    <SelectItem value="credit">Credit Note</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

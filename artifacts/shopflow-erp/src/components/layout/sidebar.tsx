@@ -6,6 +6,8 @@ import {
   Briefcase,
   ArrowRightLeft,
   FileText,
+  ClipboardList,
+  FileMinus,
   ShoppingCart,
   Users,
   Building2,
@@ -19,8 +21,8 @@ import { cn } from "@/lib/utils";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { 
-    name: "Inventory", 
+  {
+    name: "Inventory",
     items: [
       { name: "Products", href: "/inventory/products", icon: Package },
       { name: "Categories", href: "/inventory/categories", icon: Tags },
@@ -32,6 +34,8 @@ const navigation = [
     name: "Billing",
     items: [
       { name: "Invoices", href: "/billing/invoices", icon: FileText },
+      { name: "Quotations", href: "/billing/quotations", icon: ClipboardList },
+      { name: "Credit Notes", href: "/billing/credit-notes", icon: FileMinus },
     ]
   },
   { name: "Orders", href: "/orders", icon: ShoppingCart },

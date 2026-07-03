@@ -31,7 +31,7 @@ const itemSchema = z.object({
 
 const schema = z.object({
   customerId: z.coerce.number().min(1, "Customer required"),
-  type: z.string().min(1),
+  type: z.enum(["gst", "non_gst"]),
   status: z.string().optional(),
   discount: z.coerce.number().min(0).optional(),
   transport: z.coerce.number().min(0).optional(),
@@ -45,8 +45,14 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
+const today = new Date().toISOString().split("T")[0];
 const emptyItem = { productId: 0, quantity: 1, unitPrice: 0, discount: 0, gstPercent: 0 };
-const empty: FormValues = { customerId: 0, type: "gst", status: "completed", discount: 0, transport: 0, packageCharge: 0, otherCharge: 0, paymentMethod: "cash", paidAmount: 0, dueDate: "", notes: "", items: [{ ...emptyItem }] };
+const empty: FormValues = {
+  customerId: 0, type: "gst", status: "completed",
+  discount: 0, transport: 0, packageCharge: 0, otherCharge: 0,
+  paymentMethod: "cash", paidAmount: 0, dueDate: today, notes: "",
+  items: [{ ...emptyItem }],
+};
 
 interface InvoiceToEdit {
   id: number;
@@ -76,12 +82,18 @@ export function InvoiceFormDialog({
   const { data: customers } = useListCustomers({ limit: 200 });
   const { data: products } = useListProducts({ limit: 200 });
 
+  // Normalise invoice type — strip legacy values
+  function normaliseType(t: string): "gst" | "non_gst" {
+    if (t === "non_gst") return "non_gst";
+    return "gst";
+  }
+
   useEffect(() => {
     if (open) {
       if (invoice) {
         form.reset({
           customerId: invoice.customerId,
-          type: invoice.type,
+          type: normaliseType(invoice.type),
           status: invoice.status ?? "completed",
           discount: invoice.discount,
           transport: invoice.transport,
@@ -89,7 +101,7 @@ export function InvoiceFormDialog({
           otherCharge: invoice.otherCharge ?? 0,
           paymentMethod: invoice.paymentMethod ?? "cash",
           paidAmount: invoice.paidAmount,
-          dueDate: invoice.dueDate ?? "",
+          dueDate: invoice.dueDate ?? today,
           notes: invoice.notes ?? "",
           items: invoice.items.length > 0
             ? invoice.items.map((it: any) => ({
@@ -102,7 +114,7 @@ export function InvoiceFormDialog({
             : [{ ...emptyItem }],
         });
       } else {
-        form.reset(empty);
+        form.reset({ ...empty, dueDate: new Date().toISOString().split("T")[0] });
       }
     }
   }, [open, invoice, form]);
@@ -123,12 +135,15 @@ export function InvoiceFormDialog({
     },
   });
 
+  const invoiceType = form.watch("type");
+  const isGst = invoiceType === "gst";
+
   const watchedItems = form.watch("items");
   const itemsTotal = watchedItems.reduce((sum, item) => {
     const qty = Number(item.quantity) || 0;
     const price = Number(item.unitPrice) || 0;
     const disc = Number(item.discount) || 0;
-    const gst = Number(item.gstPercent) || 0;
+    const gst = isGst ? (Number(item.gstPercent) || 0) : 0;
     return sum + qty * price * (1 - disc / 100) * (1 + gst / 100);
   }, 0);
   const transport = Number(form.watch("transport")) || 0;
@@ -141,6 +156,10 @@ export function InvoiceFormDialog({
 
   function onSubmit(values: FormValues) {
     const payload = { ...values, dueDate: values.dueDate || undefined };
+    // Zero out GST for non-GST invoices
+    if (values.type === "non_gst") {
+      payload.items = payload.items.map((item) => ({ ...item, gstPercent: 0 }));
+    }
     if (isEditing && invoice) {
       updateMutation.mutate({ id: invoice.id, data: payload as any });
     } else {
@@ -164,7 +183,7 @@ export function InvoiceFormDialog({
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Invoice" : "Create Invoice"}</DialogTitle>
-          <DialogDescription>{isEditing ? "Update invoice details and line items." : "Create a new GST invoice, estimate, or quotation."}</DialogDescription>
+          <DialogDescription>{isEditing ? "Update invoice details and line items." : "Create a new GST or Non-GST invoice."}</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -184,9 +203,6 @@ export function InvoiceFormDialog({
                     <SelectContent>
                       <SelectItem value="gst">GST Invoice</SelectItem>
                       <SelectItem value="non_gst">Non-GST Invoice</SelectItem>
-                      <SelectItem value="estimate">Estimate</SelectItem>
-                      <SelectItem value="quotation">Quotation</SelectItem>
-                      <SelectItem value="credit">Credit Note</SelectItem>
                     </SelectContent>
                   </Select><FormMessage />
                 </FormItem>
@@ -230,7 +246,7 @@ export function InvoiceFormDialog({
                 <FormItem><FormLabel>Other Charges (₹)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="dueDate" render={({ field }) => (
-                <FormItem><FormLabel>Due Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
             </div>
             {isOrderLinked && (
@@ -246,7 +262,7 @@ export function InvoiceFormDialog({
                 )}
               </div>
               {fields.map((field, index) => (
-                <div key={field.id} className="grid grid-cols-12 gap-2 items-end p-2 rounded-md bg-muted/30">
+                <div key={field.id} className={`grid gap-2 items-end p-2 rounded-md bg-muted/30 ${isGst ? "grid-cols-12" : "grid-cols-10"}`}>
                   <div className="col-span-4">
                     <label className="text-xs font-medium leading-none mb-1 block">Product</label>
                     {isOrderLinked ? (
@@ -266,10 +282,12 @@ export function InvoiceFormDialog({
                     <label className="text-xs font-medium leading-none mb-1 block">Price (₹)</label>
                     <Input type="number" step="0.01" className="h-8 text-xs" {...form.register(`items.${index}.unitPrice`)} />
                   </div>
-                  <div className="col-span-2">
-                    <label className="text-xs font-medium leading-none mb-1 block">GST%</label>
-                    <Input type="number" step="0.01" className="h-8 text-xs" {...form.register(`items.${index}.gstPercent`)} />
-                  </div>
+                  {isGst && (
+                    <div className="col-span-2">
+                      <label className="text-xs font-medium leading-none mb-1 block">GST%</label>
+                      <Input type="number" step="0.01" className="h-8 text-xs" {...form.register(`items.${index}.gstPercent`)} />
+                    </div>
+                  )}
                   <div className="col-span-1">
                     <label className="text-xs font-medium leading-none mb-1 block">Disc%</label>
                     <Input type="number" step="0.01" className="h-8 text-xs" {...form.register(`items.${index}.discount`)} />
