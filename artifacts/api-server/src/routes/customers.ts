@@ -30,6 +30,35 @@ function parseCustomer(c: any) {
   };
 }
 
+/** Compute real-time outstanding for a customer from orders + invoices − payments */
+async function computeOutstanding(customerId: number): Promise<number> {
+  const orders = await db
+    .select({ total: ordersTable.total })
+    .from(ordersTable)
+    .where(eq(ordersTable.customerId, customerId));
+
+  const invoices = await db
+    .select({ total: invoicesTable.total })
+    .from(invoicesTable)
+    .where(eq(invoicesTable.customerId, customerId));
+
+  const payments = await db
+    .select({ amount: paymentsTable.amount })
+    .from(paymentsTable)
+    .where(and(
+      eq(paymentsTable.entityType, "customer"),
+      eq(paymentsTable.entityId, customerId),
+    ));
+
+  const totalDebits =
+    orders.reduce((s, o) => s + parseFloat(String(o.total ?? "0")), 0) +
+    invoices.reduce((s, i) => s + parseFloat(String(i.total ?? "0")), 0);
+
+  const totalCredits = payments.reduce((s, p) => s + parseFloat(String(p.amount ?? "0")), 0);
+
+  return Math.max(0, totalDebits - totalCredits);
+}
+
 function generateCode(prefix: string, id: number) {
   return `${prefix}${String(id).padStart(4, "0")}`;
 }
@@ -63,7 +92,10 @@ router.get("/customers/:id", async (req, res): Promise<void> => {
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, params.data.id));
   if (!customer) { res.status(404).json({ error: "Customer not found" }); return; }
-  res.json(parseCustomer(customer));
+
+  // Compute real-time outstanding so it's always accurate regardless of DB state
+  const outstanding = await computeOutstanding(params.data.id);
+  res.json({ ...parseCustomer(customer), outstanding });
 });
 
 router.patch("/customers/:id", async (req, res): Promise<void> => {
@@ -95,50 +127,88 @@ router.get("/customers/:id/ledger", async (req, res): Promise<void> => {
   const entries: any[] = [];
 
   orders.forEach(o => {
+    const orderTotal = parseFloat(String(o.total ?? "0"));
+    const paid = parseFloat(String(o.paidAmount ?? "0"));
+
+    // Debit: full order amount (what customer owes)
     entries.push({
-      id: o.id,
+      id: `order-${o.id}`,
       date: o.createdAt.toISOString(),
       description: `Order #${o.orderNumber}`,
-      debit: parseFloat(String(o.total)),
+      debit: orderTotal,
       credit: 0,
       balance: 0,
       type: "order",
       referenceId: o.id,
     });
+
+    // If paid at order-time, record the credit immediately after
+    if (paid > 0) {
+      entries.push({
+        id: `order-pay-${o.id}`,
+        date: o.createdAt.toISOString(),
+        description: `Payment at order #${o.orderNumber} (${o.paymentMethod ?? "cash"})`,
+        debit: 0,
+        credit: paid,
+        balance: 0,
+        type: "payment",
+        referenceId: o.id,
+      });
+    }
   });
 
   invoices.forEach(i => {
+    const invoiceTotal = parseFloat(String(i.total ?? "0"));
+    const paid = parseFloat(String(i.paidAmount ?? "0"));
+
+    // Debit: full invoice amount
     entries.push({
-      id: i.id,
+      id: `invoice-${i.id}`,
       date: i.createdAt.toISOString(),
       description: `Invoice #${i.invoiceNumber}`,
-      debit: parseFloat(String(i.total)),
+      debit: invoiceTotal,
       credit: 0,
       balance: 0,
       type: "invoice",
       referenceId: i.id,
     });
+
+    // If paid at invoice-creation time, record the credit immediately after
+    if (paid > 0) {
+      entries.push({
+        id: `invoice-pay-${i.id}`,
+        date: i.createdAt.toISOString(),
+        description: `Payment at invoice #${i.invoiceNumber} (${i.paymentMethod ?? "cash"})`,
+        debit: 0,
+        credit: paid,
+        balance: 0,
+        type: "payment",
+        referenceId: i.id,
+      });
+    }
   });
 
   payments.forEach(p => {
     entries.push({
       id: p.id,
       date: p.createdAt.toISOString(),
-      description: `Payment - ${p.method}`,
+      description: `Payment - ${p.method}${p.notes ? ` (${p.notes})` : ""}`,
       debit: 0,
-      credit: parseFloat(String(p.amount)),
+      credit: parseFloat(String(p.amount ?? "0")),
       balance: 0,
       type: "payment",
       referenceId: p.id,
     });
   });
 
+  // Sort all entries by date ascending
   entries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+  // Compute running balance: debit = customer owes more, credit = customer paid
   let balance = 0;
   entries.forEach(e => {
     balance = balance + e.debit - e.credit;
-    e.balance = balance;
+    e.balance = parseFloat(balance.toFixed(2));
   });
 
   res.json(entries);
