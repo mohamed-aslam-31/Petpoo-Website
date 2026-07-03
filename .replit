@@ -35,4 +35,3 @@ externalPort = 8080
 
 [userenv.shared]
 BASE_PATH = "/"
-PORT = "5000"
