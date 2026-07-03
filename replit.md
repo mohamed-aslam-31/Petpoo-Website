@@ -4,8 +4,13 @@ A full-stack wholesale & retail ERP system for Indian merchants — inventory, b
 
 ## Run & Operate
 
-- `PORT=8080 pnpm --filter @workspace/api-server run dev` — run the API server (port 8080, proxied at `/api`)
-- `PORT=5000 BASE_PATH=/ pnpm --filter @workspace/shopflow-erp run dev` — run the frontend (port 5000, proxied at `/`)
+On Replit, use the managed artifact workflows — they handle port assignment automatically:
+- **`artifacts/api-server: API Server`** — API server (port 8080, proxied at `/api`)
+- **`artifacts/shopflow-erp: web`** — Frontend (port 5173 on Replit, proxied at `/`)
+
+To run manually outside Replit:
+- `PORT=8080 pnpm --filter @workspace/api-server run dev` — API server
+- `PORT=5000 BASE_PATH=/ pnpm --filter @workspace/shopflow-erp run dev` — Frontend
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
