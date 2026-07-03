@@ -24,32 +24,28 @@ import { Separator } from "@/components/ui/separator";
 const itemSchema = z.object({
   productId: z.coerce.number().min(1, "Product required"),
   quantity: z.coerce.number().min(1, "Qty must be ≥ 1"),
-  unitPrice: z.coerce.number().min(0),
-  discount: z.coerce.number().min(0).optional(),
-  gstPercent: z.coerce.number().min(0).max(100).optional(),
 });
 
 const schema = z.object({
   customerId: z.coerce.number().min(1, "Customer required"),
-  type: z.string().min(1),
-  discount: z.coerce.number().min(0).optional(),
-  paymentMethod: z.string().optional(),
-  paidAmount: z.coerce.number().min(0).optional(),
+  orderDate: z.string().min(1, "Date required"),
   notes: z.string().optional(),
   items: z.array(itemSchema).min(1, "At least one item required"),
 });
 type FormValues = z.infer<typeof schema>;
 
-const emptyItem = { productId: 0, quantity: 1, unitPrice: 0, discount: 0, gstPercent: 0 };
-const empty: FormValues = { customerId: 0, type: "retail", discount: 0, paymentMethod: "cash", paidAmount: 0, notes: "", items: [{ ...emptyItem }] };
+const emptyItem = { productId: 0, quantity: 1 };
+const empty: FormValues = {
+  customerId: 0,
+  orderDate: new Date().toISOString().slice(0, 10),
+  notes: "",
+  items: [{ ...emptyItem }],
+};
 
 interface OrderToEdit {
   id: number;
   customerId: number;
-  type: string;
-  discount: number;
-  paymentMethod?: string | null;
-  paidAmount: number;
+  orderDate: string;
   notes?: string | null;
   items: any[];
 }
@@ -70,19 +66,10 @@ export function OrderFormDialog({
       if (order) {
         form.reset({
           customerId: order.customerId,
-          type: order.type,
-          discount: order.discount,
-          paymentMethod: order.paymentMethod ?? "cash",
-          paidAmount: order.paidAmount,
+          orderDate: order.orderDate ? order.orderDate.slice(0, 10) : new Date().toISOString().slice(0, 10),
           notes: order.notes ?? "",
           items: order.items.length > 0
-            ? order.items.map((it: any) => ({
-                productId: it.productId ?? 0,
-                quantity: it.quantity ?? 1,
-                unitPrice: it.unitPrice ?? 0,
-                discount: it.discount ?? 0,
-                gstPercent: it.gstPercent ?? 0,
-              }))
+            ? order.items.map((it: any) => ({ productId: it.productId ?? 0, quantity: it.quantity ?? 1 }))
             : [{ ...emptyItem }],
         });
       } else {
@@ -95,7 +82,7 @@ export function OrderFormDialog({
 
   const createMutation = useCreateOrder({
     mutation: {
-      onSuccess: () => { toast.success("Order created"); invalidate(); onOpenChange(false); },
+      onSuccess: () => { toast.success("Order booked"); invalidate(); onOpenChange(false); },
       onError: (e: any) => toast.error(e?.message ?? "Failed to create order"),
     },
   });
@@ -108,14 +95,6 @@ export function OrderFormDialog({
   });
 
   const watchedItems = form.watch("items");
-  const subtotal = watchedItems.reduce((sum, item) => {
-    const qty = Number(item.quantity) || 0;
-    const price = Number(item.unitPrice) || 0;
-    const disc = Number(item.discount) || 0;
-    const gst = Number(item.gstPercent) || 0;
-    const lineTotal = qty * price * (1 - disc / 100) * (1 + gst / 100);
-    return sum + lineTotal;
-  }, 0);
 
   function onSubmit(values: FormValues) {
     if (isEditing && order) {
@@ -126,22 +105,17 @@ export function OrderFormDialog({
   }
 
   function handleProductChange(index: number, productId: string) {
-    const product = products?.data?.find((p) => p.id === Number(productId));
-    if (product) {
-      form.setValue(`items.${index}.productId`, Number(productId));
-      form.setValue(`items.${index}.unitPrice`, Number(product.retailPrice) || 0);
-      form.setValue(`items.${index}.gstPercent`, Number(product.gstPercent) || 0);
-    }
+    form.setValue(`items.${index}.productId`, Number(productId));
   }
 
   const isPending = createMutation.isPending || updateMutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Order" : "Create Order"}</DialogTitle>
-          <DialogDescription>{isEditing ? "Update order details and items." : "Create a new retail or wholesale order."}</DialogDescription>
+          <DialogTitle>{isEditing ? "Edit Order" : "Book Order"}</DialogTitle>
+          <DialogDescription>{isEditing ? "Update the booking details and items." : "Book stock for a customer. Payment and billing happen when you complete this order."}</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -154,30 +128,8 @@ export function OrderFormDialog({
                   </Select><FormMessage />
                 </FormItem>
               )} />
-              <FormField control={form.control} name="type" render={({ field }) => (
-                <FormItem><FormLabel>Type</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent><SelectItem value="retail">Retail</SelectItem><SelectItem value="wholesale">Wholesale</SelectItem></SelectContent>
-                  </Select><FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="paymentMethod" render={({ field }) => (
-                <FormItem><FormLabel>Payment Method</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
-                    <SelectContent>
-                      <SelectItem value="cash">Cash</SelectItem>
-                      <SelectItem value="upi">UPI</SelectItem>
-                      <SelectItem value="card">Card</SelectItem>
-                      <SelectItem value="bank">Bank Transfer</SelectItem>
-                      <SelectItem value="credit">Credit</SelectItem>
-                    </SelectContent>
-                  </Select><FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="paidAmount" render={({ field }) => (
-                <FormItem><FormLabel>Paid Amount (₹)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
+              <FormField control={form.control} name="orderDate" render={({ field }) => (
+                <FormItem><FormLabel>Order Date</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
             </div>
 
@@ -189,28 +141,16 @@ export function OrderFormDialog({
               </div>
               {fields.map((field, index) => (
                 <div key={field.id} className="grid grid-cols-12 gap-2 items-end p-2 rounded-md bg-muted/30">
-                  <div className="col-span-4">
+                  <div className="col-span-8">
                     <label className="text-xs font-medium leading-none mb-1 block">Product</label>
                     <Select onValueChange={(v) => handleProductChange(index, v)} value={watchedItems[index]?.productId ? String(watchedItems[index].productId) : ""}>
                       <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select..." /></SelectTrigger>
                       <SelectContent>{products?.data?.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
-                  <div className="col-span-2">
+                  <div className="col-span-3">
                     <label className="text-xs font-medium leading-none mb-1 block">Qty</label>
                     <Input type="number" className="h-8 text-xs" {...form.register(`items.${index}.quantity`)} />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="text-xs font-medium leading-none mb-1 block">Price</label>
-                    <Input type="number" step="0.01" className="h-8 text-xs" {...form.register(`items.${index}.unitPrice`)} />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="text-xs font-medium leading-none mb-1 block">GST%</label>
-                    <Input type="number" step="0.01" className="h-8 text-xs" {...form.register(`items.${index}.gstPercent`)} />
-                  </div>
-                  <div className="col-span-1">
-                    <label className="text-xs font-medium leading-none mb-1 block">Disc%</label>
-                    <Input type="number" step="0.01" className="h-8 text-xs" {...form.register(`items.${index}.discount`)} />
                   </div>
                   <div className="col-span-1 flex justify-end">
                     <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(index)} disabled={fields.length === 1}><Trash2 className="h-3 w-3" /></Button>
@@ -220,18 +160,13 @@ export function OrderFormDialog({
               {form.formState.errors.items?.root && <p className="text-sm text-destructive">{form.formState.errors.items.root.message}</p>}
             </div>
 
-            <div className="flex justify-between items-center text-sm font-medium pt-2">
-              <span className="text-muted-foreground">Estimated Total</span>
-              <span className="text-lg font-bold">₹{subtotal.toFixed(2)}</span>
-            </div>
-
             <FormField control={form.control} name="notes" render={({ field }) => (
               <FormItem><FormLabel>Notes</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
             )} />
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" disabled={isPending}>{isPending ? "Saving..." : isEditing ? "Save Changes" : "Create Order"}</Button>
+              <Button type="submit" disabled={isPending}>{isPending ? "Saving..." : isEditing ? "Save Changes" : "Book Order"}</Button>
             </DialogFooter>
           </form>
         </Form>

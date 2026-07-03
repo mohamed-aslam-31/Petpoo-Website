@@ -12,16 +12,12 @@ export interface Order {
   orderNumber: string;
   customerId: number;
   customerName: string;
-  type: string;
   status: string;
-  subtotal: number;
-  discount: number;
-  gstAmount: number;
-  total: number;
-  paidAmount?: number;
-  paymentStatus: string;
+  orderDate: string;
   /** @nullable */
-  paymentMethod?: string | null;
+  invoiceId?: number | null;
+  /** @nullable */
+  invoiceNumber?: string | null;
   /** @nullable */
   notes?: string | null;
   items?: OrderItem[];

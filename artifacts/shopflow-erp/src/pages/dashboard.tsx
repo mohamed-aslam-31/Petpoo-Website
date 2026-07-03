@@ -34,7 +34,7 @@ export function Dashboard() {
     },
     {
       title: "Pending Orders",
-      value: (summary?.retailOrders || 0) + (summary?.wholesaleOrders || 0),
+      value: summary?.pendingOrders || 0,
       icon: ShoppingCart,
       trend: "-2.4%",
       trendUp: false,
@@ -170,9 +170,7 @@ export function Dashboard() {
                 <TableHead>Order</TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Date</TableHead>
-                <TableHead>Type</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Total</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -182,23 +180,17 @@ export function Dashboard() {
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
-                  <TableCell><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
-                  <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
                 </TableRow>
               )) : recentOrders?.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">No recent orders.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No recent orders.</TableCell></TableRow>
               ) : recentOrders?.map((order) => (
                 <TableRow key={order.id}>
                   <TableCell className="font-medium text-primary">{order.orderNumber}</TableCell>
                   <TableCell>{order.customerName}</TableCell>
                   <TableCell className="text-muted-foreground">{format(new Date(order.createdAt), "MMM d")}</TableCell>
                   <TableCell>
-                    <Badge variant="outline" className={order.type === 'wholesale' ? 'bg-blue-50 text-blue-700' : 'bg-slate-50 text-slate-700'}>{order.type}</Badge>
+                    <Badge variant="secondary" className={order.status === 'completed' ? 'bg-green-100 text-green-700' : order.status === 'pending' ? 'bg-amber-100 text-amber-700' : order.status === 'cancelled' ? 'bg-slate-100 text-slate-600' : 'bg-red-100 text-red-700'}>{order.status}</Badge>
                   </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className={order.status === 'completed' ? 'bg-green-100 text-green-700' : order.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-700'}>{order.status}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-medium">₹{order.total}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

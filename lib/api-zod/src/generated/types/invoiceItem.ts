@@ -6,7 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface OrderItemInput {
+export interface InvoiceItem {
   productId: number;
+  productName: string;
+  sku?: string;
   quantity: number;
+  unitPrice: number;
+  discount?: number;
+  gstPercent?: number;
+  total: number;
 }

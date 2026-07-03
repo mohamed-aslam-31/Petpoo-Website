@@ -13,6 +13,8 @@ export interface InvoiceUpdate {
   status?: string;
   discount?: number;
   transport?: number;
+  packageCharge?: number;
+  otherCharge?: number;
   paymentStatus?: string;
   paidAmount?: number;
   paymentMethod?: string;

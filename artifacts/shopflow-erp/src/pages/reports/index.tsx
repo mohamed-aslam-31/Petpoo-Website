@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { IndianRupee, TrendingUp, TrendingDown, FileText } from "lucide-react";
 
 export function Reports() {
-  const { data: profitLoss, isLoading: isLoadingPl } = useGetProfitLossReport({ period: 'monthly' });
+  const { data: profitLoss, isLoading: isLoadingPl } = useGetProfitLossReport();
   const { data: sales, isLoading: isLoadingSales } = useGetSalesReport({ period: 'monthly' });
 
   return (

@@ -23,7 +23,7 @@ import { InvoiceFormDialog } from "./invoice-form-dialog";
 
 const PAGE_SIZE = 20;
 
-const INVOICE_STATUSES = ["draft", "pending", "paid", "overdue", "cancelled"] as const;
+const INVOICE_STATUSES = ["processing", "completed", "returned"] as const;
 
 export function Invoices() {
   const [search, setSearch] = useState("");
@@ -145,11 +145,9 @@ export function Invoices() {
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
-      case "paid": return "bg-green-100 text-green-700 hover:bg-green-100";
-      case "pending": return "bg-amber-100 text-amber-700 hover:bg-amber-100";
-      case "overdue": return "bg-red-100 text-red-700 hover:bg-red-100";
-      case "draft": return "bg-slate-100 text-slate-700 hover:bg-slate-100";
-      case "cancelled": return "bg-slate-200 text-slate-500 hover:bg-slate-200";
+      case "completed": return "bg-green-100 text-green-700 hover:bg-green-100";
+      case "processing": return "bg-amber-100 text-amber-700 hover:bg-amber-100";
+      case "returned": return "bg-red-100 text-red-700 hover:bg-red-100";
       default: return "bg-slate-100 text-slate-700 hover:bg-slate-100";
     }
   };

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { sql, lte, gte, desc } from "drizzle-orm";
+import { sql, lte, gte, desc, ne } from "drizzle-orm";
 import { db, productsTable, customersTable, suppliersTable, ordersTable, invoicesTable, expensesTable } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -14,27 +14,22 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
 
   const [todaySalesResult] = await db
     .select({ total: sql<number>`coalesce(cast(sum(cast(total as numeric)) as float), 0)` })
-    .from(ordersTable)
-    .where(gte(ordersTable.createdAt, todayStart));
+    .from(invoicesTable)
+    .where(sql`${invoicesTable.createdAt} >= ${todayStart} and ${invoicesTable.status} != 'returned'`);
 
   const [totalProducts] = await db
     .select({ count: sql<number>`cast(count(*) as int)` })
     .from(productsTable);
 
-  const [retailOrders] = await db
+  const [pendingOrders] = await db
     .select({ count: sql<number>`cast(count(*) as int)` })
     .from(ordersTable)
-    .where(sql`type = 'retail'`);
-
-  const [wholesaleOrders] = await db
-    .select({ count: sql<number>`cast(count(*) as int)` })
-    .from(ordersTable)
-    .where(sql`type = 'wholesale'`);
+    .where(sql`status = 'pending'`);
 
   const [pendingPaymentsResult] = await db
     .select({ total: sql<number>`coalesce(cast(sum(cast(total as numeric) - cast(paid_amount as numeric)) as float), 0)` })
-    .from(ordersTable)
-    .where(sql`payment_status != 'paid'`);
+    .from(invoicesTable)
+    .where(sql`payment_status != 'paid' and status != 'returned'`);
 
   const [totalCustomers] = await db
     .select({ count: sql<number>`cast(count(*) as int)` })
@@ -55,14 +50,13 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
 
   const [monthlyRevenue] = await db
     .select({ total: sql<number>`coalesce(cast(sum(cast(total as numeric)) as float), 0)` })
-    .from(ordersTable)
-    .where(gte(ordersTable.createdAt, monthStart));
+    .from(invoicesTable)
+    .where(sql`${invoicesTable.createdAt} >= ${monthStart} and ${invoicesTable.status} != 'returned'`);
 
   res.json({
     todaySales: todaySalesResult.total ?? 0,
     totalProducts: totalProducts.count ?? 0,
-    retailOrders: retailOrders.count ?? 0,
-    wholesaleOrders: wholesaleOrders.count ?? 0,
+    pendingOrders: pendingOrders.count ?? 0,
     pendingPayments: pendingPaymentsResult.total ?? 0,
     totalCustomers: totalCustomers.count ?? 0,
     stockValue: stockValue.value ?? 0,
@@ -76,13 +70,13 @@ router.get("/dashboard/sales-chart", async (req, res): Promise<void> => {
   const rows = await db.execute(sql`
     SELECT
       to_char(generate_series, 'YYYY-MM-DD') as date,
-      COALESCE(SUM(CASE WHEN o.created_at::date = generate_series THEN CAST(o.total AS numeric) ELSE 0 END), 0) as sales
+      COALESCE(SUM(CASE WHEN i.created_at::date = generate_series THEN CAST(i.total AS numeric) ELSE 0 END), 0) as sales
     FROM generate_series(
       CURRENT_DATE - INTERVAL '29 days',
       CURRENT_DATE,
       '1 day'::interval
     ) as generate_series
-    LEFT JOIN orders o ON o.created_at::date = generate_series
+    LEFT JOIN invoices i ON i.created_at::date = generate_series AND i.status != 'returned'
     GROUP BY generate_series
     ORDER BY generate_series ASC
   `);
@@ -121,8 +115,8 @@ router.get("/dashboard/top-products", async (req, res): Promise<void> => {
       COALESCE(SUM((item->>'total')::numeric), 0) as revenue
     FROM products p
     LEFT JOIN categories c ON c.id = p.category_id
-    LEFT JOIN orders o ON TRUE
-    LEFT JOIN LATERAL jsonb_array_elements(o.items) as item ON (item->>'productId')::int = p.id
+    LEFT JOIN invoices i ON i.status != 'returned'
+    LEFT JOIN LATERAL jsonb_array_elements(i.items) as item ON (item->>'productId')::int = p.id
     GROUP BY p.id, p.name, c.name
     ORDER BY total_sold DESC
     LIMIT 10
@@ -142,9 +136,7 @@ router.get("/dashboard/recent-orders", async (req, res): Promise<void> => {
     .select({
       id: ordersTable.id,
       orderNumber: ordersTable.orderNumber,
-      total: ordersTable.total,
       status: ordersTable.status,
-      type: ordersTable.type,
       createdAt: ordersTable.createdAt,
       customerName: customersTable.name,
     })
@@ -157,9 +149,7 @@ router.get("/dashboard/recent-orders", async (req, res): Promise<void> => {
     id: r.id,
     orderNumber: r.orderNumber,
     customerName: r.customerName ?? "Unknown",
-    total: parseFloat(String(r.total)),
     status: r.status,
-    type: r.type,
     createdAt: r.createdAt.toISOString(),
   })));
 });
@@ -175,20 +165,27 @@ router.get("/reports/sales", async (req, res): Promise<void> => {
     SELECT
       ${groupBy} as period,
       CAST(SUM(CAST(total AS numeric)) AS float) as total_revenue,
-      COUNT(*) as total_orders,
       COUNT(*) as total_invoices,
       CAST(SUM(CAST(total AS numeric)) AS float) as total_sales,
       0 as total_profit
-    FROM orders
+    FROM invoices
+    WHERE status != 'returned'
     GROUP BY ${groupBy}
     ORDER BY ${groupBy} DESC
     LIMIT 12
   `));
 
+  const orderRows = await db.execute(sql.raw(`
+    SELECT ${groupBy} as period, COUNT(*) as total_orders
+    FROM orders
+    GROUP BY ${groupBy}
+  `));
+  const orderCountMap = new Map((orderRows.rows as any[]).map(r => [r.period, parseInt(r.total_orders ?? "0")]));
+
   res.json((rows.rows as any[]).map(r => ({
     period: r.period,
     totalSales: parseFloat(r.total_sales ?? "0"),
-    totalOrders: parseInt(r.total_orders ?? "0"),
+    totalOrders: orderCountMap.get(r.period) ?? 0,
     totalInvoices: parseInt(r.total_invoices ?? "0"),
     totalRevenue: parseFloat(r.total_revenue ?? "0"),
     totalProfit: parseFloat(r.total_profit ?? "0"),
@@ -198,7 +195,8 @@ router.get("/reports/sales", async (req, res): Promise<void> => {
 router.get("/reports/profit-loss", async (req, res): Promise<void> => {
   const [revenue] = await db
     .select({ total: sql<number>`coalesce(cast(sum(cast(total as numeric)) as float), 0)` })
-    .from(ordersTable);
+    .from(invoicesTable)
+    .where(ne(invoicesTable.status, "returned"));
 
   const [expensesTotal] = await db
     .select({ total: sql<number>`coalesce(cast(sum(cast(amount as numeric)) as float), 0)` })

@@ -56,6 +56,7 @@ import type {
   ListStockMovementsParams,
   ListSuppliersParams,
   Order,
+  OrderCompleteInput,
   OrderInput,
   OrderUpdate,
   OrdersPage,
@@ -2664,6 +2665,217 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getDeleteOrderMutationOptions(options));
+    }
+
+export const getCompleteOrderUrl = (id: number,) => {
+
+
+
+
+  return `/api/orders/${id}/complete`
+}
+
+/**
+ * @summary Complete an order and generate its invoice
+ */
+export const completeOrder = async (id: number,
+    orderCompleteInput: OrderCompleteInput, options?: RequestInit): Promise<Invoice> => {
+
+  return customFetch<Invoice>(getCompleteOrderUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(orderCompleteInput)
+  }
+);}
+
+
+
+
+export const getCompleteOrderMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeOrder>>, TError,{id: number;data: BodyType<OrderCompleteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeOrder>>, TError,{id: number;data: BodyType<OrderCompleteInput>}, TContext> => {
+
+const mutationKey = ['completeOrder'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeOrder>>, {id: number;data: BodyType<OrderCompleteInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  completeOrder(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteOrderMutationResult = NonNullable<Awaited<ReturnType<typeof completeOrder>>>
+    export type CompleteOrderMutationBody = BodyType<OrderCompleteInput>
+    export type CompleteOrderMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Complete an order and generate its invoice
+ */
+export const useCompleteOrder = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeOrder>>, TError,{id: number;data: BodyType<OrderCompleteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof completeOrder>>,
+        TError,
+        {id: number;data: BodyType<OrderCompleteInput>},
+        TContext
+      > => {
+      return useMutation(getCompleteOrderMutationOptions(options));
+    }
+
+export const getCancelOrderUrl = (id: number,) => {
+
+
+
+
+  return `/api/orders/${id}/cancel`
+}
+
+/**
+ * @summary Cancel a pending order and restore stock
+ */
+export const cancelOrder = async (id: number, options?: RequestInit): Promise<Order> => {
+
+  return customFetch<Order>(getCancelOrderUrl(id),
+  {
+    ...options,
+    method: 'PATCH'
+
+
+  }
+);}
+
+
+
+
+export const getCancelOrderMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelOrder>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelOrder>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['cancelOrder'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelOrder>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  cancelOrder(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelOrderMutationResult = NonNullable<Awaited<ReturnType<typeof cancelOrder>>>
+
+    export type CancelOrderMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Cancel a pending order and restore stock
+ */
+export const useCancelOrder = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelOrder>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelOrder>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getCancelOrderMutationOptions(options));
+    }
+
+export const getReturnOrderUrl = (id: number,) => {
+
+
+
+
+  return `/api/orders/${id}/return`
+}
+
+/**
+ * @summary Mark a completed order as returned, restore stock and mark its invoice returned
+ */
+export const returnOrder = async (id: number, options?: RequestInit): Promise<Order> => {
+
+  return customFetch<Order>(getReturnOrderUrl(id),
+  {
+    ...options,
+    method: 'PATCH'
+
+
+  }
+);}
+
+
+
+
+export const getReturnOrderMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof returnOrder>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof returnOrder>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['returnOrder'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof returnOrder>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  returnOrder(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReturnOrderMutationResult = NonNullable<Awaited<ReturnType<typeof returnOrder>>>
+
+    export type ReturnOrderMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Mark a completed order as returned, restore stock and mark its invoice returned
+ */
+export const useReturnOrder = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof returnOrder>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof returnOrder>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getReturnOrderMutationOptions(options));
     }
 
 export const getListInvoicesUrl = (params?: ListInvoicesParams,) => {

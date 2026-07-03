@@ -9,7 +9,6 @@
 export type ListOrdersParams = {
 search?: string;
 status?: string;
-type?: string;
 dateFrom?: string;
 dateTo?: string;
 page?: number;

@@ -2,13 +2,15 @@ import { pgTable, text, serial, timestamp, integer, numeric, jsonb, date } from 
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
+import { ordersTable } from "./orders";
 
 export const invoicesTable = pgTable("invoices", {
   id: serial("id").primaryKey(),
   invoiceNumber: text("invoice_number").notNull().unique(),
   customerId: integer("customer_id").notNull().references(() => customersTable.id),
+  orderId: integer("order_id").references(() => ordersTable.id),
   type: text("type").notNull().default("gst"),
-  status: text("status").notNull().default("active"),
+  status: text("status").notNull().default("processing"),
   subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),
   discount: numeric("discount", { precision: 12, scale: 2 }).notNull().default("0"),
   cgst: numeric("cgst", { precision: 12, scale: 2 }).notNull().default("0"),
@@ -16,6 +18,8 @@ export const invoicesTable = pgTable("invoices", {
   igst: numeric("igst", { precision: 12, scale: 2 }).notNull().default("0"),
   gstAmount: numeric("gst_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   transport: numeric("transport", { precision: 12, scale: 2 }).notNull().default("0"),
+  packageCharge: numeric("package_charge", { precision: 12, scale: 2 }).notNull().default("0"),
+  otherCharge: numeric("other_charge", { precision: 12, scale: 2 }).notNull().default("0"),
   total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"),
   paidAmount: numeric("paid_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   paymentStatus: text("payment_status").notNull().default("unpaid"),

@@ -9,8 +9,7 @@
 export interface DashboardSummary {
   todaySales: number;
   totalProducts: number;
-  retailOrders: number;
-  wholesaleOrders: number;
+  pendingOrders: number;
   pendingPayments: number;
   totalCustomers: number;
   stockValue: number;

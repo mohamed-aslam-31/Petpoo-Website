@@ -12,8 +12,7 @@ export interface HealthStatus {
 export interface DashboardSummary {
   todaySales: number;
   totalProducts: number;
-  retailOrders: number;
-  wholesaleOrders: number;
+  pendingOrders: number;
   pendingPayments: number;
   totalCustomers: number;
   stockValue: number;
@@ -41,9 +40,7 @@ export interface RecentOrder {
   id: number;
   orderNumber: string;
   customerName: string;
-  total: number;
   status: string;
-  type: string;
   createdAt: string;
 }
 
@@ -315,10 +312,6 @@ export interface OrderItem {
   productName: string;
   sku?: string;
   quantity: number;
-  unitPrice: number;
-  discount?: number;
-  gstPercent?: number;
-  total: number;
 }
 
 export interface Order {
@@ -326,16 +319,12 @@ export interface Order {
   orderNumber: string;
   customerId: number;
   customerName: string;
-  type: string;
   status: string;
-  subtotal: number;
-  discount: number;
-  gstAmount: number;
-  total: number;
-  paidAmount?: number;
-  paymentStatus: string;
+  orderDate: string;
   /** @nullable */
-  paymentMethod?: string | null;
+  invoiceId?: number | null;
+  /** @nullable */
+  invoiceNumber?: string | null;
   /** @nullable */
   notes?: string | null;
   items?: OrderItem[];
@@ -352,39 +341,72 @@ export interface OrdersPage {
 export interface OrderItemInput {
   productId: number;
   quantity: number;
-  unitPrice: number;
-  discount?: number;
-  gstPercent?: number;
 }
-
-export type OrderInputType = typeof OrderInputType[keyof typeof OrderInputType];
-
-
-export const OrderInputType = {
-  retail: 'retail',
-  wholesale: 'wholesale',
-} as const;
 
 export interface OrderInput {
   customerId: number;
-  type: OrderInputType;
-  discount?: number;
-  paymentMethod?: string;
-  paidAmount?: number;
+  orderDate?: string;
   notes?: string;
   items: OrderItemInput[];
 }
 
 export interface OrderUpdate {
   customerId?: number;
-  type?: string;
-  status?: string;
-  discount?: number;
-  paymentStatus?: string;
-  paidAmount?: number;
-  paymentMethod?: string;
+  orderDate?: string;
   notes?: string;
   items?: OrderItemInput[];
+}
+
+export interface OrderCompleteItemInput {
+  productId: number;
+  quantity: number;
+  unitPrice: number;
+  discount?: number;
+  gstPercent?: number;
+}
+
+export type OrderCompleteInputInvoiceType = typeof OrderCompleteInputInvoiceType[keyof typeof OrderCompleteInputInvoiceType];
+
+
+export const OrderCompleteInputInvoiceType = {
+  gst: 'gst',
+  non_gst: 'non_gst',
+  estimate: 'estimate',
+  quotation: 'quotation',
+  credit: 'credit',
+} as const;
+
+export type OrderCompleteInputStatus = typeof OrderCompleteInputStatus[keyof typeof OrderCompleteInputStatus];
+
+
+export const OrderCompleteInputStatus = {
+  processing: 'processing',
+  completed: 'completed',
+} as const;
+
+export interface OrderCompleteInput {
+  invoiceType: OrderCompleteInputInvoiceType;
+  status: OrderCompleteInputStatus;
+  paymentMethod?: string;
+  paidAmount?: number;
+  transportCharge?: number;
+  packageCharge?: number;
+  otherCharge?: number;
+  discount?: number;
+  dueDate?: string;
+  notes?: string;
+  items: OrderCompleteItemInput[];
+}
+
+export interface InvoiceItem {
+  productId: number;
+  productName: string;
+  sku?: string;
+  quantity: number;
+  unitPrice: number;
+  discount?: number;
+  gstPercent?: number;
+  total: number;
 }
 
 export interface Invoice {
@@ -392,6 +414,10 @@ export interface Invoice {
   invoiceNumber: string;
   customerId: number;
   customerName: string;
+  /** @nullable */
+  orderId?: number | null;
+  /** @nullable */
+  orderNumber?: string | null;
   type: string;
   status: string;
   subtotal: number;
@@ -401,6 +427,8 @@ export interface Invoice {
   igst?: number;
   gstAmount: number;
   transport?: number;
+  packageCharge?: number;
+  otherCharge?: number;
   total: number;
   paidAmount?: number;
   paymentStatus: string;
@@ -410,7 +438,7 @@ export interface Invoice {
   dueDate?: string | null;
   /** @nullable */
   notes?: string | null;
-  items?: OrderItem[];
+  items?: InvoiceItem[];
   createdAt: string;
 }
 
@@ -440,11 +468,22 @@ export const InvoiceInputType = {
   credit: 'credit',
 } as const;
 
+export type InvoiceInputStatus = typeof InvoiceInputStatus[keyof typeof InvoiceInputStatus];
+
+
+export const InvoiceInputStatus = {
+  processing: 'processing',
+  completed: 'completed',
+} as const;
+
 export interface InvoiceInput {
   customerId: number;
   type: InvoiceInputType;
+  status?: InvoiceInputStatus;
   discount?: number;
   transport?: number;
+  packageCharge?: number;
+  otherCharge?: number;
   paymentMethod?: string;
   paidAmount?: number;
   dueDate?: string;
@@ -458,6 +497,8 @@ export interface InvoiceUpdate {
   status?: string;
   discount?: number;
   transport?: number;
+  packageCharge?: number;
+  otherCharge?: number;
   paymentStatus?: string;
   paidAmount?: number;
   paymentMethod?: string;
@@ -689,7 +730,6 @@ limit?: number;
 export type ListOrdersParams = {
 search?: string;
 status?: string;
-type?: string;
 dateFrom?: string;
 dateTo?: string;
 page?: number;

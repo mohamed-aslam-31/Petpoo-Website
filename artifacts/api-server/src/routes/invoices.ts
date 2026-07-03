@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, sql, gte, lte, or } from "drizzle-orm";
-import { db, invoicesTable, customersTable, productsTable, stockMovementsTable } from "@workspace/db";
+import { db, invoicesTable, ordersTable, customersTable, productsTable, stockMovementsTable } from "@workspace/db";
 import {
   CreateInvoiceBody,
   GetInvoiceParams,
@@ -10,13 +10,15 @@ import {
 
 const router: IRouter = Router();
 
-function parseInvoice(inv: any, customerName?: string) {
+function parseInvoice(inv: any, customerName?: string, orderNumber?: string | null) {
   const items = Array.isArray(inv.items) ? inv.items : (typeof inv.items === "string" ? JSON.parse(inv.items) : []);
   return {
     id: inv.id,
     invoiceNumber: inv.invoiceNumber,
     customerId: inv.customerId,
     customerName: customerName ?? inv.customerName ?? "",
+    orderId: inv.orderId ?? null,
+    orderNumber: orderNumber ?? null,
     type: inv.type,
     status: inv.status,
     subtotal: parseFloat(String(inv.subtotal ?? "0")),
@@ -26,6 +28,8 @@ function parseInvoice(inv: any, customerName?: string) {
     igst: parseFloat(String(inv.igst ?? "0")),
     gstAmount: parseFloat(String(inv.gstAmount ?? "0")),
     transport: parseFloat(String(inv.transport ?? "0")),
+    packageCharge: parseFloat(String(inv.packageCharge ?? "0")),
+    otherCharge: parseFloat(String(inv.otherCharge ?? "0")),
     total: parseFloat(String(inv.total ?? "0")),
     paidAmount: parseFloat(String(inv.paidAmount ?? "0")),
     paymentStatus: inv.paymentStatus,
@@ -42,7 +46,7 @@ function generateInvoiceNumber(id: number) {
   return `INV${year}${String(id).padStart(5, "0")}`;
 }
 
-function calcInvoiceTotals(items: any[], discount: number, transport: number) {
+function calcInvoiceTotals(items: any[], discount: number, transport: number, packageCharge: number, otherCharge: number) {
   let subtotal = 0;
   let cgst = 0, sgst = 0;
   const parsedItems = items.map((item: any) => {
@@ -54,7 +58,7 @@ function calcInvoiceTotals(items: any[], discount: number, transport: number) {
     return { ...item, total: lineTotal + lineGst };
   });
   const gstAmount = cgst + sgst;
-  const total = subtotal + gstAmount + transport - discount;
+  const total = subtotal + gstAmount + transport + packageCharge + otherCharge - discount;
   return { subtotal, cgst, sgst, igst: 0, gstAmount, total, parsedItems };
 }
 
@@ -84,7 +88,7 @@ async function adjustStock(
   } as any);
 }
 
-/** Deduct stock for all items in an invoice */
+/** Deduct stock for all items in a standalone (not order-linked) invoice */
 async function deductInvoiceStock(items: any[], invoiceNumber: string) {
   for (const item of items) {
     if (item.productId && item.quantity > 0) {
@@ -139,57 +143,39 @@ router.get("/invoices", async (req, res): Promise<void> => {
     .where(where);
 
   const rows = await db
-    .select({
-      id: invoicesTable.id,
-      invoiceNumber: invoicesTable.invoiceNumber,
-      customerId: invoicesTable.customerId,
-      customerName: customersTable.name,
-      type: invoicesTable.type,
-      status: invoicesTable.status,
-      subtotal: invoicesTable.subtotal,
-      discount: invoicesTable.discount,
-      cgst: invoicesTable.cgst,
-      sgst: invoicesTable.sgst,
-      igst: invoicesTable.igst,
-      gstAmount: invoicesTable.gstAmount,
-      transport: invoicesTable.transport,
-      total: invoicesTable.total,
-      paidAmount: invoicesTable.paidAmount,
-      paymentStatus: invoicesTable.paymentStatus,
-      paymentMethod: invoicesTable.paymentMethod,
-      dueDate: invoicesTable.dueDate,
-      notes: invoicesTable.notes,
-      items: invoicesTable.items,
-      createdAt: invoicesTable.createdAt,
-    })
+    .select({ inv: invoicesTable, customerName: customersTable.name, orderNumber: ordersTable.orderNumber })
     .from(invoicesTable)
     .leftJoin(customersTable, eq(customersTable.id, invoicesTable.customerId))
+    .leftJoin(ordersTable, eq(ordersTable.id, invoicesTable.orderId))
     .where(where)
     .orderBy(sql`${invoicesTable.createdAt} desc`)
     .limit(limit)
     .offset(offset);
 
-  res.json({ data: rows.map(r => parseInvoice(r, r.customerName ?? "")), total: countResult.count, page, limit });
+  res.json({ data: rows.map(r => parseInvoice(r.inv, r.customerName ?? "", r.orderNumber)), total: countResult.count, page, limit });
 });
 
 router.post("/invoices", async (req, res): Promise<void> => {
   const parsed = CreateInvoiceBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const { customerId, type, items, discount = 0, transport = 0, paymentMethod, paidAmount = 0, dueDate, notes } = parsed.data;
+  const { customerId, type, status, items, discount = 0, transport = 0, packageCharge = 0, otherCharge = 0, paymentMethod, paidAmount = 0, dueDate, notes } = parsed.data as any;
 
   const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, customerId));
   if (!customer) { res.status(404).json({ error: "Customer not found" }); return; }
 
   const discountAmt = parseFloat(String(discount));
   const transportAmt = parseFloat(String(transport));
-  const { subtotal, cgst, sgst, igst, gstAmount, total, parsedItems } = calcInvoiceTotals(items as any[], discountAmt, transportAmt);
+  const packageAmt = parseFloat(String(packageCharge));
+  const otherAmt = parseFloat(String(otherCharge));
+  const { subtotal, cgst, sgst, igst, gstAmount, total, parsedItems } = calcInvoiceTotals(items as any[], discountAmt, transportAmt, packageAmt, otherAmt);
   const paymentStatus = (paidAmount ?? 0) >= total ? "paid" : (paidAmount ?? 0) > 0 ? "partial" : "unpaid";
 
   const [temp] = await db.insert(invoicesTable).values({
     invoiceNumber: "TEMP",
     customerId,
     type,
+    status: status ?? "processing",
     subtotal: String(subtotal),
     discount: String(discountAmt),
     cgst: String(cgst),
@@ -197,6 +183,8 @@ router.post("/invoices", async (req, res): Promise<void> => {
     igst: String(igst),
     gstAmount: String(gstAmount),
     transport: String(transportAmt),
+    packageCharge: String(packageAmt),
+    otherCharge: String(otherAmt),
     total: String(total),
     paidAmount: String(paidAmount ?? 0),
     paymentStatus,
@@ -209,7 +197,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
   const invoiceNumber = generateInvoiceNumber(temp.id);
   const [invoice] = await db.update(invoicesTable).set({ invoiceNumber }).where(eq(invoicesTable.id, temp.id)).returning();
 
-  // Deduct stock for each item
+  // Standalone invoices (not generated from an order) deduct stock directly
   await deductInvoiceStock(parsedItems, invoiceNumber);
 
   res.status(201).json(parseInvoice(invoice, customer.name));
@@ -219,34 +207,39 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
   const params = GetInvoiceParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const [row] = await db
-    .select({ inv: invoicesTable, customerName: customersTable.name })
+    .select({ inv: invoicesTable, customerName: customersTable.name, orderNumber: ordersTable.orderNumber })
     .from(invoicesTable)
     .leftJoin(customersTable, eq(customersTable.id, invoicesTable.customerId))
+    .leftJoin(ordersTable, eq(ordersTable.id, invoicesTable.orderId))
     .where(eq(invoicesTable.id, params.data.id));
   if (!row) { res.status(404).json({ error: "Invoice not found" }); return; }
-  res.json(parseInvoice(row.inv, row.customerName ?? ""));
+  res.json(parseInvoice(row.inv, row.customerName ?? "", row.orderNumber));
 });
 
 router.patch("/invoices/:id", async (req, res): Promise<void> => {
   const params = UpdateInvoiceParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
+  const [existing] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, params.data.id));
+  if (!existing) { res.status(404).json({ error: "Invoice not found" }); return; }
+
   const body = req.body as any;
   const updates: any = {};
 
-  // If items provided, recalculate totals and adjust stock
+  // If items provided and this invoice isn't order-linked, recalc totals and adjust stock directly.
+  // Order-linked invoices keep locked products; qty/price/gst/discount edits still recalc totals but don't touch stock here (handled via order return flow).
   if (body.items && Array.isArray(body.items)) {
-    // Read existing invoice to reverse old stock deductions
-    const [existing] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, params.data.id));
-    if (existing) {
+    if (!existing.orderId) {
       const oldItems = Array.isArray(existing.items) ? existing.items : (typeof existing.items === "string" ? JSON.parse(existing.items as string) : []);
       await reverseInvoiceStock(oldItems, existing.invoiceNumber);
     }
 
-    const discountAmt = parseFloat(String(body.discount ?? 0));
-    const transportAmt = parseFloat(String(body.transport ?? 0));
-    const paidAmount = parseFloat(String(body.paidAmount ?? 0));
-    const { subtotal, cgst, sgst, igst, gstAmount, total, parsedItems } = calcInvoiceTotals(body.items, discountAmt, transportAmt);
+    const discountAmt = parseFloat(String(body.discount ?? existing.discount ?? 0));
+    const transportAmt = parseFloat(String(body.transport ?? existing.transport ?? 0));
+    const packageAmt = parseFloat(String(body.packageCharge ?? existing.packageCharge ?? 0));
+    const otherAmt = parseFloat(String(body.otherCharge ?? existing.otherCharge ?? 0));
+    const paidAmount = parseFloat(String(body.paidAmount ?? existing.paidAmount ?? 0));
+    const { subtotal, cgst, sgst, igst, gstAmount, total, parsedItems } = calcInvoiceTotals(body.items, discountAmt, transportAmt, packageAmt, otherAmt);
     const paymentStatus = paidAmount >= total ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
 
     Object.assign(updates, {
@@ -258,6 +251,8 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       igst: String(igst),
       gstAmount: String(gstAmount),
       transport: String(transportAmt),
+      packageCharge: String(packageAmt),
+      otherCharge: String(otherAmt),
       total: String(total),
       paidAmount: String(paidAmount),
       paymentStatus,
@@ -273,8 +268,9 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
     const [invoice] = await db.update(invoicesTable).set(updates).where(eq(invoicesTable.id, params.data.id)).returning();
     if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
 
-    // Deduct stock for new items
-    await deductInvoiceStock(parsedItems, invoice.invoiceNumber);
+    if (!existing.orderId) {
+      await deductInvoiceStock(parsedItems, invoice.invoiceNumber);
+    }
 
     const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, invoice.customerId));
     res.json(parseInvoice(invoice, cust?.name ?? ""));
@@ -289,15 +285,17 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
   if (body.notes !== undefined) updates.notes = body.notes || null;
   if (body.paidAmount !== undefined) {
     updates.paidAmount = String(body.paidAmount);
-    const [existing] = await db.select({ total: invoicesTable.total }).from(invoicesTable).where(eq(invoicesTable.id, params.data.id));
-    if (existing) {
-      const total = parseFloat(String(existing.total));
+    const [existingTotal] = await db.select({ total: invoicesTable.total }).from(invoicesTable).where(eq(invoicesTable.id, params.data.id));
+    if (existingTotal) {
+      const total = parseFloat(String(existingTotal.total));
       const paid = parseFloat(String(body.paidAmount));
       updates.paymentStatus = paid >= total ? "paid" : paid > 0 ? "partial" : "unpaid";
     }
   }
   if (body.discount !== undefined) updates.discount = String(body.discount);
   if (body.transport !== undefined) updates.transport = String(body.transport);
+  if (body.packageCharge !== undefined) updates.packageCharge = String(body.packageCharge);
+  if (body.otherCharge !== undefined) updates.otherCharge = String(body.otherCharge);
 
   const [invoice] = await db.update(invoicesTable).set(updates).where(eq(invoicesTable.id, params.data.id)).returning();
   if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
@@ -309,9 +307,9 @@ router.delete("/invoices/:id", async (req, res): Promise<void> => {
   const params = DeleteInvoiceParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-  // Reverse stock deductions before deleting
+  // Reverse stock deductions before deleting (only for standalone, non-order-linked invoices)
   const [existing] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, params.data.id));
-  if (existing) {
+  if (existing && !existing.orderId) {
     const oldItems = Array.isArray(existing.items) ? existing.items : (typeof existing.items === "string" ? JSON.parse(existing.items as string) : []);
     await reverseInvoiceStock(oldItems, existing.invoiceNumber);
   }

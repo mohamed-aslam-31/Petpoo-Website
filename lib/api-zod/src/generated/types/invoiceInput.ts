@@ -5,14 +5,18 @@
  * ShopFlow ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { InvoiceInputStatus } from './invoiceInputStatus';
 import type { InvoiceInputType } from './invoiceInputType';
 import type { InvoiceItemInput } from './invoiceItemInput';
 
 export interface InvoiceInput {
   customerId: number;
   type: InvoiceInputType;
+  status?: InvoiceInputStatus;
   discount?: number;
   transport?: number;
+  packageCharge?: number;
+  otherCharge?: number;
   paymentMethod?: string;
   paidAmount?: number;
   dueDate?: string;

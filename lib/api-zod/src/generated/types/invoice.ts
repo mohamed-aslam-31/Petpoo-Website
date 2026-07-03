@@ -5,13 +5,17 @@
  * ShopFlow ERP API
  * OpenAPI spec version: 0.1.0
  */
-import type { OrderItem } from './orderItem';
+import type { InvoiceItem } from './invoiceItem';
 
 export interface Invoice {
   id: number;
   invoiceNumber: string;
   customerId: number;
   customerName: string;
+  /** @nullable */
+  orderId?: number | null;
+  /** @nullable */
+  orderNumber?: string | null;
   type: string;
   status: string;
   subtotal: number;
@@ -21,6 +25,8 @@ export interface Invoice {
   igst?: number;
   gstAmount: number;
   transport?: number;
+  packageCharge?: number;
+  otherCharge?: number;
   total: number;
   paidAmount?: number;
   paymentStatus: string;
@@ -30,6 +36,6 @@ export interface Invoice {
   dueDate?: string | null;
   /** @nullable */
   notes?: string | null;
-  items?: OrderItem[];
+  items?: InvoiceItem[];
   createdAt: string;
 }

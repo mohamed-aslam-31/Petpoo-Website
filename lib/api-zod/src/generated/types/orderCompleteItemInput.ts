@@ -6,7 +6,10 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface OrderItemInput {
+export interface OrderCompleteItemInput {
   productId: number;
   quantity: number;
+  unitPrice: number;
+  discount?: number;
+  gstPercent?: number;
 }

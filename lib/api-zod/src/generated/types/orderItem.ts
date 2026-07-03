@@ -11,8 +11,4 @@ export interface OrderItem {
   productName: string;
   sku?: string;
   quantity: number;
-  unitPrice: number;
-  discount?: number;
-  gstPercent?: number;
-  total: number;
 }

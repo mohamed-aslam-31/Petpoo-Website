@@ -5,15 +5,11 @@
  * ShopFlow ERP API
  * OpenAPI spec version: 0.1.0
  */
-import type { OrderInputType } from './orderInputType';
 import type { OrderItemInput } from './orderItemInput';
 
 export interface OrderInput {
   customerId: number;
-  type: OrderInputType;
-  discount?: number;
-  paymentMethod?: string;
-  paidAmount?: number;
+  orderDate?: string;
   notes?: string;
   items: OrderItemInput[];
 }

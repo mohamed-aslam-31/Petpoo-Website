@@ -22,8 +22,7 @@ export const HealthCheckResponse = zod.object({
 export const GetDashboardSummaryResponse = zod.object({
   "todaySales": zod.number(),
   "totalProducts": zod.number(),
-  "retailOrders": zod.number(),
-  "wholesaleOrders": zod.number(),
+  "pendingOrders": zod.number(),
   "pendingPayments": zod.number(),
   "totalCustomers": zod.number(),
   "stockValue": zod.number(),
@@ -65,9 +64,7 @@ export const GetDashboardRecentOrdersResponseItem = zod.object({
   "id": zod.number(),
   "orderNumber": zod.string(),
   "customerName": zod.string(),
-  "total": zod.number(),
   "status": zod.string(),
-  "type": zod.string(),
   "createdAt": zod.string()
 })
 export const GetDashboardRecentOrdersResponse = zod.array(GetDashboardRecentOrdersResponseItem)
@@ -716,7 +713,6 @@ export const DeleteSupplierResponse = zod.void()
 export const ListOrdersQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
   "status": zod.coerce.string().optional(),
-  "type": zod.coerce.string().optional(),
   "dateFrom": zod.coerce.string().optional(),
   "dateTo": zod.coerce.string().optional(),
   "page": zod.coerce.number().optional(),
@@ -729,25 +725,16 @@ export const ListOrdersResponse = zod.object({
   "orderNumber": zod.string(),
   "customerId": zod.number(),
   "customerName": zod.string(),
-  "type": zod.string(),
   "status": zod.string(),
-  "subtotal": zod.number(),
-  "discount": zod.number(),
-  "gstAmount": zod.number(),
-  "total": zod.number(),
-  "paidAmount": zod.number().optional(),
-  "paymentStatus": zod.string(),
-  "paymentMethod": zod.string().nullish(),
+  "orderDate": zod.string(),
+  "invoiceId": zod.number().nullish(),
+  "invoiceNumber": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "items": zod.array(zod.object({
   "productId": zod.number(),
   "productName": zod.string(),
   "sku": zod.string().optional(),
-  "quantity": zod.number(),
-  "unitPrice": zod.number(),
-  "discount": zod.number().optional(),
-  "gstPercent": zod.number().optional(),
-  "total": zod.number()
+  "quantity": zod.number()
 })).optional(),
   "createdAt": zod.string()
 })),
@@ -762,17 +749,11 @@ export const ListOrdersResponse = zod.object({
  */
 export const CreateOrderBody = zod.object({
   "customerId": zod.number(),
-  "type": zod.enum(['retail', 'wholesale']),
-  "discount": zod.number().optional(),
-  "paymentMethod": zod.string().optional(),
-  "paidAmount": zod.number().optional(),
+  "orderDate": zod.string().optional(),
   "notes": zod.string().optional(),
   "items": zod.array(zod.object({
   "productId": zod.number(),
-  "quantity": zod.number(),
-  "unitPrice": zod.number(),
-  "discount": zod.number().optional(),
-  "gstPercent": zod.number().optional()
+  "quantity": zod.number()
 }))
 })
 
@@ -781,25 +762,16 @@ export const CreateOrderResponse = zod.object({
   "orderNumber": zod.string(),
   "customerId": zod.number(),
   "customerName": zod.string(),
-  "type": zod.string(),
   "status": zod.string(),
-  "subtotal": zod.number(),
-  "discount": zod.number(),
-  "gstAmount": zod.number(),
-  "total": zod.number(),
-  "paidAmount": zod.number().optional(),
-  "paymentStatus": zod.string(),
-  "paymentMethod": zod.string().nullish(),
+  "orderDate": zod.string(),
+  "invoiceId": zod.number().nullish(),
+  "invoiceNumber": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "items": zod.array(zod.object({
   "productId": zod.number(),
   "productName": zod.string(),
   "sku": zod.string().optional(),
-  "quantity": zod.number(),
-  "unitPrice": zod.number(),
-  "discount": zod.number().optional(),
-  "gstPercent": zod.number().optional(),
-  "total": zod.number()
+  "quantity": zod.number()
 })).optional(),
   "createdAt": zod.string()
 })
@@ -814,25 +786,16 @@ export const GetOrderResponse = zod.object({
   "orderNumber": zod.string(),
   "customerId": zod.number(),
   "customerName": zod.string(),
-  "type": zod.string(),
   "status": zod.string(),
-  "subtotal": zod.number(),
-  "discount": zod.number(),
-  "gstAmount": zod.number(),
-  "total": zod.number(),
-  "paidAmount": zod.number().optional(),
-  "paymentStatus": zod.string(),
-  "paymentMethod": zod.string().nullish(),
+  "orderDate": zod.string(),
+  "invoiceId": zod.number().nullish(),
+  "invoiceNumber": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "items": zod.array(zod.object({
   "productId": zod.number(),
   "productName": zod.string(),
   "sku": zod.string().optional(),
-  "quantity": zod.number(),
-  "unitPrice": zod.number(),
-  "discount": zod.number().optional(),
-  "gstPercent": zod.number().optional(),
-  "total": zod.number()
+  "quantity": zod.number()
 })).optional(),
   "createdAt": zod.string()
 })
@@ -844,19 +807,11 @@ export const UpdateOrderParams = zod.object({
 
 export const UpdateOrderBody = zod.object({
   "customerId": zod.number().optional(),
-  "type": zod.string().optional(),
-  "status": zod.string().optional(),
-  "discount": zod.number().optional(),
-  "paymentStatus": zod.string().optional(),
-  "paidAmount": zod.number().optional(),
-  "paymentMethod": zod.string().optional(),
+  "orderDate": zod.string().optional(),
   "notes": zod.string().optional(),
   "items": zod.array(zod.object({
   "productId": zod.number(),
-  "quantity": zod.number(),
-  "unitPrice": zod.number(),
-  "discount": zod.number().optional(),
-  "gstPercent": zod.number().optional()
+  "quantity": zod.number()
 })).optional()
 })
 
@@ -865,15 +820,78 @@ export const UpdateOrderResponse = zod.object({
   "orderNumber": zod.string(),
   "customerId": zod.number(),
   "customerName": zod.string(),
+  "status": zod.string(),
+  "orderDate": zod.string(),
+  "invoiceId": zod.number().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "sku": zod.string().optional(),
+  "quantity": zod.number()
+})).optional(),
+  "createdAt": zod.string()
+})
+
+
+export const DeleteOrderParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteOrderResponse = zod.void()
+
+
+/**
+ * @summary Complete an order and generate its invoice
+ */
+export const CompleteOrderParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CompleteOrderBody = zod.object({
+  "invoiceType": zod.enum(['gst', 'non_gst', 'estimate', 'quotation', 'credit']),
+  "status": zod.enum(['processing', 'completed']),
+  "paymentMethod": zod.string().optional(),
+  "paidAmount": zod.number().optional(),
+  "transportCharge": zod.number().optional(),
+  "packageCharge": zod.number().optional(),
+  "otherCharge": zod.number().optional(),
+  "discount": zod.number().optional(),
+  "dueDate": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "quantity": zod.number(),
+  "unitPrice": zod.number(),
+  "discount": zod.number().optional(),
+  "gstPercent": zod.number().optional()
+}))
+})
+
+export const CompleteOrderResponse = zod.object({
+  "id": zod.number(),
+  "invoiceNumber": zod.string(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "orderId": zod.number().nullish(),
+  "orderNumber": zod.string().nullish(),
   "type": zod.string(),
   "status": zod.string(),
   "subtotal": zod.number(),
-  "discount": zod.number(),
+  "discount": zod.number().optional(),
+  "cgst": zod.number().optional(),
+  "sgst": zod.number().optional(),
+  "igst": zod.number().optional(),
   "gstAmount": zod.number(),
+  "transport": zod.number().optional(),
+  "packageCharge": zod.number().optional(),
+  "otherCharge": zod.number().optional(),
   "total": zod.number(),
   "paidAmount": zod.number().optional(),
   "paymentStatus": zod.string(),
   "paymentMethod": zod.string().nullish(),
+  "dueDate": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "items": zod.array(zod.object({
   "productId": zod.number(),
@@ -889,11 +907,58 @@ export const UpdateOrderResponse = zod.object({
 })
 
 
-export const DeleteOrderParams = zod.object({
+/**
+ * @summary Cancel a pending order and restore stock
+ */
+export const CancelOrderParams = zod.object({
   "id": zod.coerce.number()
 })
 
-export const DeleteOrderResponse = zod.void()
+export const CancelOrderResponse = zod.object({
+  "id": zod.number(),
+  "orderNumber": zod.string(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "status": zod.string(),
+  "orderDate": zod.string(),
+  "invoiceId": zod.number().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "sku": zod.string().optional(),
+  "quantity": zod.number()
+})).optional(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Mark a completed order as returned, restore stock and mark its invoice returned
+ */
+export const ReturnOrderParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ReturnOrderResponse = zod.object({
+  "id": zod.number(),
+  "orderNumber": zod.string(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "status": zod.string(),
+  "orderDate": zod.string(),
+  "invoiceId": zod.number().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "sku": zod.string().optional(),
+  "quantity": zod.number()
+})).optional(),
+  "createdAt": zod.string()
+})
 
 
 /**
@@ -916,6 +981,8 @@ export const ListInvoicesResponse = zod.object({
   "invoiceNumber": zod.string(),
   "customerId": zod.number(),
   "customerName": zod.string(),
+  "orderId": zod.number().nullish(),
+  "orderNumber": zod.string().nullish(),
   "type": zod.string(),
   "status": zod.string(),
   "subtotal": zod.number(),
@@ -925,6 +992,8 @@ export const ListInvoicesResponse = zod.object({
   "igst": zod.number().optional(),
   "gstAmount": zod.number(),
   "transport": zod.number().optional(),
+  "packageCharge": zod.number().optional(),
+  "otherCharge": zod.number().optional(),
   "total": zod.number(),
   "paidAmount": zod.number().optional(),
   "paymentStatus": zod.string(),
@@ -955,8 +1024,11 @@ export const ListInvoicesResponse = zod.object({
 export const CreateInvoiceBody = zod.object({
   "customerId": zod.number(),
   "type": zod.enum(['gst', 'non_gst', 'estimate', 'quotation', 'credit']),
+  "status": zod.enum(['processing', 'completed']).optional(),
   "discount": zod.number().optional(),
   "transport": zod.number().optional(),
+  "packageCharge": zod.number().optional(),
+  "otherCharge": zod.number().optional(),
   "paymentMethod": zod.string().optional(),
   "paidAmount": zod.number().optional(),
   "dueDate": zod.string().optional(),
@@ -975,6 +1047,8 @@ export const CreateInvoiceResponse = zod.object({
   "invoiceNumber": zod.string(),
   "customerId": zod.number(),
   "customerName": zod.string(),
+  "orderId": zod.number().nullish(),
+  "orderNumber": zod.string().nullish(),
   "type": zod.string(),
   "status": zod.string(),
   "subtotal": zod.number(),
@@ -984,6 +1058,8 @@ export const CreateInvoiceResponse = zod.object({
   "igst": zod.number().optional(),
   "gstAmount": zod.number(),
   "transport": zod.number().optional(),
+  "packageCharge": zod.number().optional(),
+  "otherCharge": zod.number().optional(),
   "total": zod.number(),
   "paidAmount": zod.number().optional(),
   "paymentStatus": zod.string(),
@@ -1013,6 +1089,8 @@ export const GetInvoiceResponse = zod.object({
   "invoiceNumber": zod.string(),
   "customerId": zod.number(),
   "customerName": zod.string(),
+  "orderId": zod.number().nullish(),
+  "orderNumber": zod.string().nullish(),
   "type": zod.string(),
   "status": zod.string(),
   "subtotal": zod.number(),
@@ -1022,6 +1100,8 @@ export const GetInvoiceResponse = zod.object({
   "igst": zod.number().optional(),
   "gstAmount": zod.number(),
   "transport": zod.number().optional(),
+  "packageCharge": zod.number().optional(),
+  "otherCharge": zod.number().optional(),
   "total": zod.number(),
   "paidAmount": zod.number().optional(),
   "paymentStatus": zod.string(),
@@ -1052,6 +1132,8 @@ export const UpdateInvoiceBody = zod.object({
   "status": zod.string().optional(),
   "discount": zod.number().optional(),
   "transport": zod.number().optional(),
+  "packageCharge": zod.number().optional(),
+  "otherCharge": zod.number().optional(),
   "paymentStatus": zod.string().optional(),
   "paidAmount": zod.number().optional(),
   "paymentMethod": zod.string().optional(),
@@ -1071,6 +1153,8 @@ export const UpdateInvoiceResponse = zod.object({
   "invoiceNumber": zod.string(),
   "customerId": zod.number(),
   "customerName": zod.string(),
+  "orderId": zod.number().nullish(),
+  "orderNumber": zod.string().nullish(),
   "type": zod.string(),
   "status": zod.string(),
   "subtotal": zod.number(),
@@ -1080,6 +1164,8 @@ export const UpdateInvoiceResponse = zod.object({
   "igst": zod.number().optional(),
   "gstAmount": zod.number(),
   "transport": zod.number().optional(),
+  "packageCharge": zod.number().optional(),
+  "otherCharge": zod.number().optional(),
   "total": zod.number(),
   "paidAmount": zod.number().optional(),
   "paymentStatus": zod.string(),

@@ -639,10 +639,6 @@ paths:
           in: query
           schema:
             type: string
-        - name: type
-          in: query
-          schema:
-            type: string
         - name: dateFrom
           in: query
           schema:
@@ -735,6 +731,69 @@ paths:
       responses:
         "204":
           description: Deleted
+
+  /orders/{id}/complete:
+    post:
+      operationId: completeOrder
+      tags: [orders]
+      summary: Complete an order and generate its invoice
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderCompleteInput"
+      responses:
+        "200":
+          description: Order completed and invoice created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Invoice"
+
+  /orders/{id}/cancel:
+    patch:
+      operationId: cancelOrder
+      tags: [orders]
+      summary: Cancel a pending order and restore stock
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Order cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  /orders/{id}/return:
+    patch:
+      operationId: returnOrder
+      tags: [orders]
+      summary: Mark a completed order as returned, restore stock and mark its invoice returned
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Order returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
 
   # Invoices
   /invoices:
@@ -1205,12 +1264,11 @@ components:
 
     DashboardSummary:
       type: object
-      required: [todaySales, totalProducts, retailOrders, wholesaleOrders, pendingPayments, totalCustomers, stockValue, lowStockCount]
+      required: [todaySales, totalProducts, pendingOrders, pendingPayments, totalCustomers, stockValue, lowStockCount]
       properties:
         todaySales:         { type: number }
         totalProducts:      { type: integer }
-        retailOrders:       { type: integer }
-        wholesaleOrders:    { type: integer }
+        pendingOrders:      { type: integer }
         pendingPayments:    { type: number }
         totalCustomers:     { type: integer }
         stockValue:         { type: number }
@@ -1239,14 +1297,12 @@ components:
 
     RecentOrder:
       type: object
-      required: [id, orderNumber, customerName, total, status, type, createdAt]
+      required: [id, orderNumber, customerName, status, createdAt]
       properties:
         id:           { type: integer }
         orderNumber:  { type: string }
         customerName: { type: string }
-        total:        { type: number }
         status:       { type: string }
-        type:         { type: string }
         createdAt:    { type: string }
 
     Category:
@@ -1508,34 +1564,25 @@ components:
 
     OrderItem:
       type: object
-      required: [productId, productName, quantity, unitPrice, total]
+      required: [productId, productName, quantity]
       properties:
         productId:   { type: integer }
         productName: { type: string }
         sku:         { type: string }
         quantity:    { type: integer }
-        unitPrice:   { type: number }
-        discount:    { type: number }
-        gstPercent:  { type: number }
-        total:       { type: number }
 
     Order:
       type: object
-      required: [id, orderNumber, customerId, customerName, type, status, subtotal, discount, gstAmount, total, paymentStatus, createdAt]
+      required: [id, orderNumber, customerId, customerName, status, orderDate, createdAt]
       properties:
         id:            { type: integer }
         orderNumber:   { type: string }
         customerId:    { type: integer }
         customerName:  { type: string }
-        type:          { type: string }
         status:        { type: string }
-        subtotal:      { type: number }
-        discount:      { type: number }
-        gstAmount:     { type: number }
-        total:         { type: number }
-        paidAmount:    { type: number }
-        paymentStatus: { type: string }
-        paymentMethod: { type: ["string", "null"] }
+        orderDate:     { type: string }
+        invoiceId:     { type: ["integer", "null"] }
+        invoiceNumber: { type: ["string", "null"] }
         notes:         { type: ["string", "null"] }
         items:         { type: array, items: { $ref: "#/components/schemas/OrderItem" } }
         createdAt:     { type: string }
@@ -1551,6 +1598,30 @@ components:
 
     OrderItemInput:
       type: object
+      required: [productId, quantity]
+      properties:
+        productId: { type: integer }
+        quantity:  { type: integer }
+
+    OrderInput:
+      type: object
+      required: [customerId, items]
+      properties:
+        customerId: { type: integer }
+        orderDate:  { type: string }
+        notes:      { type: string }
+        items:      { type: array, items: { $ref: "#/components/schemas/OrderItemInput" } }
+
+    OrderUpdate:
+      type: object
+      properties:
+        customerId: { type: integer }
+        orderDate:  { type: string }
+        notes:      { type: string }
+        items:      { type: array, items: { $ref: "#/components/schemas/OrderItemInput" } }
+
+    OrderCompleteItemInput:
+      type: object
       required: [productId, quantity, unitPrice]
       properties:
         productId:  { type: integer }
@@ -1559,30 +1630,34 @@ components:
         discount:   { type: number }
         gstPercent: { type: number }
 
-    OrderInput:
+    OrderCompleteInput:
       type: object
-      required: [customerId, type, items]
+      required: [invoiceType, status, items]
       properties:
-        customerId:    { type: integer }
-        type:          { type: string, enum: [retail, wholesale] }
-        discount:      { type: number }
-        paymentMethod: { type: string }
-        paidAmount:    { type: number }
-        notes:         { type: string }
-        items:         { type: array, items: { $ref: "#/components/schemas/OrderItemInput" } }
+        invoiceType:     { type: string, enum: [gst, non_gst, estimate, quotation, credit] }
+        status:          { type: string, enum: [processing, completed] }
+        paymentMethod:   { type: string }
+        paidAmount:      { type: number }
+        transportCharge: { type: number }
+        packageCharge:   { type: number }
+        otherCharge:     { type: number }
+        discount:        { type: number }
+        dueDate:         { type: string }
+        notes:           { type: string }
+        items:           { type: array, items: { $ref: "#/components/schemas/OrderCompleteItemInput" } }
 
-    OrderUpdate:
+    InvoiceItem:
       type: object
+      required: [productId, productName, quantity, unitPrice, total]
       properties:
-        customerId:    { type: integer }
-        type:          { type: string }
-        status:        { type: string }
-        discount:      { type: number }
-        paymentStatus: { type: string }
-        paidAmount:    { type: number }
-        paymentMethod: { type: string }
-        notes:         { type: string }
-        items:         { type: array, items: { $ref: "#/components/schemas/OrderItemInput" } }
+        productId:   { type: integer }
+        productName: { type: string }
+        sku:         { type: string }
+        quantity:    { type: integer }
+        unitPrice:   { type: number }
+        discount:    { type: number }
+        gstPercent:  { type: number }
+        total:       { type: number }
 
     Invoice:
       type: object
@@ -1592,6 +1667,8 @@ components:
         invoiceNumber:  { type: string }
         customerId:     { type: integer }
         customerName:   { type: string }
+        orderId:        { type: ["integer", "null"] }
+        orderNumber:    { type: ["string", "null"] }
         type:           { type: string }
         status:         { type: string }
         subtotal:       { type: number }
@@ -1601,13 +1678,15 @@ components:
         igst:           { type: number }
         gstAmount:      { type: number }
         transport:      { type: number }
+        packageCharge:  { type: number }
+        otherCharge:    { type: number }
         total:          { type: number }
         paidAmount:     { type: number }
         paymentStatus:  { type: string }
         paymentMethod:  { type: ["string", "null"] }
         dueDate:        { type: ["string", "null"] }
         notes:          { type: ["string", "null"] }
-        items:          { type: array, items: { $ref: "#/components/schemas/OrderItem" } }
+        items:          { type: array, items: { $ref: "#/components/schemas/InvoiceItem" } }
         createdAt:      { type: string }
 
     InvoicesPage:
@@ -1635,8 +1714,11 @@ components:
       properties:
         customerId:    { type: integer }
         type:          { type: string, enum: [gst, non_gst, estimate, quotation, credit] }
+        status:        { type: string, enum: [processing, completed] }
         discount:      { type: number }
         transport:     { type: number }
+        packageCharge: { type: number }
+        otherCharge:   { type: number }
         paymentMethod: { type: string }
         paidAmount:    { type: number }
         dueDate:       { type: string }
@@ -1651,6 +1733,8 @@ components:
         status:        { type: string }
         discount:      { type: number }
         transport:     { type: number }
+        packageCharge: { type: number }
+        otherCharge:   { type: number }
         paymentStatus: { type: string }
         paidAmount:    { type: number }
         paymentMethod: { type: string }

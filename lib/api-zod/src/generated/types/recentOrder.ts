@@ -10,8 +10,6 @@ export interface RecentOrder {
   id: number;
   orderNumber: string;
   customerName: string;
-  total: number;
   status: string;
-  type: string;
   createdAt: string;
 }

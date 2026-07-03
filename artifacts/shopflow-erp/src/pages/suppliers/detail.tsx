@@ -3,6 +3,7 @@ import { useRoute, Link } from "wouter";
 import {
   useGetSupplier,
   useListPayments,
+  getGetSupplierQueryKey,
   getListPaymentsQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,7 +27,7 @@ export function SupplierDetail() {
   const [editOpen, setEditOpen] = useState(false);
 
   const { data: supplier, isLoading: isLoadingSupplier } = useGetSupplier(supplierId, {
-    query: { enabled: !!supplierId },
+    query: { enabled: !!supplierId, queryKey: getGetSupplierQueryKey(supplierId) },
   });
   const { data: paymentsData, isLoading: isLoadingPayments } = useListPayments(
     { search: supplier?.name, limit: 100 },

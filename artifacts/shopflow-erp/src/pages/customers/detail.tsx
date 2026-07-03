@@ -5,6 +5,8 @@ import {
   useGetCustomerLedger,
   useListInvoices,
   useListOrders,
+  getGetCustomerQueryKey,
+  getGetCustomerLedgerQueryKey,
   getListInvoicesQueryKey,
   getListOrdersQueryKey,
 } from "@workspace/api-client-react";
@@ -30,10 +32,10 @@ export function CustomerDetail() {
   const [editOpen, setEditOpen] = useState(false);
 
   const { data: customer, isLoading: isLoadingCustomer } = useGetCustomer(customerId, {
-    query: { enabled: !!customerId },
+    query: { enabled: !!customerId, queryKey: getGetCustomerQueryKey(customerId) },
   });
   const { data: ledger, isLoading: isLoadingLedger } = useGetCustomerLedger(customerId, {
-    query: { enabled: !!customerId },
+    query: { enabled: !!customerId, queryKey: getGetCustomerLedgerQueryKey(customerId) },
   });
   const { data: invoicesData, isLoading: isLoadingInvoices } = useListInvoices(
     { customerId, limit: 50 },
@@ -219,19 +221,22 @@ export function CustomerDetail() {
                         <TableRow key={i}><TableCell><Skeleton className="h-4 w-20" /></TableCell><TableCell><Skeleton className="h-4 w-24" /></TableCell><TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell><TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell><TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell><TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell><TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell></TableRow>
                       )) : invoicesData?.data?.length === 0 ? (
                         <TableRow><TableCell colSpan={7} className="h-32 text-center text-muted-foreground">No invoices found.</TableCell></TableRow>
-                      ) : invoicesData?.data?.map((inv) => (
+                      ) : invoicesData?.data?.map((inv) => {
+                        const due = Math.max(0, Number(inv.total) - Number(inv.paidAmount || 0));
+                        return (
                         <TableRow key={inv.id} className="hover:bg-muted/30">
                           <TableCell className="font-mono font-medium text-primary text-sm">{inv.invoiceNumber}</TableCell>
                           <TableCell className="text-muted-foreground">{format(new Date(inv.createdAt), "MMM d, yyyy")}</TableCell>
                           <TableCell><Badge variant="outline" className="uppercase text-[10px] tracking-wider">{inv.type.replace("_", " ")}</Badge></TableCell>
                           <TableCell>
-                            <Badge className={`text-xs ${inv.status === "paid" ? "bg-green-100 text-green-700" : inv.status === "pending" ? "bg-amber-100 text-amber-700" : inv.status === "overdue" ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-600"}`} variant="secondary">{inv.status}</Badge>
+                            <Badge className={`text-xs ${inv.status === "completed" ? "bg-green-100 text-green-700" : inv.status === "processing" ? "bg-amber-100 text-amber-700" : inv.status === "returned" ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-600"}`} variant="secondary">{inv.status}</Badge>
                           </TableCell>
                           <TableCell className="text-right font-medium">₹{Number(inv.total).toLocaleString()}</TableCell>
                           <TableCell className="text-right text-green-600">₹{Number(inv.paidAmount || 0).toLocaleString()}</TableCell>
-                          <TableCell className={`text-right font-bold ${Number(inv.dueAmount || 0) > 0 ? "text-amber-600" : "text-green-600"}`}>₹{Number(inv.dueAmount || 0).toLocaleString()}</TableCell>
+                          <TableCell className={`text-right font-bold ${due > 0 && inv.status !== "returned" ? "text-amber-600" : "text-green-600"}`}>₹{due.toLocaleString()}</TableCell>
                         </TableRow>
-                      ))}
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </CardContent>
@@ -247,25 +252,21 @@ export function CustomerDetail() {
                       <TableRow>
                         <TableHead>Order No.</TableHead>
                         <TableHead>Date</TableHead>
-                        <TableHead>Type</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Total (₹)</TableHead>
-                        <TableHead className="text-right">Paid (₹)</TableHead>
+                        <TableHead>Items</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {isLoadingOrders ? Array(3).fill(0).map((_, i) => (
-                        <TableRow key={i}><TableCell><Skeleton className="h-4 w-20" /></TableCell><TableCell><Skeleton className="h-4 w-24" /></TableCell><TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell><TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell><TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell><TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell></TableRow>
+                        <TableRow key={i}><TableCell><Skeleton className="h-4 w-20" /></TableCell><TableCell><Skeleton className="h-4 w-24" /></TableCell><TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell><TableCell><Skeleton className="h-4 w-16" /></TableCell></TableRow>
                       )) : ordersData?.data?.filter((o) => o.customerName === customer.name)?.length === 0 ? (
-                        <TableRow><TableCell colSpan={6} className="h-32 text-center text-muted-foreground">No orders found.</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={4} className="h-32 text-center text-muted-foreground">No orders found.</TableCell></TableRow>
                       ) : ordersData?.data?.filter((o) => o.customerName === customer.name)?.map((order) => (
                         <TableRow key={order.id} className="hover:bg-muted/30">
                           <TableCell className="font-mono font-medium text-primary text-sm">{order.orderNumber}</TableCell>
                           <TableCell className="text-muted-foreground">{format(new Date(order.createdAt), "MMM d, yyyy")}</TableCell>
-                          <TableCell><Badge variant="outline" className={order.type === "wholesale" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-slate-50 text-slate-700"}>{order.type}</Badge></TableCell>
-                          <TableCell><Badge className={`text-xs ${order.status === "completed" ? "bg-green-100 text-green-700" : order.status === "pending" ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"}`} variant="secondary">{order.status}</Badge></TableCell>
-                          <TableCell className="text-right font-medium">₹{Number(order.total).toLocaleString()}</TableCell>
-                          <TableCell className="text-right text-green-600">₹{Number(order.paidAmount || 0).toLocaleString()}</TableCell>
+                          <TableCell><Badge className={`text-xs ${order.status === "completed" ? "bg-green-100 text-green-700" : order.status === "pending" ? "bg-amber-100 text-amber-700" : order.status === "cancelled" ? "bg-slate-100 text-slate-600" : "bg-red-100 text-red-700"}`} variant="secondary">{order.status}</Badge></TableCell>
+                          <TableCell className="text-muted-foreground text-sm">{(order.items?.length ?? 0)} item{(order.items?.length ?? 0) === 1 ? "" : "s"}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>

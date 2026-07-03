@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, sql, gte, lte } from "drizzle-orm";
-import { db, customersTable, ordersTable, invoicesTable, paymentsTable } from "@workspace/db";
+import { db, customersTable, invoicesTable, paymentsTable } from "@workspace/db";
 import {
   CreateCustomerBody,
   UpdateCustomerBody,
@@ -34,17 +34,14 @@ function parseCustomer(c: any) {
   };
 }
 
-/** Compute real-time outstanding for a customer from orders + invoices − payments */
+/** Compute real-time outstanding for a customer from invoices − payments (orders carry no money; returned invoices are excluded) */
 async function computeOutstanding(customerId: number): Promise<number> {
-  const orders = await db
-    .select({ total: ordersTable.total, paidAmount: ordersTable.paidAmount })
-    .from(ordersTable)
-    .where(eq(ordersTable.customerId, customerId));
-
   const invoices = await db
-    .select({ total: invoicesTable.total, paidAmount: invoicesTable.paidAmount })
+    .select({ total: invoicesTable.total, paidAmount: invoicesTable.paidAmount, status: invoicesTable.status })
     .from(invoicesTable)
     .where(eq(invoicesTable.customerId, customerId));
+
+  const activeInvoices = invoices.filter(i => i.status !== "returned");
 
   const payments = await db
     .select({ amount: paymentsTable.amount })
@@ -54,13 +51,10 @@ async function computeOutstanding(customerId: number): Promise<number> {
       eq(paymentsTable.entityId, customerId),
     ));
 
-  const totalDebits =
-    orders.reduce((s, o) => s + parseFloat(String(o.total ?? "0")), 0) +
-    invoices.reduce((s, i) => s + parseFloat(String(i.total ?? "0")), 0);
+  const totalDebits = activeInvoices.reduce((s, i) => s + parseFloat(String(i.total ?? "0")), 0);
 
   const totalCredits =
-    orders.reduce((s, o) => s + parseFloat(String(o.paidAmount ?? "0")), 0) +
-    invoices.reduce((s, i) => s + parseFloat(String(i.paidAmount ?? "0")), 0) +
+    activeInvoices.reduce((s, i) => s + parseFloat(String(i.paidAmount ?? "0")), 0) +
     payments.reduce((s, p) => s + parseFloat(String(p.amount ?? "0")), 0);
 
   return Math.max(0, totalDebits - totalCredits);
@@ -157,20 +151,16 @@ router.get("/customers/:id/ledger", async (req, res): Promise<void> => {
   const params = GetCustomerLedgerParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-  const orders = await db.select().from(ordersTable).where(eq(ordersTable.customerId, params.data.id)).orderBy(ordersTable.createdAt);
   const invoices = await db.select().from(invoicesTable).where(eq(invoicesTable.customerId, params.data.id)).orderBy(invoicesTable.createdAt);
   const payments = await db.select().from(paymentsTable).where(and(eq(paymentsTable.entityType, "customer"), eq(paymentsTable.entityId, params.data.id))).orderBy(paymentsTable.createdAt);
 
   const entries: any[] = [];
 
-  orders.forEach(o => {
-    const orderTotal = parseFloat(String(o.total ?? "0"));
-    const paid = parseFloat(String(o.paidAmount ?? "0"));
-    entries.push({ id: `order-${o.id}`, date: o.createdAt.toISOString(), description: `Order #${o.orderNumber}`, debit: orderTotal, credit: 0, balance: 0, type: "order", referenceId: o.id });
-    if (paid > 0) entries.push({ id: `order-pay-${o.id}`, date: o.createdAt.toISOString(), description: `Payment at order #${o.orderNumber} (${o.paymentMethod ?? "cash"})`, debit: 0, credit: paid, balance: 0, type: "payment", referenceId: o.id });
-  });
-
   invoices.forEach(i => {
+    if (i.status === "returned") {
+      entries.push({ id: `invoice-${i.id}`, date: i.createdAt.toISOString(), description: `Invoice #${i.invoiceNumber} (Returned)`, debit: 0, credit: 0, balance: 0, type: "invoice", referenceId: i.id });
+      return;
+    }
     const invoiceTotal = parseFloat(String(i.total ?? "0"));
     const paid = parseFloat(String(i.paidAmount ?? "0"));
     entries.push({ id: `invoice-${i.id}`, date: i.createdAt.toISOString(), description: `Invoice #${i.invoiceNumber}`, debit: invoiceTotal, credit: 0, balance: 0, type: "invoice", referenceId: i.id });
