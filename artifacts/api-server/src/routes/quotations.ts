@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, and, sql, or } from "drizzle-orm";
+import { eq, ilike, and, sql, or, inArray } from "drizzle-orm";
 import { z } from "zod";
-import { db, quotationsTable, customersTable } from "@workspace/db";
+import { db, quotationsTable, customersTable, ordersTable, productsTable, stockMovementsTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -14,6 +14,8 @@ const ItemSchema = z.object({
   discount: z.number().min(0).max(100).optional().default(0),
   gstPercent: z.number().min(0).max(100).optional().default(0),
 });
+
+const VALID_STATUSES = ["draft", "sent", "accepted", "rejected"] as const;
 
 const CreateQuotationSchema = z.object({
   customerId: z.number().int().positive().optional().nullable(),
@@ -34,7 +36,7 @@ const CreateQuotationSchema = z.object({
   otherCharge: z.number().min(0).optional().default(0),
   items: z.array(ItemSchema).min(1, "At least one item required"),
   notes: z.string().optional(),
-  status: z.enum(["draft", "sent", "accepted", "rejected", "expired"]).optional().default("draft"),
+  status: z.enum(VALID_STATUSES).optional().default("draft"),
 }).refine(
   (d) => d.isNewCustomer || (d.customerId != null && d.customerId > 0),
   { message: "Either select an existing customer or provide new customer details", path: ["customerId"] }
@@ -59,7 +61,7 @@ const PatchQuotationSchema = z.object({
   otherCharge: z.number().min(0).optional(),
   items: z.array(ItemSchema).optional(),
   notes: z.string().optional().nullable(),
-  status: z.enum(["draft", "sent", "accepted", "rejected", "expired"]).optional(),
+  status: z.enum(VALID_STATUSES).optional(),
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -116,6 +118,45 @@ function parseQuotation(q: any, customerDbName?: string | null) {
   };
 }
 
+async function enrichItemNamesForOrder(items: any[]) {
+  const result = [];
+  for (const item of items) {
+    const [product] = await db.select().from(productsTable).where(eq(productsTable.id, item.productId));
+    result.push({
+      productId: item.productId,
+      productName: product?.name ?? "Unknown",
+      sku: product?.sku ?? "",
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      discount: item.discount ?? 0,
+      gstPercent: item.gstPercent ?? 0,
+    });
+  }
+  return result;
+}
+
+async function adjustStockForOrder(
+  productId: number,
+  type: "increase" | "decrease",
+  quantity: number,
+  reason: string,
+) {
+  const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
+  if (!product || quantity <= 0) return;
+  const beforeStock = product.currentStock;
+  const afterStock = type === "increase" ? beforeStock + quantity : Math.max(0, beforeStock - quantity);
+  await db.update(productsTable).set({ currentStock: afterStock }).where(eq(productsTable.id, productId));
+  await db.insert(stockMovementsTable).values({
+    productId,
+    type,
+    quantity,
+    beforeStock,
+    afterStock,
+    reason,
+    notes: null,
+  } as any);
+}
+
 // ── Routes ────────────────────────────────────────────────────────────────────
 // GET /quotations
 router.get("/quotations", async (req, res): Promise<void> => {
@@ -167,7 +208,6 @@ router.post("/quotations", async (req, res): Promise<void> => {
 
   const data = parsed.data;
 
-  // Verify existing customer if provided
   if (!data.isNewCustomer && data.customerId) {
     const [cust] = await db.select({ id: customersTable.id }).from(customersTable).where(eq(customersTable.id, data.customerId));
     if (!cust) { res.status(404).json({ error: "Customer not found" }); return; }
@@ -216,6 +256,132 @@ router.post("/quotations", async (req, res): Promise<void> => {
   res.status(201).json(parseQuotation(quotation, customerDbName));
 });
 
+// POST /quotations/bulk-delete  (must be before /:id routes)
+router.post("/quotations/bulk-delete", async (req, res): Promise<void> => {
+  const schema = z.object({ ids: z.array(z.number().int().positive()).min(1) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: "ids must be a non-empty array of integers" }); return; }
+
+  const deleted = await db.delete(quotationsTable)
+    .where(inArray(quotationsTable.id, parsed.data.ids))
+    .returning({ id: quotationsTable.id });
+
+  res.json({ deleted: deleted.length });
+});
+
+// PATCH /quotations/bulk-status  (must be before /:id routes)
+router.patch("/quotations/bulk-status", async (req, res): Promise<void> => {
+  const schema = z.object({
+    ids: z.array(z.number().int().positive()).min(1),
+    status: z.enum(VALID_STATUSES),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const updated = await db.update(quotationsTable)
+    .set({ status: parsed.data.status })
+    .where(inArray(quotationsTable.id, parsed.data.ids))
+    .returning({ id: quotationsTable.id });
+
+  res.json({ updated: updated.length });
+});
+
+// POST /quotations/:id/convert-to-order
+router.post("/quotations/:id/convert-to-order", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [row] = await db
+    .select({ q: quotationsTable, customerDbName: customersTable.name })
+    .from(quotationsTable)
+    .leftJoin(customersTable, eq(customersTable.id, quotationsTable.customerId as any))
+    .where(eq(quotationsTable.id, id));
+
+  if (!row) { res.status(404).json({ error: "Quotation not found" }); return; }
+
+  const q = row.q;
+  if (q.status !== "accepted") {
+    res.status(400).json({ error: "Only accepted quotations can be converted to orders" }); return;
+  }
+
+  // Resolve / create customer
+  let customerId: number;
+  let customerName: string;
+
+  if (q.isNewCustomer) {
+    // Create the customer record from the quotation's new-customer fields
+    const [tempCust] = await db.insert(customersTable).values({
+      customerCode: "TEMP",
+      name: q.customerName ?? "Unknown",
+      phone: q.customerPhone ?? "",
+      email: q.customerEmail ?? null,
+      shopName: q.customerShopName ?? null,
+      landlineNumber: q.customerLandline ?? null,
+      address: q.customerGstAddress ?? null,
+      city: q.customerCity ?? null,
+      state: q.customerState ?? null,
+      type: (q.customerShopType as any) ?? "retail",
+      status: "active",
+    } as any).returning();
+
+    const custCode = `CUST${String(tempCust.id).padStart(4, "0")}`;
+    const [cust] = await db.update(customersTable)
+      .set({ customerCode: custCode })
+      .where(eq(customersTable.id, tempCust.id))
+      .returning();
+    customerId = cust.id;
+    customerName = cust.name;
+
+    // Link quotation to the newly created customer, mark no longer "new"
+    await db.update(quotationsTable)
+      .set({ customerId, isNewCustomer: false })
+      .where(eq(quotationsTable.id, id));
+  } else {
+    if (!q.customerId) { res.status(400).json({ error: "Quotation has no linked customer" }); return; }
+    customerId = q.customerId;
+    customerName = row.customerDbName ?? "";
+  }
+
+  // Map quotation items → order items (only items with a productId)
+  const qItems: any[] = Array.isArray(q.items) ? q.items : (typeof q.items === "string" ? JSON.parse(q.items) : []);
+  const orderItems = qItems.filter((item: any) => item.productId);
+
+  if (orderItems.length === 0) {
+    res.status(400).json({ error: "No items with products found to create an order" }); return;
+  }
+
+  const enrichedItems = await enrichItemNamesForOrder(orderItems);
+
+  const [tempOrder] = await db.insert(ordersTable).values({
+    orderNumber: "TEMP",
+    customerId,
+    orderDate: q.date,
+    notes: q.notes ? `From Quotation ${q.quotationNumber}. ${q.notes}` : `From Quotation ${q.quotationNumber}`,
+    items: enrichedItems,
+  } as any).returning();
+
+  const orderNumber = `ORD${String(tempOrder.id).padStart(6, "0")}`;
+  const [order] = await db.update(ordersTable)
+    .set({ orderNumber })
+    .where(eq(ordersTable.id, tempOrder.id))
+    .returning();
+
+  // Deduct stock
+  for (const item of enrichedItems) {
+    if (item.productId && item.quantity > 0) {
+      await adjustStockForOrder(item.productId, "decrease", item.quantity, `Order ${orderNumber} (Quotation ${q.quotationNumber})`);
+    }
+  }
+
+  res.status(201).json({
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    customerId,
+    customerName,
+    quotationNumber: q.quotationNumber,
+  });
+});
+
 // GET /quotations/:id
 router.get("/quotations/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
@@ -241,7 +407,6 @@ router.patch("/quotations/:id", async (req, res): Promise<void> => {
 
   const data = parsed.data;
 
-  // Verify customer if switching to existing
   if (data.customerId != null && !(data.isNewCustomer)) {
     const [cust] = await db.select({ id: customersTable.id }).from(customersTable).where(eq(customersTable.id, data.customerId));
     if (!cust) { res.status(404).json({ error: "Customer not found" }); return; }
@@ -256,7 +421,6 @@ router.patch("/quotations/:id", async (req, res): Promise<void> => {
   if ("isNewCustomer" in data) updates.isNewCustomer = data.isNewCustomer;
   if ("status" in data) updates.status = data.status;
 
-  // Recalculate totals if items provided
   if (data.items && data.items.length > 0) {
     const type = data.type ?? "gst";
     const transport = parseNum(data.transport ?? 0);
