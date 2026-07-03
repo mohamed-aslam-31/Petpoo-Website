@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { useListProducts, getListProductsQueryKey } from "@workspace/api-client-react";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useListProducts,
+  useListCategories,
+  useDeleteProduct,
+  getListProductsQueryKey,
+} from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,13 +15,73 @@ import { Badge } from "@/components/ui/badge";
 import { Search, Plus, Filter, MoreHorizontal, Edit, Trash2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import { ProductFormDialog } from "./product-form-dialog";
+
+const PAGE_SIZE = 20;
 
 export function Products() {
   const [search, setSearch] = useState("");
-  const { data, isLoading } = useListProducts(
-    { search: search || undefined },
-    { query: { queryKey: getListProductsQueryKey({ search: search || undefined }) } }
-  );
+  const [categoryId, setCategoryId] = useState<string | undefined>(undefined);
+  const [page, setPage] = useState(1);
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
+  const [deletingProduct, setDeletingProduct] = useState<any | null>(null);
+
+  const queryClient = useQueryClient();
+  const { data: categories } = useListCategories();
+
+  const listParams = {
+    search: search || undefined,
+    categoryId: categoryId ? Number(categoryId) : undefined,
+    page,
+    limit: PAGE_SIZE,
+  };
+
+  const { data, isLoading } = useListProducts(listParams, {
+    query: { queryKey: getListProductsQueryKey(listParams) },
+  });
+
+  const deleteMutation = useDeleteProduct({
+    mutation: {
+      onSuccess: () => {
+        toast.success("Product deleted");
+        queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
+        setDeletingProduct(null);
+      },
+      onError: (err: any) => toast.error(err?.message ?? "Failed to delete product"),
+    },
+  });
+
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  function openAddDialog() {
+    setEditingProduct(null);
+    setFormOpen(true);
+  }
+
+  function openEditDialog(product: any) {
+    setEditingProduct(product);
+    setFormOpen(true);
+  }
 
   return (
     <div className="space-y-6">
@@ -23,7 +90,7 @@ export function Products() {
           <h2 className="text-3xl font-bold tracking-tight">Products</h2>
           <p className="text-muted-foreground mt-1">Manage your inventory, pricing, and stock levels.</p>
         </div>
-        <Button className="shrink-0 gap-2">
+        <Button className="shrink-0 gap-2" onClick={openAddDialog}>
           <Plus className="h-4 w-4" />
           Add Product
         </Button>
@@ -38,13 +105,32 @@ export function Products() {
               placeholder="Search products by name or SKU..."
               className="pl-9 bg-background"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
             />
           </div>
-          <Button variant="outline" className="w-full sm:w-auto gap-2">
-            <Filter className="h-4 w-4" />
-            Filters
-          </Button>
+          <Select
+            value={categoryId ?? "all"}
+            onValueChange={(val) => {
+              setCategoryId(val === "all" ? undefined : val);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-full sm:w-56 gap-2">
+              <Filter className="h-4 w-4" />
+              <SelectValue placeholder="All categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All categories</SelectItem>
+              {categories?.map((c) => (
+                <SelectItem key={c.id} value={String(c.id)}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <CardContent className="p-0">
           <Table>
@@ -107,10 +193,13 @@ export function Products() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem className="cursor-pointer">
+                          <DropdownMenuItem className="cursor-pointer" onClick={() => openEditDialog(product)}>
                             <Edit className="mr-2 h-4 w-4" /> Edit
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive">
+                          <DropdownMenuItem
+                            className="cursor-pointer text-destructive focus:text-destructive"
+                            onClick={() => setDeletingProduct(product)}
+                          >
                             <Trash2 className="mr-2 h-4 w-4" /> Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -121,16 +210,55 @@ export function Products() {
               )}
             </TableBody>
           </Table>
-          
+
           <div className="border-t p-4 flex items-center justify-between text-sm text-muted-foreground bg-muted/20">
-            <div>Showing {data?.data?.length || 0} of {data?.total || 0} products</div>
+            <div>
+              Showing {data?.data?.length ? (page - 1) * PAGE_SIZE + 1 : 0}-
+              {(page - 1) * PAGE_SIZE + (data?.data?.length ?? 0)} of {total} products
+            </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled>Previous</Button>
-              <Button variant="outline" size="sm" disabled>Next</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              >
+                Next
+              </Button>
             </div>
           </div>
         </CardContent>
       </Card>
+
+      <ProductFormDialog open={formOpen} onOpenChange={setFormOpen} product={editingProduct} />
+
+      <AlertDialog open={!!deletingProduct} onOpenChange={(open) => !open && setDeletingProduct(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete "{deletingProduct?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the product from your inventory. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deletingProduct && deleteMutation.mutate({ id: deletingProduct.id })}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

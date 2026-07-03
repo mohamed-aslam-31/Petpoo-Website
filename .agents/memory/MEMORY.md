@@ -1,0 +1,2 @@
+- [FormLabel outside FormField](formlabel-outside-formfield.md) — use plain `<label>` HTML in dynamic field arrays (useFieldArray) since FormLabel requires a FormField context.
+- [ShopFlow ERP stack](shopflow-erp-stack.md) — key stack decisions, port, workflow, and API patterns for this project.
