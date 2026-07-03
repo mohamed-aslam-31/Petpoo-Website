@@ -33,12 +33,12 @@ function parseCustomer(c: any) {
 /** Compute real-time outstanding for a customer from orders + invoices − payments */
 async function computeOutstanding(customerId: number): Promise<number> {
   const orders = await db
-    .select({ total: ordersTable.total })
+    .select({ total: ordersTable.total, paidAmount: ordersTable.paidAmount })
     .from(ordersTable)
     .where(eq(ordersTable.customerId, customerId));
 
   const invoices = await db
-    .select({ total: invoicesTable.total })
+    .select({ total: invoicesTable.total, paidAmount: invoicesTable.paidAmount })
     .from(invoicesTable)
     .where(eq(invoicesTable.customerId, customerId));
 
@@ -54,7 +54,10 @@ async function computeOutstanding(customerId: number): Promise<number> {
     orders.reduce((s, o) => s + parseFloat(String(o.total ?? "0")), 0) +
     invoices.reduce((s, i) => s + parseFloat(String(i.total ?? "0")), 0);
 
-  const totalCredits = payments.reduce((s, p) => s + parseFloat(String(p.amount ?? "0")), 0);
+  const totalCredits =
+    orders.reduce((s, o) => s + parseFloat(String(o.paidAmount ?? "0")), 0) +
+    invoices.reduce((s, i) => s + parseFloat(String(i.paidAmount ?? "0")), 0) +
+    payments.reduce((s, p) => s + parseFloat(String(p.amount ?? "0")), 0);
 
   return Math.max(0, totalDebits - totalCredits);
 }
