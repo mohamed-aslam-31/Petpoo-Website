@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, sql, gte, lte, or } from "drizzle-orm";
-import { db, invoicesTable, customersTable } from "@workspace/db";
+import { db, invoicesTable, customersTable, productsTable, stockMovementsTable } from "@workspace/db";
 import {
   CreateInvoiceBody,
   GetInvoiceParams,
@@ -56,6 +56,50 @@ function calcInvoiceTotals(items: any[], discount: number, transport: number) {
   const gstAmount = cgst + sgst;
   const total = subtotal + gstAmount + transport - discount;
   return { subtotal, cgst, sgst, igst: 0, gstAmount, total, parsedItems };
+}
+
+/** Adjust a single product's stock and record a movement */
+async function adjustStock(
+  productId: number,
+  type: "increase" | "decrease" | "damage" | "lost" | "return",
+  quantity: number,
+  reason: string,
+  notes?: string,
+) {
+  const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
+  if (!product || quantity <= 0) return;
+  const beforeStock = product.currentStock;
+  const afterStock = type === "increase" || type === "return"
+    ? beforeStock + quantity
+    : Math.max(0, beforeStock - quantity);
+  await db.update(productsTable).set({ currentStock: afterStock }).where(eq(productsTable.id, productId));
+  await db.insert(stockMovementsTable).values({
+    productId,
+    type,
+    quantity,
+    beforeStock,
+    afterStock,
+    reason,
+    notes: notes ?? null,
+  } as any);
+}
+
+/** Deduct stock for all items in an invoice */
+async function deductInvoiceStock(items: any[], invoiceNumber: string) {
+  for (const item of items) {
+    if (item.productId && item.quantity > 0) {
+      await adjustStock(item.productId, "decrease", item.quantity, `Invoice ${invoiceNumber}`);
+    }
+  }
+}
+
+/** Reverse stock deductions for all items */
+async function reverseInvoiceStock(items: any[], invoiceNumber: string) {
+  for (const item of items) {
+    if (item.productId && item.quantity > 0) {
+      await adjustStock(item.productId, "increase", item.quantity, `Invoice ${invoiceNumber} - edit reversal`);
+    }
+  }
 }
 
 router.get("/invoices", async (req, res): Promise<void> => {
@@ -162,7 +206,12 @@ router.post("/invoices", async (req, res): Promise<void> => {
     items: parsedItems,
   } as any).returning();
 
-  const [invoice] = await db.update(invoicesTable).set({ invoiceNumber: generateInvoiceNumber(temp.id) }).where(eq(invoicesTable.id, temp.id)).returning();
+  const invoiceNumber = generateInvoiceNumber(temp.id);
+  const [invoice] = await db.update(invoicesTable).set({ invoiceNumber }).where(eq(invoicesTable.id, temp.id)).returning();
+
+  // Deduct stock for each item
+  await deductInvoiceStock(parsedItems, invoiceNumber);
+
   res.status(201).json(parseInvoice(invoice, customer.name));
 });
 
@@ -185,8 +234,15 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
   const body = req.body as any;
   const updates: any = {};
 
-  // If items provided, recalculate totals
+  // If items provided, recalculate totals and adjust stock
   if (body.items && Array.isArray(body.items)) {
+    // Read existing invoice to reverse old stock deductions
+    const [existing] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, params.data.id));
+    if (existing) {
+      const oldItems = Array.isArray(existing.items) ? existing.items : (typeof existing.items === "string" ? JSON.parse(existing.items as string) : []);
+      await reverseInvoiceStock(oldItems, existing.invoiceNumber);
+    }
+
     const discountAmt = parseFloat(String(body.discount ?? 0));
     const transportAmt = parseFloat(String(body.transport ?? 0));
     const paidAmount = parseFloat(String(body.paidAmount ?? 0));
@@ -206,6 +262,23 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       paidAmount: String(paidAmount),
       paymentStatus,
     });
+
+    if (body.customerId !== undefined) updates.customerId = body.customerId;
+    if (body.type !== undefined) updates.type = body.type;
+    if (body.status !== undefined) updates.status = body.status;
+    if (body.paymentMethod !== undefined) updates.paymentMethod = body.paymentMethod;
+    if (body.dueDate !== undefined) updates.dueDate = body.dueDate || null;
+    if (body.notes !== undefined) updates.notes = body.notes || null;
+
+    const [invoice] = await db.update(invoicesTable).set(updates).where(eq(invoicesTable.id, params.data.id)).returning();
+    if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
+
+    // Deduct stock for new items
+    await deductInvoiceStock(parsedItems, invoice.invoiceNumber);
+
+    const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, invoice.customerId));
+    res.json(parseInvoice(invoice, cust?.name ?? ""));
+    return;
   }
 
   if (body.customerId !== undefined) updates.customerId = body.customerId;
@@ -214,20 +287,17 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
   if (body.paymentMethod !== undefined) updates.paymentMethod = body.paymentMethod;
   if (body.dueDate !== undefined) updates.dueDate = body.dueDate || null;
   if (body.notes !== undefined) updates.notes = body.notes || null;
-  if (!body.items) {
-    if (body.paidAmount !== undefined) {
-      updates.paidAmount = String(body.paidAmount);
-      // Recalc payment status if paidAmount changed without items
-      const [existing] = await db.select({ total: invoicesTable.total }).from(invoicesTable).where(eq(invoicesTable.id, params.data.id));
-      if (existing) {
-        const total = parseFloat(String(existing.total));
-        const paid = parseFloat(String(body.paidAmount));
-        updates.paymentStatus = paid >= total ? "paid" : paid > 0 ? "partial" : "unpaid";
-      }
+  if (body.paidAmount !== undefined) {
+    updates.paidAmount = String(body.paidAmount);
+    const [existing] = await db.select({ total: invoicesTable.total }).from(invoicesTable).where(eq(invoicesTable.id, params.data.id));
+    if (existing) {
+      const total = parseFloat(String(existing.total));
+      const paid = parseFloat(String(body.paidAmount));
+      updates.paymentStatus = paid >= total ? "paid" : paid > 0 ? "partial" : "unpaid";
     }
-    if (body.discount !== undefined) updates.discount = String(body.discount);
-    if (body.transport !== undefined) updates.transport = String(body.transport);
   }
+  if (body.discount !== undefined) updates.discount = String(body.discount);
+  if (body.transport !== undefined) updates.transport = String(body.transport);
 
   const [invoice] = await db.update(invoicesTable).set(updates).where(eq(invoicesTable.id, params.data.id)).returning();
   if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
@@ -238,6 +308,14 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
 router.delete("/invoices/:id", async (req, res): Promise<void> => {
   const params = DeleteInvoiceParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  // Reverse stock deductions before deleting
+  const [existing] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, params.data.id));
+  if (existing) {
+    const oldItems = Array.isArray(existing.items) ? existing.items : (typeof existing.items === "string" ? JSON.parse(existing.items as string) : []);
+    await reverseInvoiceStock(oldItems, existing.invoiceNumber);
+  }
+
   const [invoice] = await db.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id)).returning();
   if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
   res.sendStatus(204);

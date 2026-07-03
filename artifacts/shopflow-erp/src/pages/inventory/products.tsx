@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Filter, MoreHorizontal, Edit, Trash2 } from "lucide-react";
+import { Search, Plus, Filter, MoreHorizontal, Edit, Trash2, Package } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -33,6 +33,7 @@ import {
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { ProductFormDialog } from "./product-form-dialog";
+import { StockAdjustDialog } from "./stock-adjust-dialog";
 
 const PAGE_SIZE = 20;
 
@@ -44,6 +45,7 @@ export function Products() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<any | null>(null);
+  const [adjustingProduct, setAdjustingProduct] = useState<any | null>(null);
 
   const queryClient = useQueryClient();
   const { data: categories } = useListCategories();
@@ -196,6 +198,9 @@ export function Products() {
                           <DropdownMenuItem className="cursor-pointer" onClick={() => openEditDialog(product)}>
                             <Edit className="mr-2 h-4 w-4" /> Edit
                           </DropdownMenuItem>
+                          <DropdownMenuItem className="cursor-pointer" onClick={() => setAdjustingProduct(product)}>
+                            <Package className="mr-2 h-4 w-4" /> Adjust Stock
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             className="cursor-pointer text-destructive focus:text-destructive"
                             onClick={() => setDeletingProduct(product)}
@@ -239,6 +244,7 @@ export function Products() {
       </Card>
 
       <ProductFormDialog open={formOpen} onOpenChange={setFormOpen} product={editingProduct} />
+      <StockAdjustDialog open={!!adjustingProduct} onOpenChange={(v) => !v && setAdjustingProduct(null)} product={adjustingProduct} />
 
       <AlertDialog open={!!deletingProduct} onOpenChange={(open) => !open && setDeletingProduct(null)}>
         <AlertDialogContent>

@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, sql, gte, lte, or } from "drizzle-orm";
-import { db, ordersTable, customersTable } from "@workspace/db";
+import { db, ordersTable, customersTable, productsTable, stockMovementsTable } from "@workspace/db";
 import {
   CreateOrderBody,
   GetOrderParams,
@@ -48,6 +48,50 @@ function calcOrderTotals(items: any[], discount: number) {
   });
   const total = subtotal + gstAmount - discount;
   return { subtotal, gstAmount, total, parsedItems };
+}
+
+/** Adjust a single product's stock and record a movement */
+async function adjustStock(
+  productId: number,
+  type: "increase" | "decrease" | "damage" | "lost" | "return",
+  quantity: number,
+  reason: string,
+  notes?: string,
+) {
+  const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
+  if (!product || quantity <= 0) return;
+  const beforeStock = product.currentStock;
+  const afterStock = type === "increase" || type === "return"
+    ? beforeStock + quantity
+    : Math.max(0, beforeStock - quantity);
+  await db.update(productsTable).set({ currentStock: afterStock }).where(eq(productsTable.id, productId));
+  await db.insert(stockMovementsTable).values({
+    productId,
+    type,
+    quantity,
+    beforeStock,
+    afterStock,
+    reason,
+    notes: notes ?? null,
+  } as any);
+}
+
+/** Deduct stock for all items in an order */
+async function deductOrderStock(items: any[], orderNumber: string) {
+  for (const item of items) {
+    if (item.productId && item.quantity > 0) {
+      await adjustStock(item.productId, "decrease", item.quantity, `Order ${orderNumber}`);
+    }
+  }
+}
+
+/** Reverse stock deductions for all items (used before updating order items) */
+async function reverseOrderStock(items: any[], orderNumber: string) {
+  for (const item of items) {
+    if (item.productId && item.quantity > 0) {
+      await adjustStock(item.productId, "increase", item.quantity, `Order ${orderNumber} - edit reversal`);
+    }
+  }
 }
 
 router.get("/orders", async (req, res): Promise<void> => {
@@ -141,9 +185,13 @@ router.post("/orders", async (req, res): Promise<void> => {
     items: parsedItems,
   } as any).returning();
 
-  const [order] = await db.update(ordersTable).set({ orderNumber: generateOrderNumber(temp.id) }).where(eq(ordersTable.id, temp.id)).returning();
-  const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, customerId));
-  res.status(201).json(parseOrder(order, cust.name));
+  const orderNumber = generateOrderNumber(temp.id);
+  const [order] = await db.update(ordersTable).set({ orderNumber }).where(eq(ordersTable.id, temp.id)).returning();
+
+  // Deduct stock for each item
+  await deductOrderStock(parsedItems, orderNumber);
+
+  res.status(201).json(parseOrder(order, customer.name));
 });
 
 router.get("/orders/:id", async (req, res): Promise<void> => {
@@ -165,8 +213,15 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
   const body = req.body as any;
   const updates: any = {};
 
-  // If items provided, recalculate totals
+  // If items provided, recalculate totals and adjust stock
   if (body.items && Array.isArray(body.items)) {
+    // Read existing order to get old items for reversal
+    const [existing] = await db.select().from(ordersTable).where(eq(ordersTable.id, params.data.id));
+    if (existing) {
+      const oldItems = Array.isArray(existing.items) ? existing.items : (typeof existing.items === "string" ? JSON.parse(existing.items as string) : []);
+      await reverseOrderStock(oldItems, existing.orderNumber);
+    }
+
     const discountAmt = parseFloat(String(body.discount ?? 0));
     const paidAmount = parseFloat(String(body.paidAmount ?? 0));
     const { subtotal, gstAmount, total, parsedItems } = calcOrderTotals(body.items, discountAmt);
@@ -181,6 +236,14 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
       paidAmount: String(paidAmount),
       paymentStatus,
     });
+
+    // Deduct stock for new items
+    const [updatedOrder] = await db.update(ordersTable).set(updates).where(eq(ordersTable.id, params.data.id)).returning();
+    if (!updatedOrder) { res.status(404).json({ error: "Order not found" }); return; }
+    await deductOrderStock(parsedItems, updatedOrder.orderNumber);
+    const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, updatedOrder.customerId));
+    res.json(parseOrder(updatedOrder, cust?.name ?? ""));
+    return;
   }
 
   if (body.customerId !== undefined) updates.customerId = body.customerId;
@@ -188,18 +251,16 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
   if (body.status !== undefined) updates.status = body.status;
   if (body.paymentMethod !== undefined) updates.paymentMethod = body.paymentMethod;
   if (body.notes !== undefined) updates.notes = body.notes || null;
-  if (!body.items) {
-    if (body.paidAmount !== undefined) {
-      updates.paidAmount = String(body.paidAmount);
-      const [existing] = await db.select({ total: ordersTable.total }).from(ordersTable).where(eq(ordersTable.id, params.data.id));
-      if (existing) {
-        const total = parseFloat(String(existing.total));
-        const paid = parseFloat(String(body.paidAmount));
-        updates.paymentStatus = paid >= total ? "paid" : paid > 0 ? "partial" : "unpaid";
-      }
+  if (body.paidAmount !== undefined) {
+    updates.paidAmount = String(body.paidAmount);
+    const [existing] = await db.select({ total: ordersTable.total }).from(ordersTable).where(eq(ordersTable.id, params.data.id));
+    if (existing) {
+      const total = parseFloat(String(existing.total));
+      const paid = parseFloat(String(body.paidAmount));
+      updates.paymentStatus = paid >= total ? "paid" : paid > 0 ? "partial" : "unpaid";
     }
-    if (body.discount !== undefined) updates.discount = String(body.discount);
   }
+  if (body.discount !== undefined) updates.discount = String(body.discount);
 
   const [order] = await db.update(ordersTable).set(updates).where(eq(ordersTable.id, params.data.id)).returning();
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
@@ -210,6 +271,14 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
 router.delete("/orders/:id", async (req, res): Promise<void> => {
   const params = DeleteOrderParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  // Reverse stock deductions before deleting
+  const [existing] = await db.select().from(ordersTable).where(eq(ordersTable.id, params.data.id));
+  if (existing) {
+    const oldItems = Array.isArray(existing.items) ? existing.items : (typeof existing.items === "string" ? JSON.parse(existing.items as string) : []);
+    await reverseOrderStock(oldItems, existing.orderNumber);
+  }
+
   const [order] = await db.delete(ordersTable).where(eq(ordersTable.id, params.data.id)).returning();
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
   res.sendStatus(204);
