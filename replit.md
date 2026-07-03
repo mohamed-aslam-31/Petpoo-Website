@@ -1,36 +1,57 @@
-# [Project name]
+# ShopFlow ERP
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A full-stack wholesale & retail ERP system for Indian merchants — inventory, billing, orders, customers, suppliers, employees, payments, expenses, and analytics in one place.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080, proxied at `/api`)
+- `pnpm --filter @workspace/shopflow-erp run dev` — run the frontend (port 25765, proxied at `/`)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required env: `DATABASE_URL` — Postgres connection string, `SESSION_SECRET`
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
+- Frontend: React 18 + Vite + Tailwind CSS + shadcn/ui + TanStack Query + Recharts + wouter
+- API: Express 5 (port 8080, path prefix `/api`)
 - DB: PostgreSQL + Drizzle ORM
 - Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
+- API codegen: Orval (from OpenAPI spec → `lib/api-zod/`, `lib/api-hooks/`)
 - Build: esbuild (CJS bundle)
+- Auth: localStorage-based (demo mode — any credentials work)
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `lib/db/src/schema/` — all 10 Drizzle table definitions (source of truth for DB shape)
+- `lib/api-spec/openapi.yaml` — OpenAPI spec (source of truth for API contract)
+- `lib/api-zod/` — generated Zod schemas (do not edit manually)
+- `lib/api-hooks/` — generated TanStack Query hooks (do not edit manually)
+- `artifacts/api-server/src/routes/` — one file per module (categories, brands, products, customers, suppliers, orders, invoices, payments, employees, expenses, stock, dashboard)
+- `artifacts/shopflow-erp/src/pages/` — all frontend pages organized by module
+- `artifacts/shopflow-erp/src/components/` — shared UI components + layout
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Contract-first: OpenAPI spec → codegen → Zod validators on server + React Query hooks on client
+- Numeric DB columns stored as Postgres `numeric`/`decimal` — always `parseFloat()` before sending JSON
+- Order/invoice items stored as JSONB array — flexible line-item structure without a separate table
+- Auto-generated codes (CUST0001, ORD000001, etc.) inserted as "TEMP" then updated in a second query after getting the auto-increment id
+- Express 5 async handlers must type-annotate `Promise<void>` return to satisfy strict TS
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- **Dashboard** — today's sales, stock value, low-stock alerts, charts (30-day sales trend, top products)
+- **Inventory** — products with SKU/barcode/HSN/GST, categories, brands, stock adjustment log
+- **Billing** — GST-compliant invoices (CGST/SGST/IGST), wholesale orders
+- **Customers** — customer ledger with transaction history
+- **Suppliers** — supplier accounts + outstanding tracking
+- **Employees** — staff directory with roles, departments, salaries
+- **Payments** — incoming/outgoing payment tracking
+- **Expenses** — expense management by category
+- **Reports** — sales analytics, profit & loss
 
 ## User preferences
 
@@ -38,7 +59,10 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Never `pnpm dev` at workspace root — run via workflows or `pnpm --filter @workspace/<name> run dev`
+- After schema changes: `pnpm --filter @workspace/db run push` then restart API workflow
+- After OpenAPI spec changes: `pnpm --filter @workspace/api-spec run codegen` then restart API workflow
+- Numeric DB fields (prices, amounts) come back as strings from Drizzle — always wrap in `parseFloat()`
 
 ## Pointers
 
