@@ -18,6 +18,7 @@ import { Orders } from "./pages/orders";
 import { Customers } from "./pages/customers";
 import { CustomerDetail } from "./pages/customers/detail";
 import { Suppliers } from "./pages/suppliers";
+import { SupplierDetail } from "./pages/suppliers/detail";
 import { Employees } from "./pages/employees";
 import { Payments } from "./pages/payments";
 import { Expenses } from "./pages/expenses";
@@ -71,6 +72,7 @@ function Router() {
       <Route path="/customers" component={() => <ProtectedRoute component={Customers} />} />
       <Route path="/customers/:id" component={() => <ProtectedRoute component={CustomerDetail} />} />
       <Route path="/suppliers" component={() => <ProtectedRoute component={Suppliers} />} />
+      <Route path="/suppliers/:id" component={() => <ProtectedRoute component={SupplierDetail} />} />
       <Route path="/employees" component={() => <ProtectedRoute component={Employees} />} />
       <Route path="/payments" component={() => <ProtectedRoute component={Payments} />} />
       <Route path="/expenses" component={() => <ProtectedRoute component={Expenses} />} />

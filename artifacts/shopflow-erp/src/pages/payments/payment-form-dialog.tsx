@@ -9,6 +9,9 @@ import {
   useListCustomers,
   useListSuppliers,
   getListPaymentsQueryKey,
+  getGetCustomerLedgerQueryKey,
+  getGetCustomerQueryKey,
+  getGetSupplierQueryKey,
 } from "@workspace/api-client-react";
 import {
   Dialog,
@@ -46,27 +49,65 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
-const empty: FormValues = { amount: 0, method: "cash", type: "received", entityType: "customer", entityId: 0, notes: "" };
+const makeEmpty = (entityType = "customer", entityId = 0): FormValues => ({
+  amount: 0,
+  method: "cash",
+  type: entityType === "supplier" ? "paid" : "received",
+  entityType,
+  entityId,
+  notes: "",
+});
 
 export function PaymentFormDialog({
-  open, onOpenChange,
-}: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  open,
+  onOpenChange,
+  defaultEntityType,
+  defaultEntityId,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  defaultEntityType?: "customer" | "supplier";
+  defaultEntityId?: number;
+}) {
   const queryClient = useQueryClient();
-  const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: empty });
+  const form = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: makeEmpty(defaultEntityType, defaultEntityId),
+  });
   const entityType = form.watch("entityType");
 
   const { data: customers } = useListCustomers({ limit: 200 });
   const { data: suppliers } = useListSuppliers({ limit: 200 });
 
   useEffect(() => {
-    if (open) { form.reset(empty); }
-  }, [open, form]);
+    if (open) {
+      form.reset(makeEmpty(defaultEntityType, defaultEntityId));
+    }
+  }, [open, defaultEntityType, defaultEntityId]);
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
+    if (form.getValues("entityType") === "customer") {
+      const id = form.getValues("entityId");
+      if (id) {
+        queryClient.invalidateQueries({ queryKey: getGetCustomerLedgerQueryKey(id) });
+        queryClient.invalidateQueries({ queryKey: getGetCustomerQueryKey(id) });
+      }
+    } else {
+      const id = form.getValues("entityId");
+      if (id) {
+        queryClient.invalidateQueries({ queryKey: getGetSupplierQueryKey(id) });
+      }
+    }
+  };
 
   const createMutation = useCreatePayment({
     mutation: {
-      onSuccess: () => { toast.success("Payment recorded"); invalidate(); onOpenChange(false); },
+      onSuccess: () => {
+        toast.success("Payment recorded");
+        invalidate();
+        onOpenChange(false);
+      },
       onError: (e: any) => toast.error(e?.message ?? "Failed"),
     },
   });
@@ -78,6 +119,7 @@ export function PaymentFormDialog({
   }
 
   const entities = entityType === "customer" ? customers?.data ?? [] : suppliers?.data ?? [];
+  const locked = !!defaultEntityType && !!defaultEntityId;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -117,7 +159,11 @@ export function PaymentFormDialog({
               )} />
               <FormField control={form.control} name="entityType" render={({ field }) => (
                 <FormItem><FormLabel>From / To</FormLabel>
-                  <Select onValueChange={(v) => { field.onChange(v); form.setValue("entityId", 0 as any); }} value={field.value}>
+                  <Select
+                    onValueChange={(v) => { field.onChange(v); form.setValue("entityId", 0 as any); }}
+                    value={field.value}
+                    disabled={locked}
+                  >
                     <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                     <SelectContent>
                       <SelectItem value="customer">Customer</SelectItem>
@@ -128,7 +174,11 @@ export function PaymentFormDialog({
               )} />
               <FormField control={form.control} name="entityId" render={({ field }) => (
                 <FormItem><FormLabel>{entityType === "customer" ? "Customer" : "Supplier"}</FormLabel>
-                  <Select onValueChange={(v) => field.onChange(Number(v))} value={field.value ? String(field.value) : ""}>
+                  <Select
+                    onValueChange={(v) => field.onChange(Number(v))}
+                    value={field.value ? String(field.value) : ""}
+                    disabled={locked}
+                  >
                     <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
                     <SelectContent>
                       {entities.map((e: any) => <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>)}

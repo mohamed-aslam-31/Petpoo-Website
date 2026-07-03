@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, MoreHorizontal, Edit, Trash2 } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, Eye } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
+import { Link } from "wouter";
 import { SupplierFormDialog } from "./supplier-form-dialog";
 
 const PAGE_SIZE = 20;
@@ -73,8 +74,8 @@ export function Suppliers() {
                 <TableRow><TableCell colSpan={6} className="h-32 text-center text-muted-foreground">No suppliers found.</TableCell></TableRow>
               ) : data?.data?.map((supplier) => (
                 <TableRow key={supplier.id} className="hover:bg-muted/50 transition-colors">
-                  <TableCell className="font-medium text-primary">
-                    {supplier.name}
+                  <TableCell className="font-medium">
+                    <Link href={`/suppliers/${supplier.id}`} className="hover:underline text-primary">{supplier.name}</Link>
                     <div className="text-xs text-muted-foreground font-normal mt-0.5">{supplier.supplierCode}</div>
                   </TableCell>
                   <TableCell>
@@ -92,6 +93,7 @@ export function Suppliers() {
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem asChild><Link href={`/suppliers/${supplier.id}`} className="cursor-pointer flex items-center"><Eye className="mr-2 h-4 w-4" /> View Details</Link></DropdownMenuItem>
                         <DropdownMenuItem className="cursor-pointer" onClick={() => { setEditingSupplier(supplier); setFormOpen(true); }}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
                         <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={() => setDeletingSupplier(supplier)}><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
                       </DropdownMenuContent>
