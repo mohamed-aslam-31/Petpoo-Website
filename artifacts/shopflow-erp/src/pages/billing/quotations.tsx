@@ -5,7 +5,6 @@ import { z } from "zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { useLocation } from "wouter";
 import { useListCustomers, useListProducts } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -90,19 +89,6 @@ function useBulkStatus() {
       apiFetch("/quotations/bulk-status", { method: "PATCH", body: JSON.stringify({ ids, status }) }),
     onSuccess: (data: any) => { qc.invalidateQueries({ queryKey: QK }); toast.success(`Updated ${data?.updated ?? 0} quotation(s)`); },
     onError: (e: any) => toast.error(e.message ?? "Bulk status update failed"),
-  });
-}
-
-function useConvertToOrder() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: number) => apiFetch(`/quotations/${id}/convert-to-order`, { method: "POST" }),
-    onSuccess: (data: any) => {
-      qc.invalidateQueries({ queryKey: QK });
-      qc.invalidateQueries({ queryKey: ["orders"] });
-      toast.success(`Order ${data.orderNumber} created successfully!`);
-    },
-    onError: (e: any) => toast.error(e.message ?? "Failed to convert"),
   });
 }
 
@@ -440,8 +426,6 @@ function QuotationFormDialog({ open, onOpenChange, quotation }: { open: boolean;
                     <SelectContent>
                       <SelectItem value="draft">Draft</SelectItem>
                       <SelectItem value="sent">Sent</SelectItem>
-                      <SelectItem value="accepted">Accepted</SelectItem>
-                      <SelectItem value="rejected">Rejected</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -602,7 +586,6 @@ const STATUS_COLORS: Record<string, string> = {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export function Quotations() {
-  const [, navigate] = useLocation();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -610,7 +593,6 @@ export function Quotations() {
   const [editingQuotation, setEditingQuotation] = useState<any | null>(null);
   const [viewingQuotation, setViewingQuotation] = useState<any | null>(null);
   const [deletingQuotation, setDeletingQuotation] = useState<any | null>(null);
-  const [convertingQuotation, setConvertingQuotation] = useState<any | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
@@ -619,7 +601,6 @@ export function Quotations() {
   const deleteMutation = useDeleteQuotation();
   const bulkDeleteMutation = useBulkDelete();
   const bulkStatusMutation = useBulkStatus();
-  const convertMutation = useConvertToOrder();
 
   const quotations: any[] = data?.data ?? [];
   const total = data?.total ?? 0;
@@ -652,16 +633,12 @@ export function Quotations() {
 
   function handleBulkStatus(status: string) {
     bulkStatusMutation.mutate({ ids: Array.from(selectedIds), status }, {
-      onSuccess: () => { setSelectedIds(new Set()); setBulkStatusOpen(false); },
-    });
-  }
-
-  function handleConvert() {
-    if (!convertingQuotation) return;
-    convertMutation.mutate(convertingQuotation.id, {
       onSuccess: (data: any) => {
-        setConvertingQuotation(null);
-        setTimeout(() => navigate("/orders"), 800);
+        setSelectedIds(new Set());
+        setBulkStatusOpen(false);
+        if (status === "accepted" && data?.ordersCreated > 0) {
+          toast.success(`${data.ordersCreated} order${data.ordersCreated !== 1 ? "s" : ""} created automatically`, { description: "Find them in the Orders page." });
+        }
       },
     });
   }
@@ -807,12 +784,12 @@ export function Quotations() {
                           </>
                         )}
 
-                        {/* Convert to Order — only for accepted */}
-                        {q.status === "accepted" && (
+                        {/* accepted quotations show a read-only indicator — auto-converted on status change */}
+                        {q.status === "accepted" && q.convertedOrderNumber && (
                           <>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem className="cursor-pointer text-green-700 focus:text-green-700" onClick={() => setConvertingQuotation(q)}>
-                              <ArrowRight className="mr-2 h-4 w-4" /> Convert to Order
+                            <DropdownMenuItem disabled className="text-green-700 opacity-70">
+                              <ArrowRight className="mr-2 h-4 w-4" /> Order {q.convertedOrderNumber}
                             </DropdownMenuItem>
                           </>
                         )}
@@ -885,29 +862,6 @@ export function Quotations() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Convert to Order confirm */}
-      <AlertDialog open={!!convertingQuotation} onOpenChange={(open) => !open && setConvertingQuotation(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Convert to Order?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will create a new order from quotation <strong>{convertingQuotation?.quotationNumber}</strong> for <strong>{convertingQuotation?.customerName}</strong>.
-              {convertingQuotation?.isNewCustomer && (
-                <span className="block mt-2 text-amber-600 font-medium">
-                  ⚠ This customer will also be saved to the Customers database.
-                </span>
-              )}
-              <span className="block mt-1">Stock will be deducted immediately on order creation.</span>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConvert} disabled={convertMutation.isPending} className="bg-green-600 hover:bg-green-700 text-white">
-              {convertMutation.isPending ? "Creating Order..." : "Create Order"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

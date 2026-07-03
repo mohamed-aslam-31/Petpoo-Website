@@ -11,6 +11,8 @@ export const ordersTable = pgTable("orders", {
   orderDate: date("order_date", { mode: "string" }).notNull(),
   notes: text("notes"),
   items: jsonb("items").notNull().default("[]"),
+  /** Carries quotation-level data so the Complete Order dialog can pre-fill charges */
+  meta: jsonb("meta"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

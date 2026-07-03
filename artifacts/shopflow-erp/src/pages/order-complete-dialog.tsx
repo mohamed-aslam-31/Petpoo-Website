@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCompleteOrder,
-  useListProducts,
   getListOrdersQueryKey,
   getListInvoicesQueryKey,
   getGetDashboardSummaryQueryKey,
@@ -44,10 +43,30 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
+interface OrderItem {
+  productId: number;
+  productName: string;
+  sku?: string;
+  quantity: number;
+  /** Pre-filled from quotation */
+  unitPrice?: number;
+  discount?: number;
+  gstPercent?: number;
+}
+
+interface OrderMeta {
+  type?: string;          // "gst" | "non_gst"
+  transport?: number;
+  packageCharge?: number;
+  otherCharge?: number;
+  quotationNumber?: string;
+}
+
 interface OrderToComplete {
   id: number;
   orderNumber: string;
-  items: { productId: number; productName: string; sku?: string; quantity: number }[];
+  items: OrderItem[];
+  meta?: OrderMeta | null;
 }
 
 export function OrderCompleteDialog({
@@ -63,27 +82,36 @@ export function OrderCompleteDialog({
   });
   const { fields } = useFieldArray({ control: form.control, name: "items" });
 
-  const { data: products } = useListProducts({ limit: 200 });
-
   useEffect(() => {
     if (open && order) {
+      const meta = order.meta;
+      // Derive invoice type from quotation meta; default to gst
+      const invoiceType = meta?.type === "non_gst" ? "non_gst" : "gst";
+
       form.reset({
-        invoiceType: "gst", status: "completed", paymentMethod: "cash", paidAmount: 0,
-        transportCharge: 0, packageCharge: 0, otherCharge: 0, discount: 0, dueDate: "", notes: "",
-        items: order.items.map((it) => {
-          const product = products?.data?.find((p) => p.id === it.productId);
-          return {
-            productId: it.productId,
-            productName: it.productName ?? product?.name ?? "Unknown",
-            quantity: it.quantity,
-            unitPrice: Number(product?.retailPrice) || 0,
-            discount: 0,
-            gstPercent: Number(product?.gstPercent) || 0,
-          };
-        }),
+        invoiceType,
+        status: "completed",
+        paymentMethod: "cash",
+        paidAmount: 0,
+        // Pre-fill charges from quotation meta
+        transportCharge: meta?.transport ?? 0,
+        packageCharge: meta?.packageCharge ?? 0,
+        otherCharge: meta?.otherCharge ?? 0,
+        discount: 0,
+        dueDate: "",
+        notes: "",
+        items: order.items.map((it) => ({
+          productId: it.productId,
+          productName: it.productName ?? "Unknown",
+          quantity: it.quantity,
+          // Use stored quotation price; fall back to 0 so user can fill it in
+          unitPrice: it.unitPrice ?? 0,
+          discount: it.discount ?? 0,
+          gstPercent: it.gstPercent ?? 0,
+        })),
       });
     }
-  }, [open, order, products, form]);
+  }, [open, order, form]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() });
@@ -125,13 +153,20 @@ export function OrderCompleteDialog({
   }
 
   const isPending = completeMutation.isPending;
+  const fromQuotation = order?.meta?.quotationNumber;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Complete Order {order?.orderNumber}</DialogTitle>
-          <DialogDescription>Generate the invoice for this booking. Product is locked to what was booked; quantity, price, GST% and discount can be adjusted.</DialogDescription>
+          <DialogDescription>
+            Generate the invoice for this order.
+            {fromQuotation && (
+              <span className="ml-1 text-primary font-medium">Pre-filled from Quotation {fromQuotation}.</span>
+            )}
+            {" "}All prices and charges can be adjusted before confirming.
+          </DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -194,7 +229,7 @@ export function OrderCompleteDialog({
 
             <Separator />
             <div className="space-y-2">
-              <h4 className="font-medium">Items (product locked to booking)</h4>
+              <h4 className="font-medium text-sm">Items — quantity, price, GST% and discount are editable</h4>
               {fields.map((field, index) => (
                 <div key={field.id} className="grid grid-cols-12 gap-2 items-end p-2 rounded-md bg-muted/30">
                   <div className="col-span-4">
@@ -223,7 +258,7 @@ export function OrderCompleteDialog({
 
             <div className="flex justify-between items-center text-sm font-medium pt-2 border-t">
               <span className="text-muted-foreground">Grand Total</span>
-              <span className="text-lg font-bold">₹{grandTotal.toFixed(2)}</span>
+              <span className="text-lg font-bold">₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
             </div>
 
             <FormField control={form.control} name="notes" render={({ field }) => (

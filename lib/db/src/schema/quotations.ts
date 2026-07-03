@@ -1,4 +1,5 @@
 import { pgTable, text, serial, timestamp, integer, numeric, jsonb, date, boolean } from "drizzle-orm/pg-core";
+// Note: intentionally not importing ordersTable to avoid circular schema imports
 import { customersTable } from "./customers";
 
 export const quotationsTable = pgTable("quotations", {
@@ -28,7 +29,10 @@ export const quotationsTable = pgTable("quotations", {
   total: numeric("total", { precision: 12, scale: 2 }).notNull().default("0"),
   items: jsonb("items").notNull().default("[]"),
   notes: text("notes"),
-  status: text("status").notNull().default("draft"), // draft | sent | accepted | rejected | expired
+  status: text("status").notNull().default("draft"), // draft | sent | accepted | rejected
+  /** Set when the quotation is auto-converted to an order on acceptance */
+  convertedOrderId: integer("converted_order_id"),
+  convertedOrderNumber: text("converted_order_number"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

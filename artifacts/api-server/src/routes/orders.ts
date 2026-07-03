@@ -27,6 +27,8 @@ function parseOrder(o: any, customerName?: string, invoiceNumber?: string | null
     invoiceNumber: invoiceNumber ?? null,
     notes: o.notes ?? null,
     items,
+    /** Quotation-level charges/type so CompleteOrder dialog can pre-fill */
+    meta: o.meta ?? null,
     createdAt: o.createdAt instanceof Date ? o.createdAt.toISOString() : o.createdAt,
   };
 }
