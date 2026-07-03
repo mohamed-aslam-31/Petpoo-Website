@@ -13,10 +13,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import {
   Phone, Mail, MapPin, CreditCard, ArrowLeft, Edit, Plus,
-  ArrowUpRight, ArrowDownRight, RefreshCcw,
+  ArrowUpRight, ArrowDownRight, RefreshCcw, Printer,
 } from "lucide-react";
 import { PaymentFormDialog } from "../payments/payment-form-dialog";
 import { SupplierFormDialog } from "./supplier-form-dialog";
+import { printSupplierStatement } from "@/lib/print-statement";
 
 export function SupplierDetail() {
   const [, params] = useRoute("/suppliers/:id");
@@ -87,6 +88,13 @@ export function SupplierDetail() {
           </div>
         </div>
         <div className="flex gap-2 shrink-0">
+          <Button
+            variant="outline" size="sm" className="gap-2"
+            onClick={() => printSupplierStatement(
+              { name: supplier.name, code: supplier.supplierCode, phone: supplier.phone, email: supplier.email, address: supplier.address, gstNumber: supplier.gstNumber, outstanding: supplier.outstanding, type: "supplier" },
+              payments
+            )}
+          ><Printer className="h-4 w-4" /> Print Statement</Button>
           <Button variant="outline" size="sm" className="gap-2" onClick={() => setEditOpen(true)}><Edit className="h-4 w-4" /> Edit</Button>
           <Button size="sm" className="gap-2" onClick={() => setPaymentOpen(true)}><Plus className="h-4 w-4" /> Record Payment</Button>
         </div>

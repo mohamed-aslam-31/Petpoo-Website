@@ -17,10 +17,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import {
   Phone, Mail, MapPin, CreditCard, ArrowLeft, Edit, Plus,
-  TrendingUp, TrendingDown, IndianRupee, FileText, ShoppingCart,
+  TrendingUp, TrendingDown, IndianRupee, Printer,
 } from "lucide-react";
 import { PaymentFormDialog } from "../payments/payment-form-dialog";
 import { CustomerFormDialog } from "./customer-form-dialog";
+import { printStatement } from "@/lib/print-statement";
 
 export function CustomerDetail() {
   const [, params] = useRoute("/customers/:id");
@@ -79,6 +80,13 @@ export function CustomerDetail() {
           </div>
         </div>
         <div className="flex gap-2 shrink-0">
+          <Button
+            variant="outline" size="sm" className="gap-2"
+            onClick={() => printStatement(
+              { name: customer.name, code: customer.customerCode, phone: customer.phone, email: customer.email, address: customer.address, gstNumber: customer.gstNumber, outstanding: customer.outstanding, type: "customer" },
+              (ledger ?? []).map((e) => ({ date: e.date, description: e.description, type: e.type, debit: Number(e.debit), credit: Number(e.credit), balance: Number(e.balance) }))
+            )}
+          ><Printer className="h-4 w-4" /> Print Statement</Button>
           <Button variant="outline" size="sm" className="gap-2" onClick={() => setEditOpen(true)}><Edit className="h-4 w-4" /> Edit</Button>
           <Button size="sm" className="gap-2" onClick={() => setPaymentOpen(true)}><Plus className="h-4 w-4" /> Record Payment</Button>
         </div>
