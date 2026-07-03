@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, MoreHorizontal, Trash2 } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Trash2, Edit, Filter, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { InvoiceFormDialog } from "./invoice-form-dialog";
 
@@ -20,14 +21,41 @@ export function Invoices() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [formOpen, setFormOpen] = useState(false);
+  const [editingInvoice, setEditingInvoice] = useState<any | null>(null);
   const [deletingInvoice, setDeletingInvoice] = useState<any | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Filters
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterType, setFilterType] = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+
   const queryClient = useQueryClient();
 
-  const listParams = { search: search || undefined, page, limit: PAGE_SIZE };
+  const listParams = {
+    search: search || undefined,
+    status: filterStatus || undefined,
+    type: filterType || undefined,
+    dateFrom: filterDateFrom || undefined,
+    dateTo: filterDateTo || undefined,
+    page,
+    limit: PAGE_SIZE,
+  };
   const { data, isLoading } = useListInvoices(listParams, { query: { queryKey: getListInvoicesQueryKey(listParams) } });
 
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const hasActiveFilters = filterStatus || filterType || filterDateFrom || filterDateTo;
+
+  function clearFilters() {
+    setFilterStatus("");
+    setFilterType("");
+    setFilterDateFrom("");
+    setFilterDateTo("");
+    setPage(1);
+  }
 
   const deleteMutation = useDeleteInvoice({
     mutation: {
@@ -54,17 +82,74 @@ export function Invoices() {
           <h2 className="text-3xl font-bold tracking-tight">Invoices</h2>
           <p className="text-muted-foreground mt-1">Manage billing, estimates, and quotations.</p>
         </div>
-        <Button className="shrink-0 gap-2" onClick={() => setFormOpen(true)}>
-          <Plus className="h-4 w-4" /> Create Invoice
-        </Button>
-      </div>
-      <Card>
-        <div className="p-4 border-b flex gap-4 items-center bg-muted/20">
-          <div className="relative w-full sm:w-96">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input type="search" placeholder="Search by invoice number or customer..." className="pl-9 bg-background" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
-          </div>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => setShowFilters(v => !v)}>
+            <Filter className="h-4 w-4" />
+            Filters
+            {hasActiveFilters && <Badge className="h-5 w-5 p-0 flex items-center justify-center text-[10px] rounded-full">!</Badge>}
+          </Button>
+          <Button className="shrink-0 gap-2" onClick={() => { setEditingInvoice(null); setFormOpen(true); }}>
+            <Plus className="h-4 w-4" /> Create Invoice
+          </Button>
         </div>
+      </div>
+
+      <Card>
+        <div className="p-4 border-b space-y-3 bg-muted/20">
+          <div className="flex gap-3 items-center flex-wrap">
+            <div className="relative flex-1 min-w-[200px] sm:max-w-80">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input type="search" placeholder="Search by invoice no. or customer..." className="pl-9 bg-background" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+            </div>
+          </div>
+
+          {showFilters && (
+            <div className="flex flex-wrap gap-3 pt-1 items-end">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-muted-foreground">Status</span>
+                <Select value={filterStatus || "all"} onValueChange={(v) => { setFilterStatus(v === "all" ? "" : v); setPage(1); }}>
+                  <SelectTrigger className="h-8 w-36 bg-background text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="draft">Draft</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                    <SelectItem value="overdue">Overdue</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-muted-foreground">Type</span>
+                <Select value={filterType || "all"} onValueChange={(v) => { setFilterType(v === "all" ? "" : v); setPage(1); }}>
+                  <SelectTrigger className="h-8 w-36 bg-background text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="gst">GST Invoice</SelectItem>
+                    <SelectItem value="non_gst">Non-GST</SelectItem>
+                    <SelectItem value="estimate">Estimate</SelectItem>
+                    <SelectItem value="quotation">Quotation</SelectItem>
+                    <SelectItem value="credit">Credit Note</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-muted-foreground">Date From</span>
+                <Input type="date" className="h-8 w-36 bg-background text-sm" value={filterDateFrom} onChange={(e) => { setFilterDateFrom(e.target.value); setPage(1); }} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-muted-foreground">Date To</span>
+                <Input type="date" className="h-8 w-36 bg-background text-sm" value={filterDateTo} onChange={(e) => { setFilterDateTo(e.target.value); setPage(1); }} />
+              </div>
+              {hasActiveFilters && (
+                <Button variant="ghost" size="sm" className="h-8 gap-1 text-muted-foreground" onClick={clearFilters}>
+                  <X className="h-3 w-3" /> Clear
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+
         <CardContent className="p-0">
           <Table>
             <TableHeader className="bg-muted/50">
@@ -90,11 +175,12 @@ export function Invoices() {
                   <TableCell className="text-muted-foreground">{format(new Date(invoice.createdAt), "MMM d, yyyy")}</TableCell>
                   <TableCell><Badge variant="outline" className="uppercase text-[10px] tracking-wider">{invoice.type.replace('_', ' ')}</Badge></TableCell>
                   <TableCell><Badge className={getStatusColor(invoice.status)} variant="secondary">{invoice.status}</Badge></TableCell>
-                  <TableCell className="text-right font-medium">₹{invoice.total}</TableCell>
+                  <TableCell className="text-right font-medium">₹{Number(invoice.total).toLocaleString('en-IN')}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem className="cursor-pointer" onClick={() => { setEditingInvoice(invoice); setFormOpen(true); }}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
                         <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={() => setDeletingInvoice(invoice)}><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -113,7 +199,7 @@ export function Invoices() {
         </CardContent>
       </Card>
 
-      <InvoiceFormDialog open={formOpen} onOpenChange={setFormOpen} />
+      <InvoiceFormDialog open={formOpen} onOpenChange={(v) => { setFormOpen(v); if (!v) setEditingInvoice(null); }} invoice={editingInvoice} />
 
       <AlertDialog open={!!deletingInvoice} onOpenChange={(open) => !open && setDeletingInvoice(null)}>
         <AlertDialogContent>

@@ -391,6 +391,38 @@ paths:
           in: query
           schema:
             type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: city
+          in: query
+          schema:
+            type: string
+        - name: state
+          in: query
+          schema:
+            type: string
+        - name: minOutstanding
+          in: query
+          schema:
+            type: number
+        - name: maxOutstanding
+          in: query
+          schema:
+            type: number
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+        - name: dateTo
+          in: query
+          schema:
+            type: string
         - name: page
           in: query
           schema:
@@ -611,6 +643,14 @@ paths:
           in: query
           schema:
             type: string
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+        - name: dateTo
+          in: query
+          schema:
+            type: string
         - name: page
           in: query
           schema:
@@ -711,10 +751,22 @@ paths:
           in: query
           schema:
             type: string
+        - name: type
+          in: query
+          schema:
+            type: string
         - name: customerId
           in: query
           schema:
             type: integer
+        - name: dateFrom
+          in: query
+          schema:
+            type: string
+        - name: dateTo
+          in: query
+          schema:
+            type: string
         - name: page
           in: query
           schema:
@@ -1333,19 +1385,23 @@ components:
       type: object
       required: [id, name, phone, customerCode, createdAt]
       properties:
-        id:           { type: integer }
-        customerCode: { type: string }
-        name:         { type: string }
-        phone:        { type: string }
-        email:        { type: ["string", "null"] }
-        address:      { type: ["string", "null"] }
-        gstNumber:    { type: ["string", "null"] }
-        creditLimit:  { type: number }
-        outstanding:  { type: number }
-        type:         { type: string }
-        status:       { type: string }
-        notes:        { type: ["string", "null"] }
-        createdAt:    { type: string }
+        id:             { type: integer }
+        customerCode:   { type: string }
+        name:           { type: string }
+        phone:          { type: string }
+        email:          { type: ["string", "null"] }
+        address:        { type: ["string", "null"] }
+        city:           { type: ["string", "null"] }
+        state:          { type: ["string", "null"] }
+        shopName:       { type: ["string", "null"] }
+        landlineNumber: { type: ["string", "null"] }
+        gstNumber:      { type: ["string", "null"] }
+        creditLimit:    { type: number }
+        outstanding:    { type: number }
+        type:           { type: string }
+        status:         { type: string }
+        notes:          { type: ["string", "null"] }
+        createdAt:      { type: string }
 
     CustomersPage:
       type: object
@@ -1360,27 +1416,35 @@ components:
       type: object
       required: [name, phone]
       properties:
-        name:        { type: string, minLength: 1 }
-        phone:       { type: string }
-        email:       { type: string }
-        address:     { type: string }
-        gstNumber:   { type: string }
-        creditLimit: { type: number }
-        type:        { type: string }
-        notes:       { type: string }
+        name:           { type: string, minLength: 1 }
+        phone:          { type: string }
+        email:          { type: string }
+        address:        { type: string }
+        city:           { type: string }
+        state:          { type: string }
+        shopName:       { type: string }
+        landlineNumber: { type: string }
+        gstNumber:      { type: string }
+        creditLimit:    { type: number }
+        type:           { type: string }
+        notes:          { type: string }
 
     CustomerUpdate:
       type: object
       properties:
-        name:        { type: string }
-        phone:       { type: string }
-        email:       { type: string }
-        address:     { type: string }
-        gstNumber:   { type: string }
-        creditLimit: { type: number }
-        type:        { type: string }
-        status:      { type: string }
-        notes:       { type: string }
+        name:           { type: string }
+        phone:          { type: string }
+        email:          { type: string }
+        address:        { type: string }
+        city:           { type: string }
+        state:          { type: string }
+        shopName:       { type: string }
+        landlineNumber: { type: string }
+        gstNumber:      { type: string }
+        creditLimit:    { type: number }
+        type:           { type: string }
+        status:         { type: string }
+        notes:          { type: string }
 
     LedgerEntry:
       type: object
@@ -1510,11 +1574,15 @@ components:
     OrderUpdate:
       type: object
       properties:
+        customerId:    { type: integer }
+        type:          { type: string }
         status:        { type: string }
+        discount:      { type: number }
         paymentStatus: { type: string }
         paidAmount:    { type: number }
         paymentMethod: { type: string }
         notes:         { type: string }
+        items:         { type: array, items: { $ref: "#/components/schemas/OrderItemInput" } }
 
     Invoice:
       type: object
@@ -1578,12 +1646,17 @@ components:
     InvoiceUpdate:
       type: object
       properties:
+        customerId:    { type: integer }
+        type:          { type: string }
         status:        { type: string }
+        discount:      { type: number }
+        transport:     { type: number }
         paymentStatus: { type: string }
         paidAmount:    { type: number }
         paymentMethod: { type: string }
         dueDate:       { type: string }
         notes:         { type: string }
+        items:         { type: array, items: { $ref: "#/components/schemas/InvoiceItemInput" } }
 
     Payment:
       type: object

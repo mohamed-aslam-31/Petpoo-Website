@@ -7,11 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, Filter, MoreHorizontal, Eye, Trash2 } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, Filter, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { format } from "date-fns";
 import { OrderFormDialog } from "./order-form-dialog";
 
@@ -22,14 +23,39 @@ export function Orders() {
   const [tab, setTab] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [formOpen, setFormOpen] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<any | null>(null);
   const [deletingOrder, setDeletingOrder] = useState<any | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Filters
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+
   const queryClient = useQueryClient();
 
-  const listParams = { search: search || undefined, type: tab === "all" ? undefined : tab, page, limit: PAGE_SIZE };
+  const listParams = {
+    search: search || undefined,
+    type: tab === "all" ? undefined : tab,
+    status: filterStatus || undefined,
+    dateFrom: filterDateFrom || undefined,
+    dateTo: filterDateTo || undefined,
+    page,
+    limit: PAGE_SIZE,
+  };
   const { data, isLoading } = useListOrders(listParams, { query: { queryKey: getListOrdersQueryKey(listParams) } });
 
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const hasActiveFilters = filterStatus || filterDateFrom || filterDateTo;
+
+  function clearFilters() {
+    setFilterStatus("");
+    setFilterDateFrom("");
+    setFilterDateTo("");
+    setPage(1);
+  }
 
   const deleteMutation = useDeleteOrder({
     mutation: {
@@ -55,13 +81,20 @@ export function Orders() {
           <h2 className="text-3xl font-bold tracking-tight">Orders</h2>
           <p className="text-muted-foreground mt-1">Manage customer orders and fulfillments.</p>
         </div>
-        <Button className="shrink-0 gap-2" onClick={() => setFormOpen(true)}>
-          <Plus className="h-4 w-4" /> Create Order
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" className="gap-2" onClick={() => setShowFilters(v => !v)}>
+            <Filter className="h-4 w-4" />
+            Filters
+            {hasActiveFilters && <Badge className="h-5 w-5 p-0 flex items-center justify-center text-[10px] rounded-full">!</Badge>}
+          </Button>
+          <Button className="shrink-0 gap-2" onClick={() => { setEditingOrder(null); setFormOpen(true); }}>
+            <Plus className="h-4 w-4" /> Create Order
+          </Button>
+        </div>
       </div>
 
       <Card>
-        <div className="p-4 border-b flex flex-col gap-4">
+        <div className="p-4 border-b flex flex-col gap-3">
           <Tabs value={tab} onValueChange={(v) => { setTab(v); setPage(1); }} className="w-full">
             <TabsList>
               <TabsTrigger value="all">All Orders</TabsTrigger>
@@ -69,12 +102,43 @@ export function Orders() {
               <TabsTrigger value="wholesale">Wholesale</TabsTrigger>
             </TabsList>
           </Tabs>
-          <div className="flex flex-col sm:flex-row gap-4 justify-between items-center">
-            <div className="relative w-full sm:w-96">
+          <div className="flex flex-wrap gap-3 items-center">
+            <div className="relative flex-1 min-w-[200px] sm:max-w-80">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input type="search" placeholder="Search by order number or customer..." className="pl-9 bg-background" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+              <Input type="search" placeholder="Search by order no. or customer..." className="pl-9 bg-background" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
             </div>
           </div>
+
+          {showFilters && (
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-muted-foreground">Status</span>
+                <Select value={filterStatus || "all"} onValueChange={(v) => { setFilterStatus(v === "all" ? "" : v); setPage(1); }}>
+                  <SelectTrigger className="h-8 w-36 bg-background text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                    <SelectItem value="returned">Returned</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-muted-foreground">Date From</span>
+                <Input type="date" className="h-8 w-36 bg-background text-sm" value={filterDateFrom} onChange={(e) => { setFilterDateFrom(e.target.value); setPage(1); }} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-muted-foreground">Date To</span>
+                <Input type="date" className="h-8 w-36 bg-background text-sm" value={filterDateTo} onChange={(e) => { setFilterDateTo(e.target.value); setPage(1); }} />
+              </div>
+              {hasActiveFilters && (
+                <Button variant="ghost" size="sm" className="h-8 gap-1 text-muted-foreground" onClick={clearFilters}>
+                  <X className="h-3 w-3" /> Clear
+                </Button>
+              )}
+            </div>
+          )}
         </div>
         <CardContent className="p-0">
           <Table>
@@ -105,11 +169,12 @@ export function Orders() {
                   <TableCell>
                     <Badge className={getStatusColor(order.status)} variant="secondary">{order.status}</Badge>
                   </TableCell>
-                  <TableCell className="text-right font-medium">₹{order.total}</TableCell>
+                  <TableCell className="text-right font-medium">₹{Number(order.total).toLocaleString('en-IN')}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem className="cursor-pointer" onClick={() => { setEditingOrder(order); setFormOpen(true); }}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
                         <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={() => setDeletingOrder(order)}><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -128,7 +193,7 @@ export function Orders() {
         </CardContent>
       </Card>
 
-      <OrderFormDialog open={formOpen} onOpenChange={setFormOpen} />
+      <OrderFormDialog open={formOpen} onOpenChange={(v) => { setFormOpen(v); if (!v) setEditingOrder(null); }} order={editingOrder} />
 
       <AlertDialog open={!!deletingOrder} onOpenChange={(open) => !open && setDeletingOrder(null)}>
         <AlertDialogContent>

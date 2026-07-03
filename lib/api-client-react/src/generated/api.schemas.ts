@@ -196,6 +196,14 @@ export interface Customer {
   /** @nullable */
   address?: string | null;
   /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  state?: string | null;
+  /** @nullable */
+  shopName?: string | null;
+  /** @nullable */
+  landlineNumber?: string | null;
+  /** @nullable */
   gstNumber?: string | null;
   creditLimit?: number;
   outstanding?: number;
@@ -219,6 +227,10 @@ export interface CustomerInput {
   phone: string;
   email?: string;
   address?: string;
+  city?: string;
+  state?: string;
+  shopName?: string;
+  landlineNumber?: string;
   gstNumber?: string;
   creditLimit?: number;
   type?: string;
@@ -230,6 +242,10 @@ export interface CustomerUpdate {
   phone?: string;
   email?: string;
   address?: string;
+  city?: string;
+  state?: string;
+  shopName?: string;
+  landlineNumber?: string;
   gstNumber?: string;
   creditLimit?: number;
   type?: string;
@@ -360,11 +376,15 @@ export interface OrderInput {
 }
 
 export interface OrderUpdate {
+  customerId?: number;
+  type?: string;
   status?: string;
+  discount?: number;
   paymentStatus?: string;
   paidAmount?: number;
   paymentMethod?: string;
   notes?: string;
+  items?: OrderItemInput[];
 }
 
 export interface Invoice {
@@ -433,12 +453,17 @@ export interface InvoiceInput {
 }
 
 export interface InvoiceUpdate {
+  customerId?: number;
+  type?: string;
   status?: string;
+  discount?: number;
+  transport?: number;
   paymentStatus?: string;
   paidAmount?: number;
   paymentMethod?: string;
   dueDate?: string;
   notes?: string;
+  items?: InvoiceItemInput[];
 }
 
 export interface Payment {
@@ -643,6 +668,14 @@ limit?: number;
 
 export type ListCustomersParams = {
 search?: string;
+type?: string;
+status?: string;
+city?: string;
+state?: string;
+minOutstanding?: number;
+maxOutstanding?: number;
+dateFrom?: string;
+dateTo?: string;
 page?: number;
 limit?: number;
 };
@@ -657,6 +690,8 @@ export type ListOrdersParams = {
 search?: string;
 status?: string;
 type?: string;
+dateFrom?: string;
+dateTo?: string;
 page?: number;
 limit?: number;
 };
@@ -664,7 +699,10 @@ limit?: number;
 export type ListInvoicesParams = {
 search?: string;
 status?: string;
+type?: string;
 customerId?: number;
+dateFrom?: string;
+dateTo?: string;
 page?: number;
 limit?: number;
 };

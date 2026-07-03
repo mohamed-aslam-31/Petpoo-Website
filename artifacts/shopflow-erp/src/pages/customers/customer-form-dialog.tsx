@@ -39,7 +39,11 @@ const schema = z.object({
   name: z.string().min(1, "Name is required"),
   phone: z.string().min(1, "Phone is required"),
   email: z.string().optional(),
+  shopName: z.string().optional(),
+  landlineNumber: z.string().optional(),
   address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
   gstNumber: z.string().optional(),
   creditLimit: z.coerce.number().min(0).optional(),
   type: z.string().optional(),
@@ -49,11 +53,16 @@ type FormValues = z.infer<typeof schema>;
 
 interface EditableCustomer {
   id: number; name: string; phone: string; email?: string | null;
-  address?: string | null; gstNumber?: string | null; creditLimit?: number;
+  shopName?: string | null; landlineNumber?: string | null;
+  address?: string | null; city?: string | null; state?: string | null;
+  gstNumber?: string | null; creditLimit?: number;
   type?: string; notes?: string | null;
 }
 
-const empty: FormValues = { name: "", phone: "", email: "", address: "", gstNumber: "", creditLimit: 0, type: "retail", notes: "" };
+const empty: FormValues = {
+  name: "", phone: "", email: "", shopName: "", landlineNumber: "",
+  address: "", city: "", state: "", gstNumber: "", creditLimit: 0, type: "retail", notes: "",
+};
 
 export function CustomerFormDialog({
   open, onOpenChange, customer,
@@ -63,7 +72,19 @@ export function CustomerFormDialog({
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: empty });
 
   useEffect(() => {
-    if (open) form.reset(customer ? { ...customer, email: customer.email ?? "", address: customer.address ?? "", gstNumber: customer.gstNumber ?? "", notes: customer.notes ?? "", creditLimit: customer.creditLimit ?? 0, type: customer.type ?? "retail" } : empty);
+    if (open) form.reset(customer ? {
+      ...customer,
+      email: customer.email ?? "",
+      shopName: customer.shopName ?? "",
+      landlineNumber: customer.landlineNumber ?? "",
+      address: customer.address ?? "",
+      city: customer.city ?? "",
+      state: customer.state ?? "",
+      gstNumber: customer.gstNumber ?? "",
+      notes: customer.notes ?? "",
+      creditLimit: customer.creditLimit ?? 0,
+      type: customer.type ?? "retail",
+    } : empty);
   }, [open, customer, form]);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
@@ -89,13 +110,19 @@ export function CustomerFormDialog({
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <FormField control={form.control} name="name" render={({ field }) => (
-                <FormItem className="col-span-2"><FormLabel>Full Name</FormLabel><FormControl><Input placeholder="Customer name" {...field} /></FormControl><FormMessage /></FormItem>
+                <FormItem className="col-span-2"><FormLabel>Full Name *</FormLabel><FormControl><Input placeholder="Customer name" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="shopName" render={({ field }) => (
+                <FormItem className="col-span-2"><FormLabel>Shop / Business Name</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="phone" render={({ field }) => (
-                <FormItem><FormLabel>Phone</FormLabel><FormControl><Input placeholder="Phone number" {...field} /></FormControl><FormMessage /></FormItem>
+                <FormItem><FormLabel>Mobile *</FormLabel><FormControl><Input placeholder="Mobile number" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="landlineNumber" render={({ field }) => (
+                <FormItem><FormLabel>Landline</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="email" render={({ field }) => (
-                <FormItem><FormLabel>Email</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
+                <FormItem className="col-span-2"><FormLabel>Email</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="type" render={({ field }) => (
                 <FormItem><FormLabel>Type</FormLabel>
@@ -109,10 +136,16 @@ export function CustomerFormDialog({
                 <FormItem><FormLabel>Credit Limit (₹)</FormLabel><FormControl><Input type="number" step="0.01" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="gstNumber" render={({ field }) => (
-                <FormItem><FormLabel>GST Number</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
+                <FormItem className="col-span-2"><FormLabel>GST Number</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="address" render={({ field }) => (
-                <FormItem className="col-span-2"><FormLabel>Address</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
+                <FormItem className="col-span-2"><FormLabel>Address</FormLabel><FormControl><Input placeholder="Street address" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="city" render={({ field }) => (
+                <FormItem><FormLabel>City</FormLabel><FormControl><Input placeholder="City" {...field} /></FormControl><FormMessage /></FormItem>
+              )} />
+              <FormField control={form.control} name="state" render={({ field }) => (
+                <FormItem><FormLabel>State</FormLabel><FormControl><Input placeholder="State" {...field} /></FormControl><FormMessage /></FormItem>
               )} />
               <FormField control={form.control} name="notes" render={({ field }) => (
                 <FormItem className="col-span-2"><FormLabel>Notes</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>

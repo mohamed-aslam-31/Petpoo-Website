@@ -426,6 +426,14 @@ export const AdjustStockResponse = zod.object({
  */
 export const ListCustomersQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
+  "type": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional(),
+  "city": zod.coerce.string().optional(),
+  "state": zod.coerce.string().optional(),
+  "minOutstanding": zod.coerce.number().optional(),
+  "maxOutstanding": zod.coerce.number().optional(),
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional(),
   "page": zod.coerce.number().optional(),
   "limit": zod.coerce.number().optional()
 })
@@ -438,6 +446,10 @@ export const ListCustomersResponse = zod.object({
   "phone": zod.string(),
   "email": zod.string().nullish(),
   "address": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "shopName": zod.string().nullish(),
+  "landlineNumber": zod.string().nullish(),
   "gstNumber": zod.string().nullish(),
   "creditLimit": zod.number().optional(),
   "outstanding": zod.number().optional(),
@@ -463,6 +475,10 @@ export const CreateCustomerBody = zod.object({
   "phone": zod.string(),
   "email": zod.string().optional(),
   "address": zod.string().optional(),
+  "city": zod.string().optional(),
+  "state": zod.string().optional(),
+  "shopName": zod.string().optional(),
+  "landlineNumber": zod.string().optional(),
   "gstNumber": zod.string().optional(),
   "creditLimit": zod.number().optional(),
   "type": zod.string().optional(),
@@ -476,6 +492,10 @@ export const CreateCustomerResponse = zod.object({
   "phone": zod.string(),
   "email": zod.string().nullish(),
   "address": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "shopName": zod.string().nullish(),
+  "landlineNumber": zod.string().nullish(),
   "gstNumber": zod.string().nullish(),
   "creditLimit": zod.number().optional(),
   "outstanding": zod.number().optional(),
@@ -497,6 +517,10 @@ export const GetCustomerResponse = zod.object({
   "phone": zod.string(),
   "email": zod.string().nullish(),
   "address": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "shopName": zod.string().nullish(),
+  "landlineNumber": zod.string().nullish(),
   "gstNumber": zod.string().nullish(),
   "creditLimit": zod.number().optional(),
   "outstanding": zod.number().optional(),
@@ -516,6 +540,10 @@ export const UpdateCustomerBody = zod.object({
   "phone": zod.string().optional(),
   "email": zod.string().optional(),
   "address": zod.string().optional(),
+  "city": zod.string().optional(),
+  "state": zod.string().optional(),
+  "shopName": zod.string().optional(),
+  "landlineNumber": zod.string().optional(),
   "gstNumber": zod.string().optional(),
   "creditLimit": zod.number().optional(),
   "type": zod.string().optional(),
@@ -530,6 +558,10 @@ export const UpdateCustomerResponse = zod.object({
   "phone": zod.string(),
   "email": zod.string().nullish(),
   "address": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "shopName": zod.string().nullish(),
+  "landlineNumber": zod.string().nullish(),
   "gstNumber": zod.string().nullish(),
   "creditLimit": zod.number().optional(),
   "outstanding": zod.number().optional(),
@@ -685,6 +717,8 @@ export const ListOrdersQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
   "status": zod.coerce.string().optional(),
   "type": zod.coerce.string().optional(),
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional(),
   "page": zod.coerce.number().optional(),
   "limit": zod.coerce.number().optional()
 })
@@ -809,11 +843,21 @@ export const UpdateOrderParams = zod.object({
 })
 
 export const UpdateOrderBody = zod.object({
+  "customerId": zod.number().optional(),
+  "type": zod.string().optional(),
   "status": zod.string().optional(),
+  "discount": zod.number().optional(),
   "paymentStatus": zod.string().optional(),
   "paidAmount": zod.number().optional(),
   "paymentMethod": zod.string().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "quantity": zod.number(),
+  "unitPrice": zod.number(),
+  "discount": zod.number().optional(),
+  "gstPercent": zod.number().optional()
+})).optional()
 })
 
 export const UpdateOrderResponse = zod.object({
@@ -858,7 +902,10 @@ export const DeleteOrderResponse = zod.void()
 export const ListInvoicesQueryParams = zod.object({
   "search": zod.coerce.string().optional(),
   "status": zod.coerce.string().optional(),
+  "type": zod.coerce.string().optional(),
   "customerId": zod.coerce.number().optional(),
+  "dateFrom": zod.coerce.string().optional(),
+  "dateTo": zod.coerce.string().optional(),
   "page": zod.coerce.number().optional(),
   "limit": zod.coerce.number().optional()
 })
@@ -1000,12 +1047,23 @@ export const UpdateInvoiceParams = zod.object({
 })
 
 export const UpdateInvoiceBody = zod.object({
+  "customerId": zod.number().optional(),
+  "type": zod.string().optional(),
   "status": zod.string().optional(),
+  "discount": zod.number().optional(),
+  "transport": zod.number().optional(),
   "paymentStatus": zod.string().optional(),
   "paidAmount": zod.number().optional(),
   "paymentMethod": zod.string().optional(),
   "dueDate": zod.string().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "quantity": zod.number(),
+  "unitPrice": zod.number(),
+  "discount": zod.number().optional(),
+  "gstPercent": zod.number().optional()
+})).optional()
 })
 
 export const UpdateInvoiceResponse = zod.object({

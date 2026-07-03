@@ -16,6 +16,14 @@ export interface Customer {
   /** @nullable */
   address?: string | null;
   /** @nullable */
+  city?: string | null;
+  /** @nullable */
+  state?: string | null;
+  /** @nullable */
+  shopName?: string | null;
+  /** @nullable */
+  landlineNumber?: string | null;
+  /** @nullable */
   gstNumber?: string | null;
   creditLimit?: number;
   outstanding?: number;

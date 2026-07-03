@@ -8,6 +8,14 @@
 
 export type ListCustomersParams = {
 search?: string;
+type?: string;
+status?: string;
+city?: string;
+state?: string;
+minOutstanding?: number;
+maxOutstanding?: number;
+dateFrom?: string;
+dateTo?: string;
 page?: number;
 limit?: number;
 };

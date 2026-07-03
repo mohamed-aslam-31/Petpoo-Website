@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateInvoice,
+  useUpdateInvoice,
   useListCustomers,
   useListProducts,
   getListInvoicesQueryKey,
@@ -44,7 +45,23 @@ type FormValues = z.infer<typeof schema>;
 const emptyItem = { productId: 0, quantity: 1, unitPrice: 0, discount: 0, gstPercent: 0 };
 const empty: FormValues = { customerId: 0, type: "gst", discount: 0, transport: 0, paymentMethod: "cash", paidAmount: 0, dueDate: "", notes: "", items: [{ ...emptyItem }] };
 
-export function InvoiceFormDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+interface InvoiceToEdit {
+  id: number;
+  customerId: number;
+  type: string;
+  discount: number;
+  transport: number;
+  paymentMethod?: string | null;
+  paidAmount: number;
+  dueDate?: string | null;
+  notes?: string | null;
+  items: any[];
+}
+
+export function InvoiceFormDialog({
+  open, onOpenChange, invoice,
+}: { open: boolean; onOpenChange: (v: boolean) => void; invoice?: InvoiceToEdit | null }) {
+  const isEditing = !!invoice;
   const queryClient = useQueryClient();
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: empty });
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "items" });
@@ -52,7 +69,33 @@ export function InvoiceFormDialog({ open, onOpenChange }: { open: boolean; onOpe
   const { data: customers } = useListCustomers({ limit: 200 });
   const { data: products } = useListProducts({ limit: 200 });
 
-  useEffect(() => { if (open) form.reset(empty); }, [open, form]);
+  useEffect(() => {
+    if (open) {
+      if (invoice) {
+        form.reset({
+          customerId: invoice.customerId,
+          type: invoice.type,
+          discount: invoice.discount,
+          transport: invoice.transport,
+          paymentMethod: invoice.paymentMethod ?? "cash",
+          paidAmount: invoice.paidAmount,
+          dueDate: invoice.dueDate ?? "",
+          notes: invoice.notes ?? "",
+          items: invoice.items.length > 0
+            ? invoice.items.map((it: any) => ({
+                productId: it.productId ?? 0,
+                quantity: it.quantity ?? 1,
+                unitPrice: it.unitPrice ?? 0,
+                discount: it.discount ?? 0,
+                gstPercent: it.gstPercent ?? 0,
+              }))
+            : [{ ...emptyItem }],
+        });
+      } else {
+        form.reset(empty);
+      }
+    }
+  }, [open, invoice, form]);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
 
@@ -60,6 +103,13 @@ export function InvoiceFormDialog({ open, onOpenChange }: { open: boolean; onOpe
     mutation: {
       onSuccess: () => { toast.success("Invoice created"); invalidate(); onOpenChange(false); },
       onError: (e: any) => toast.error(e?.message ?? "Failed to create invoice"),
+    },
+  });
+
+  const updateMutation = useUpdateInvoice({
+    mutation: {
+      onSuccess: () => { toast.success("Invoice updated"); invalidate(); onOpenChange(false); },
+      onError: (e: any) => toast.error(e?.message ?? "Failed to update invoice"),
     },
   });
 
@@ -77,7 +127,11 @@ export function InvoiceFormDialog({ open, onOpenChange }: { open: boolean; onOpe
 
   function onSubmit(values: FormValues) {
     const payload = { ...values, dueDate: values.dueDate || undefined };
-    createMutation.mutate({ data: payload as any });
+    if (isEditing && invoice) {
+      updateMutation.mutate({ id: invoice.id, data: payload as any });
+    } else {
+      createMutation.mutate({ data: payload as any });
+    }
   }
 
   function handleProductChange(index: number, productId: string) {
@@ -89,12 +143,14 @@ export function InvoiceFormDialog({ open, onOpenChange }: { open: boolean; onOpe
     }
   }
 
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create Invoice</DialogTitle>
-          <DialogDescription>Create a new GST invoice, estimate, or quotation.</DialogDescription>
+          <DialogTitle>{isEditing ? "Edit Invoice" : "Create Invoice"}</DialogTitle>
+          <DialogDescription>{isEditing ? "Update invoice details and line items." : "Create a new GST invoice, estimate, or quotation."}</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -196,7 +252,7 @@ export function InvoiceFormDialog({ open, onOpenChange }: { open: boolean; onOpe
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" disabled={createMutation.isPending}>{createMutation.isPending ? "Creating..." : "Create Invoice"}</Button>
+              <Button type="submit" disabled={isPending}>{isPending ? "Saving..." : isEditing ? "Save Changes" : "Create Invoice"}</Button>
             </DialogFooter>
           </form>
         </Form>

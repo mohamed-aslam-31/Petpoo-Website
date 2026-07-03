@@ -1,9 +1,8 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, and, sql } from "drizzle-orm";
+import { eq, ilike, and, sql, gte, lte, or } from "drizzle-orm";
 import { db, ordersTable, customersTable } from "@workspace/db";
 import {
   CreateOrderBody,
-  UpdateOrderBody,
   GetOrderParams,
   UpdateOrderParams,
   DeleteOrderParams,
@@ -37,6 +36,20 @@ function generateOrderNumber(id: number) {
   return `ORD${String(id).padStart(6, "0")}`;
 }
 
+function calcOrderTotals(items: any[], discount: number) {
+  let subtotal = 0;
+  let gstAmount = 0;
+  const parsedItems = items.map((item: any) => {
+    const lineTotal = item.quantity * item.unitPrice - (item.discount ?? 0);
+    const lineGst = lineTotal * ((item.gstPercent ?? 0) / 100);
+    subtotal += lineTotal;
+    gstAmount += lineGst;
+    return { ...item, total: lineTotal + lineGst };
+  });
+  const total = subtotal + gstAmount - discount;
+  return { subtotal, gstAmount, total, parsedItems };
+}
+
 router.get("/orders", async (req, res): Promise<void> => {
   const page = parseInt(String(req.query.page ?? "1"), 10);
   const limit = parseInt(String(req.query.limit ?? "20"), 10);
@@ -44,13 +57,32 @@ router.get("/orders", async (req, res): Promise<void> => {
   const search = req.query.search as string | undefined;
   const status = req.query.status as string | undefined;
   const type = req.query.type as string | undefined;
+  const dateFrom = req.query.dateFrom as string | undefined;
+  const dateTo = req.query.dateTo as string | undefined;
 
   const conditions = [];
   if (status) conditions.push(eq(ordersTable.status, status));
   if (type) conditions.push(eq(ordersTable.type, type));
+  if (dateFrom) conditions.push(gte(ordersTable.createdAt, new Date(dateFrom)));
+  if (dateTo) {
+    const to = new Date(dateTo);
+    to.setHours(23, 59, 59, 999);
+    conditions.push(lte(ordersTable.createdAt, to));
+  }
+  if (search) {
+    conditions.push(or(
+      ilike(ordersTable.orderNumber, `%${search}%`),
+      ilike(customersTable.name, `%${search}%`),
+    ) as any);
+  }
+
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const [countResult] = await db.select({ count: sql<number>`cast(count(*) as int)` }).from(ordersTable).where(where);
+  const [countResult] = await db
+    .select({ count: sql<number>`cast(count(*) as int)` })
+    .from(ordersTable)
+    .leftJoin(customersTable, eq(customersTable.id, ordersTable.customerId))
+    .where(where);
 
   const rows = await db
     .select({
@@ -90,18 +122,8 @@ router.post("/orders", async (req, res): Promise<void> => {
   const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, customerId));
   if (!customer) { res.status(404).json({ error: "Customer not found" }); return; }
 
-  let subtotal = 0;
-  let gstAmount = 0;
-  const parsedItems = items.map((item: any) => {
-    const lineTotal = item.quantity * item.unitPrice - (item.discount ?? 0);
-    const lineGst = lineTotal * ((item.gstPercent ?? 18) / 100);
-    subtotal += lineTotal;
-    gstAmount += lineGst;
-    return { ...item, total: lineTotal + lineGst };
-  });
-
   const discountAmt = parseFloat(String(discount));
-  const total = subtotal + gstAmount - discountAmt;
+  const { subtotal, gstAmount, total, parsedItems } = calcOrderTotals(items as any[], discountAmt);
   const paymentStatus = paidAmount >= total ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
 
   const [temp] = await db.insert(ordersTable).values({
@@ -120,7 +142,6 @@ router.post("/orders", async (req, res): Promise<void> => {
   } as any).returning();
 
   const [order] = await db.update(ordersTable).set({ orderNumber: generateOrderNumber(temp.id) }).where(eq(ordersTable.id, temp.id)).returning();
-
   const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, customerId));
   res.status(201).json(parseOrder(order, cust.name));
 });
@@ -140,9 +161,47 @@ router.get("/orders/:id", async (req, res): Promise<void> => {
 router.patch("/orders/:id", async (req, res): Promise<void> => {
   const params = UpdateOrderParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
-  const parsed = UpdateOrderBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const [order] = await db.update(ordersTable).set(parsed.data as any).where(eq(ordersTable.id, params.data.id)).returning();
+
+  const body = req.body as any;
+  const updates: any = {};
+
+  // If items provided, recalculate totals
+  if (body.items && Array.isArray(body.items)) {
+    const discountAmt = parseFloat(String(body.discount ?? 0));
+    const paidAmount = parseFloat(String(body.paidAmount ?? 0));
+    const { subtotal, gstAmount, total, parsedItems } = calcOrderTotals(body.items, discountAmt);
+    const paymentStatus = paidAmount >= total ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
+
+    Object.assign(updates, {
+      items: parsedItems,
+      subtotal: String(subtotal),
+      discount: String(discountAmt),
+      gstAmount: String(gstAmount),
+      total: String(total),
+      paidAmount: String(paidAmount),
+      paymentStatus,
+    });
+  }
+
+  if (body.customerId !== undefined) updates.customerId = body.customerId;
+  if (body.type !== undefined) updates.type = body.type;
+  if (body.status !== undefined) updates.status = body.status;
+  if (body.paymentMethod !== undefined) updates.paymentMethod = body.paymentMethod;
+  if (body.notes !== undefined) updates.notes = body.notes || null;
+  if (!body.items) {
+    if (body.paidAmount !== undefined) {
+      updates.paidAmount = String(body.paidAmount);
+      const [existing] = await db.select({ total: ordersTable.total }).from(ordersTable).where(eq(ordersTable.id, params.data.id));
+      if (existing) {
+        const total = parseFloat(String(existing.total));
+        const paid = parseFloat(String(body.paidAmount));
+        updates.paymentStatus = paid >= total ? "paid" : paid > 0 ? "partial" : "unpaid";
+      }
+    }
+    if (body.discount !== undefined) updates.discount = String(body.discount);
+  }
+
+  const [order] = await db.update(ordersTable).set(updates).where(eq(ordersTable.id, params.data.id)).returning();
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
   const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, order.customerId));
   res.json(parseOrder(order, cust?.name ?? ""));

@@ -5,11 +5,16 @@
  * ShopFlow ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { OrderItemInput } from './orderItemInput';
 
 export interface OrderUpdate {
+  customerId?: number;
+  type?: string;
   status?: string;
+  discount?: number;
   paymentStatus?: string;
   paidAmount?: number;
   paymentMethod?: string;
   notes?: string;
+  items?: OrderItemInput[];
 }

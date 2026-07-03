@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useCreateOrder,
+  useUpdateOrder,
   useListCustomers,
   useListProducts,
   getListOrdersQueryKey,
@@ -42,7 +43,21 @@ type FormValues = z.infer<typeof schema>;
 const emptyItem = { productId: 0, quantity: 1, unitPrice: 0, discount: 0, gstPercent: 0 };
 const empty: FormValues = { customerId: 0, type: "retail", discount: 0, paymentMethod: "cash", paidAmount: 0, notes: "", items: [{ ...emptyItem }] };
 
-export function OrderFormDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+interface OrderToEdit {
+  id: number;
+  customerId: number;
+  type: string;
+  discount: number;
+  paymentMethod?: string | null;
+  paidAmount: number;
+  notes?: string | null;
+  items: any[];
+}
+
+export function OrderFormDialog({
+  open, onOpenChange, order,
+}: { open: boolean; onOpenChange: (v: boolean) => void; order?: OrderToEdit | null }) {
+  const isEditing = !!order;
   const queryClient = useQueryClient();
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: empty });
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "items" });
@@ -50,7 +65,31 @@ export function OrderFormDialog({ open, onOpenChange }: { open: boolean; onOpenC
   const { data: customers } = useListCustomers({ limit: 200 });
   const { data: products } = useListProducts({ limit: 200 });
 
-  useEffect(() => { if (open) form.reset(empty); }, [open, form]);
+  useEffect(() => {
+    if (open) {
+      if (order) {
+        form.reset({
+          customerId: order.customerId,
+          type: order.type,
+          discount: order.discount,
+          paymentMethod: order.paymentMethod ?? "cash",
+          paidAmount: order.paidAmount,
+          notes: order.notes ?? "",
+          items: order.items.length > 0
+            ? order.items.map((it: any) => ({
+                productId: it.productId ?? 0,
+                quantity: it.quantity ?? 1,
+                unitPrice: it.unitPrice ?? 0,
+                discount: it.discount ?? 0,
+                gstPercent: it.gstPercent ?? 0,
+              }))
+            : [{ ...emptyItem }],
+        });
+      } else {
+        form.reset(empty);
+      }
+    }
+  }, [open, order, form]);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListOrdersQueryKey() });
 
@@ -58,6 +97,13 @@ export function OrderFormDialog({ open, onOpenChange }: { open: boolean; onOpenC
     mutation: {
       onSuccess: () => { toast.success("Order created"); invalidate(); onOpenChange(false); },
       onError: (e: any) => toast.error(e?.message ?? "Failed to create order"),
+    },
+  });
+
+  const updateMutation = useUpdateOrder({
+    mutation: {
+      onSuccess: () => { toast.success("Order updated"); invalidate(); onOpenChange(false); },
+      onError: (e: any) => toast.error(e?.message ?? "Failed to update order"),
     },
   });
 
@@ -72,7 +118,11 @@ export function OrderFormDialog({ open, onOpenChange }: { open: boolean; onOpenC
   }, 0);
 
   function onSubmit(values: FormValues) {
-    createMutation.mutate({ data: values as any });
+    if (isEditing && order) {
+      updateMutation.mutate({ id: order.id, data: values as any });
+    } else {
+      createMutation.mutate({ data: values as any });
+    }
   }
 
   function handleProductChange(index: number, productId: string) {
@@ -84,12 +134,14 @@ export function OrderFormDialog({ open, onOpenChange }: { open: boolean; onOpenC
     }
   }
 
+  const isPending = createMutation.isPending || updateMutation.isPending;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create Order</DialogTitle>
-          <DialogDescription>Create a new retail or wholesale order.</DialogDescription>
+          <DialogTitle>{isEditing ? "Edit Order" : "Create Order"}</DialogTitle>
+          <DialogDescription>{isEditing ? "Update order details and items." : "Create a new retail or wholesale order."}</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -179,7 +231,7 @@ export function OrderFormDialog({ open, onOpenChange }: { open: boolean; onOpenC
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" disabled={createMutation.isPending}>{createMutation.isPending ? "Creating..." : "Create Order"}</Button>
+              <Button type="submit" disabled={isPending}>{isPending ? "Saving..." : isEditing ? "Save Changes" : "Create Order"}</Button>
             </DialogFooter>
           </form>
         </Form>

@@ -11,6 +11,10 @@ export interface CustomerUpdate {
   phone?: string;
   email?: string;
   address?: string;
+  city?: string;
+  state?: string;
+  shopName?: string;
+  landlineNumber?: string;
   gstNumber?: string;
   creditLimit?: number;
   type?: string;
