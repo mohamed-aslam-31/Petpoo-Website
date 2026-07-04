@@ -5,8 +5,8 @@ description: Key config for the ShopFlow ERP project — ports, workflows, patte
 
 ## Ports & Workflows
 - Frontend: port 5000, workflow `artifacts/shopflow-erp: web`, cmd: `cd artifacts/shopflow-erp && PORT=5000 BASE_PATH=/ pnpm exec vite --config vite.config.ts --host 0.0.0.0`
-- API server: port 8080, workflow `artifacts/api-server: API Server`, cmd: `cd artifacts/api-server && pnpm run build && PORT=8080 NODE_ENV=development node --enable-source-maps ./dist/index.mjs`
-- DATABASE_URL already set to `postgresql://postgres:password@helium/heliumdb?sslmode=disable`
+- API server: port 8080, workflow `artifacts/api-server: API Server`, cmd: `cd artifacts/api-server && node ./build.mjs && PORT=8080 NODE_ENV=development node --enable-source-maps ./dist/index.mjs`
+- DATABASE_URL is configured in environment secrets (do not store the value here)
 - The bare `pnpm run dev` script for api-server (which chains `pnpm run build && pnpm run start` as nested npm-script processes) reliably fails Replit's workflow port-detection even though the server does bind and respond — nested pnpm/npm script process trees seem to break the port checker. Run the build+node command directly in the workflow instead (see cmd above). Same applies to frontend: `vite` isn't on bare PATH, must use `pnpm exec vite` with PORT/BASE_PATH exported inline, not via `pnpm --filter run dev`.
 
 ## API Pattern
