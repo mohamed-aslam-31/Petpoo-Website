@@ -2,20 +2,43 @@
 
 A full-stack wholesale & retail ERP system for Indian merchants — inventory, billing, orders, customers, suppliers, employees, payments, expenses, and analytics in one place.
 
-## Run & Operate
+## ⚡ New account / fresh import — start here
 
-On Replit, use the managed artifact workflows — they handle port assignment automatically:
-- **`artifacts/api-server: API Server`** — API server (port 8080, proxied at `/api`)
-- **`artifacts/shopflow-erp: web`** — Frontend (port 5173 on Replit, proxied at `/`)
+Run this **once** after importing the project:
 
-To run manually outside Replit:
-- `PORT=8080 pnpm --filter @workspace/api-server run dev` — API server
-- `PORT=5000 BASE_PATH=/ pnpm --filter @workspace/shopflow-erp run dev` — Frontend
+```bash
+bash setup.sh
+```
+
+That script will:
+1. Verify `DATABASE_URL` is set (connect a PostgreSQL DB first — see below)
+2. Auto-generate `SESSION_SECRET` if missing
+3. Install all dependencies (`pnpm install`)
+4. Push the database schema (`db push`)
+
+### Before running setup.sh — connect a database
+
+1. In your Replit workspace, go to **Tools → Database**
+2. Create a new **PostgreSQL** database
+3. `DATABASE_URL` is added to your Secrets automatically
+
+### After setup.sh — start the app
+
+The two workflows start the app automatically. If they aren't running, start them from the **Workflows** panel:
+- **`artifacts/api-server: API Server`** — API server on port 8080
+- **`artifacts/shopflow-erp: web`** — Frontend on port 5000
+
+The preview pane will show the login screen. Sign in with any email and password (demo mode).
+
+---
+
+## Dev commands
+
+- `pnpm --filter @workspace/db run push` — push DB schema changes
 - `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string, `SESSION_SECRET`
+- `pnpm run build` — build all packages
+- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks from OpenAPI spec
+- Required secrets: `DATABASE_URL`, `SESSION_SECRET`
 
 ## Stack
 
