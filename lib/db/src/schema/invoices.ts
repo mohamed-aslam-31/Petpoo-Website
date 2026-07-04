@@ -3,12 +3,16 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
 import { ordersTable } from "./orders";
+import { quotationsTable } from "./quotations";
 
 export const invoicesTable = pgTable("invoices", {
   id: serial("id").primaryKey(),
   invoiceNumber: text("invoice_number").notNull().unique(),
   customerId: integer("customer_id").notNull().references(() => customersTable.id),
   orderId: integer("order_id").references(() => ordersTable.id),
+  quotationId: integer("quotation_id").references(() => quotationsTable.id),
+  /** 'quotation' | 'order' | 'direct' — where this invoice originated from */
+  createdFrom: text("created_from").notNull().default("direct"),
   type: text("type").notNull().default("gst"),
   status: text("status").notNull().default("processing"),
   subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull().default("0"),

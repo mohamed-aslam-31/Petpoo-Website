@@ -5,6 +5,7 @@
  * ShopFlow ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { ListInvoicesCreatedFrom } from './listInvoicesCreatedFrom';
 
 export type ListInvoicesParams = {
 search?: string;
@@ -13,6 +14,7 @@ type?: string;
 customerId?: number;
 dateFrom?: string;
 dateTo?: string;
+createdFrom?: ListInvoicesCreatedFrom;
 page?: number;
 limit?: number;
 };

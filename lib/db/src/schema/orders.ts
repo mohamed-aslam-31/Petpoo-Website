@@ -2,6 +2,7 @@ import { pgTable, text, serial, timestamp, integer, jsonb, date } from "drizzle-
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
+import { quotationsTable } from "./quotations";
 
 export const ordersTable = pgTable("orders", {
   id: serial("id").primaryKey(),
@@ -13,6 +14,10 @@ export const ordersTable = pgTable("orders", {
   items: jsonb("items").notNull().default("[]"),
   /** Carries quotation-level data so the Complete Order dialog can pre-fill charges */
   meta: jsonb("meta"),
+  /** 'quotation' | 'direct' — where this order originated from */
+  createdFrom: text("created_from").notNull().default("direct"),
+  /** Set when this order was auto-created from an accepted quotation */
+  quotationId: integer("quotation_id").references(() => quotationsTable.id),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

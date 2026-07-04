@@ -11,3 +11,4 @@ export * from "./expenses";
 export * from "./stock_movements";
 export * from "./quotations";
 export * from "./credit-notes";
+export * from "./audit-log";

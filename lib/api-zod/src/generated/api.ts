@@ -715,6 +715,7 @@ export const ListOrdersQueryParams = zod.object({
   "status": zod.coerce.string().optional(),
   "dateFrom": zod.coerce.string().optional(),
   "dateTo": zod.coerce.string().optional(),
+  "createdFrom": zod.enum(['quotation', 'direct']).optional(),
   "page": zod.coerce.number().optional(),
   "limit": zod.coerce.number().optional()
 })
@@ -729,6 +730,9 @@ export const ListOrdersResponse = zod.object({
   "orderDate": zod.string(),
   "invoiceId": zod.number().nullish(),
   "invoiceNumber": zod.string().nullish(),
+  "quotationId": zod.number().nullish(),
+  "quotationNumber": zod.string().nullish(),
+  "createdFrom": zod.enum(['quotation', 'direct']).optional(),
   "notes": zod.string().nullish(),
   "items": zod.array(zod.object({
   "productId": zod.number(),
@@ -766,6 +770,9 @@ export const CreateOrderResponse = zod.object({
   "orderDate": zod.string(),
   "invoiceId": zod.number().nullish(),
   "invoiceNumber": zod.string().nullish(),
+  "quotationId": zod.number().nullish(),
+  "quotationNumber": zod.string().nullish(),
+  "createdFrom": zod.enum(['quotation', 'direct']).optional(),
   "notes": zod.string().nullish(),
   "items": zod.array(zod.object({
   "productId": zod.number(),
@@ -790,6 +797,9 @@ export const GetOrderResponse = zod.object({
   "orderDate": zod.string(),
   "invoiceId": zod.number().nullish(),
   "invoiceNumber": zod.string().nullish(),
+  "quotationId": zod.number().nullish(),
+  "quotationNumber": zod.string().nullish(),
+  "createdFrom": zod.enum(['quotation', 'direct']).optional(),
   "notes": zod.string().nullish(),
   "items": zod.array(zod.object({
   "productId": zod.number(),
@@ -824,6 +834,9 @@ export const UpdateOrderResponse = zod.object({
   "orderDate": zod.string(),
   "invoiceId": zod.number().nullish(),
   "invoiceNumber": zod.string().nullish(),
+  "quotationId": zod.number().nullish(),
+  "quotationNumber": zod.string().nullish(),
+  "createdFrom": zod.enum(['quotation', 'direct']).optional(),
   "notes": zod.string().nullish(),
   "items": zod.array(zod.object({
   "productId": zod.number(),
@@ -876,6 +889,9 @@ export const CompleteOrderResponse = zod.object({
   "customerName": zod.string(),
   "orderId": zod.number().nullish(),
   "orderNumber": zod.string().nullish(),
+  "quotationId": zod.number().nullish(),
+  "quotationNumber": zod.string().nullish(),
+  "createdFrom": zod.enum(['quotation', 'order', 'direct']).optional(),
   "type": zod.string(),
   "status": zod.string(),
   "subtotal": zod.number(),
@@ -923,6 +939,9 @@ export const CancelOrderResponse = zod.object({
   "orderDate": zod.string(),
   "invoiceId": zod.number().nullish(),
   "invoiceNumber": zod.string().nullish(),
+  "quotationId": zod.number().nullish(),
+  "quotationNumber": zod.string().nullish(),
+  "createdFrom": zod.enum(['quotation', 'direct']).optional(),
   "notes": zod.string().nullish(),
   "items": zod.array(zod.object({
   "productId": zod.number(),
@@ -950,6 +969,9 @@ export const ReturnOrderResponse = zod.object({
   "orderDate": zod.string(),
   "invoiceId": zod.number().nullish(),
   "invoiceNumber": zod.string().nullish(),
+  "quotationId": zod.number().nullish(),
+  "quotationNumber": zod.string().nullish(),
+  "createdFrom": zod.enum(['quotation', 'direct']).optional(),
   "notes": zod.string().nullish(),
   "items": zod.array(zod.object({
   "productId": zod.number(),
@@ -958,6 +980,35 @@ export const ReturnOrderResponse = zod.object({
   "quantity": zod.number()
 })).optional(),
   "createdAt": zod.string()
+})
+
+
+/**
+ * @summary List audit trail entries
+ */
+export const ListAuditLogQueryParams = zod.object({
+  "entityType": zod.enum(['quotation', 'order', 'invoice']).optional(),
+  "entityId": zod.coerce.number().optional(),
+  "page": zod.coerce.number().optional(),
+  "limit": zod.coerce.number().optional()
+})
+
+export const ListAuditLogResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.number(),
+  "entityType": zod.enum(['quotation', 'order', 'invoice']),
+  "entityId": zod.number(),
+  "entityNumber": zod.string().nullish(),
+  "action": zod.string(),
+  "oldStatus": zod.string().nullish(),
+  "newStatus": zod.string().nullish(),
+  "userLabel": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
 })
 
 
@@ -971,6 +1022,7 @@ export const ListInvoicesQueryParams = zod.object({
   "customerId": zod.coerce.number().optional(),
   "dateFrom": zod.coerce.string().optional(),
   "dateTo": zod.coerce.string().optional(),
+  "createdFrom": zod.enum(['quotation', 'order', 'direct']).optional(),
   "page": zod.coerce.number().optional(),
   "limit": zod.coerce.number().optional()
 })
@@ -983,6 +1035,9 @@ export const ListInvoicesResponse = zod.object({
   "customerName": zod.string(),
   "orderId": zod.number().nullish(),
   "orderNumber": zod.string().nullish(),
+  "quotationId": zod.number().nullish(),
+  "quotationNumber": zod.string().nullish(),
+  "createdFrom": zod.enum(['quotation', 'order', 'direct']).optional(),
   "type": zod.string(),
   "status": zod.string(),
   "subtotal": zod.number(),
@@ -1049,6 +1104,9 @@ export const CreateInvoiceResponse = zod.object({
   "customerName": zod.string(),
   "orderId": zod.number().nullish(),
   "orderNumber": zod.string().nullish(),
+  "quotationId": zod.number().nullish(),
+  "quotationNumber": zod.string().nullish(),
+  "createdFrom": zod.enum(['quotation', 'order', 'direct']).optional(),
   "type": zod.string(),
   "status": zod.string(),
   "subtotal": zod.number(),
@@ -1091,6 +1149,9 @@ export const GetInvoiceResponse = zod.object({
   "customerName": zod.string(),
   "orderId": zod.number().nullish(),
   "orderNumber": zod.string().nullish(),
+  "quotationId": zod.number().nullish(),
+  "quotationNumber": zod.string().nullish(),
+  "createdFrom": zod.enum(['quotation', 'order', 'direct']).optional(),
   "type": zod.string(),
   "status": zod.string(),
   "subtotal": zod.number(),
@@ -1155,6 +1216,9 @@ export const UpdateInvoiceResponse = zod.object({
   "customerName": zod.string(),
   "orderId": zod.number().nullish(),
   "orderNumber": zod.string().nullish(),
+  "quotationId": zod.number().nullish(),
+  "quotationNumber": zod.string().nullish(),
+  "createdFrom": zod.enum(['quotation', 'order', 'direct']).optional(),
   "type": zod.string(),
   "status": zod.string(),
   "subtotal": zod.number(),

@@ -1,0 +1,755 @@
+Below is a professional prompt you can directly paste into **Replit AI, Cursor AI, Lovable, Claude Code, or GitHub Copilot**.
+
+---
+
+# Continue Existing ERP Project (Do NOT Rebuild)
+
+**Important:** This is an **existing ERP project** that is already working. **Do NOT create a new project or rewrite the application from scratch.**
+
+Continue development using the existing codebase, database, APIs, UI components, routing, authentication, and business logic.
+
+Do **NOT**:
+
+* Recreate the project.
+* Change the existing UI design.
+* Rename files unnecessarily.
+* Change folder structure.
+* Replace existing pages.
+* Remove existing functionality.
+* Break existing APIs.
+
+Instead:
+
+* Analyze the existing implementation.
+* Extend the current system.
+* Reuse existing database tables and APIs.
+* Modify only the required modules.
+* Keep all existing data intact.
+* Maintain backward compatibility.
+* Preserve the current UI and user experience.
+
+---
+
+# ERP Workflow Update
+
+Implement a complete synchronized workflow between the following modules:
+
+* Quotations
+* Orders
+* Invoices
+* Customers
+
+The document hierarchy must always be:
+
+**Quotation → Order → Invoice**
+
+Every document must know its parent.
+
+Example:
+
+* Order stores quotation_id
+* Invoice stores order_id
+* Invoice also stores quotation_id if applicable
+
+The database must always maintain proper relationships.
+
+---
+
+# Quotation Module
+
+Quotation statuses:
+
+* Draft
+* Sent
+* Accepted
+* Rejected
+
+---
+
+## Draft
+
+When quotation is Draft:
+
+* Can Edit
+* Can Delete
+* No Order should exist
+* No Invoice should exist
+* No PDF should exist
+
+---
+
+## Sent
+
+When status changes
+
+Draft
+
+↓
+
+Sent
+
+Automatically:
+
+* Generate Quotation PDF
+* Download PDF automatically
+* Save PDF reference
+* Keep quotation editable
+* No Order should be created yet
+
+If quotation was previously saved as Draft and later changed to Sent, PDF must be generated at that moment.
+
+---
+
+## Accepted
+
+When quotation changes
+
+Sent
+
+↓
+
+Accepted
+
+Automatically:
+
+* Create Order
+* Link Order with quotation_id
+* Remove "Convert to Order" action button
+* Keep View PDF
+* Keep Download PDF
+* Keep Edit
+* Keep Delete
+
+Delete should still be available even after acceptance.
+
+---
+
+## Rejected
+
+When quotation becomes Rejected:
+
+* No Order should exist
+* No Invoice should exist
+
+---
+
+# Changing Accepted Back
+
+If quotation status changes from
+
+Accepted
+
+↓
+
+Draft
+
+OR
+
+Accepted
+
+↓
+
+Sent
+
+OR
+
+Accepted
+
+↓
+
+Rejected
+
+Automatically:
+
+* Delete linked Order
+* Delete linked Invoice
+* Keep Quotation
+* Synchronize every page
+* Update dashboard counts
+* Update Customer page
+
+---
+
+# Order Module
+
+Statuses:
+
+* Pending
+* Completed
+* Cancelled
+* Returned
+
+---
+
+## Order Completed
+
+No automatic rollback.
+
+---
+
+## Order Cancelled
+
+Automatically:
+
+* Change quotation status back to Sent
+* Delete or cancel linked Invoice
+* Update Customer page
+
+---
+
+## Order Returned
+
+Automatically:
+
+* Change quotation status back to Sent
+* Change Invoice to Returned
+* Update Customer page
+
+---
+
+## Delete Order
+
+If Order originated from Quotation:
+
+Delete:
+
+* Invoice
+* Order
+
+Keep:
+
+Quotation
+
+Quotation status becomes:
+
+Sent
+
+If Order is direct (without quotation):
+
+Delete:
+
+* Order
+* Invoice
+
+Nothing else.
+
+---
+
+# Invoice Module
+
+Statuses:
+
+* Processing
+* Completed
+* Returned
+* Cancelled
+
+Invoices can be created from:
+
+1. Quotation → Order → Invoice
+
+2. Order → Invoice
+
+3. Direct Invoice
+
+---
+
+## Invoice Returned
+
+Automatically:
+
+Order
+
+↓
+
+Returned
+
+Quotation
+
+↓
+
+Sent
+
+Customer page updated.
+
+---
+
+## Invoice Cancelled
+
+Automatically:
+
+Order
+
+↓
+
+Cancelled
+
+Quotation
+
+↓
+
+Sent
+
+Customer page updated.
+
+---
+
+## Delete Invoice
+
+### Case 1
+
+Quotation
+
+↓
+
+Order
+
+↓
+
+Invoice
+
+Delete Invoice
+
+↓
+
+Delete Order
+
+↓
+
+Quotation becomes Sent
+
+Quotation remains.
+
+---
+
+### Case 2
+
+Order
+
+↓
+
+Invoice
+
+Delete Invoice
+
+↓
+
+Delete Order
+
+---
+
+### Case 3
+
+Direct Invoice
+
+Delete only Invoice.
+
+Nothing else changes.
+
+---
+
+# Direct Invoice Rules
+
+If Invoice is created directly without quotation/order:
+
+* Edit affects only Invoice
+* Delete affects only Invoice
+* Cancel affects only Invoice
+* Return affects only Invoice
+
+No other module should change.
+
+---
+
+# Customer Module
+
+Customer page must always display the latest synchronized status.
+
+Example:
+
+Quotation Sent
+
+↓
+
+Quotation Accepted
+
+↓
+
+Order Pending
+
+↓
+
+Order Completed
+
+↓
+
+Invoice Processing
+
+↓
+
+Invoice Completed
+
+If Order or Invoice is:
+
+* Cancelled
+* Returned
+* Deleted
+
+Customer history must immediately update.
+
+---
+
+# Quotation Actions
+
+Draft
+
+* Edit
+* Delete
+* Send
+
+Sent
+
+* View PDF
+* Download PDF
+* Edit
+* Delete
+* Accept
+* Reject
+
+Accepted
+
+* View PDF
+* Download PDF
+* Edit
+* Delete
+
+Remove
+
+"Convert to Order"
+
+after Order creation.
+
+Rejected
+
+* Edit
+* Delete
+
+---
+
+# Order Actions
+
+Pending
+
+* Complete
+* Cancel
+* Delete
+
+Completed
+
+* Return
+* Delete
+
+Cancelled
+
+* View
+
+Returned
+
+* View
+
+---
+
+# Invoice Actions
+
+Processing
+
+* Complete
+* Cancel
+* Delete
+
+Completed
+
+* Return
+* Delete
+
+Returned
+
+* View
+
+Cancelled
+
+* View
+
+---
+
+# Filters
+
+## Quotation
+
+Add:
+
+* GST / Non-GST
+* Status
+* Date Range
+
+Date filter should support:
+
+* Today
+* Yesterday
+* Last 7 Days
+* This Month
+* Custom Range
+
+---
+
+## Orders
+
+Add filters:
+
+* Status
+* Customer
+* Date Range
+* Created From
+
+Values:
+
+* Quotation
+* Direct Order
+
+---
+
+## Invoice
+
+Add filters:
+
+* GST / Non-GST
+* Status
+* Customer
+* Date Range
+* Created From
+
+Values:
+
+* Quotation
+* Order
+* Direct Invoice
+
+---
+
+# Delete Synchronization Rules
+
+## Flow
+
+Quotation
+
+↓
+
+Order
+
+↓
+
+Invoice
+
+Delete Invoice
+
+↓
+
+Delete Order
+
+↓
+
+Quotation status = Sent
+
+Delete Order
+
+↓
+
+Delete Invoice
+
+↓
+
+Quotation status = Sent
+
+Delete Quotation
+
+↓
+
+Delete Order
+
+↓
+
+Delete Invoice
+
+Everything removed.
+
+---
+
+## Flow
+
+Order
+
+↓
+
+Invoice
+
+Delete Invoice
+
+↓
+
+Delete Order
+
+Delete Order
+
+↓
+
+Delete Invoice
+
+---
+
+## Flow
+
+Direct Invoice
+
+Delete Invoice only.
+
+---
+
+# Return Synchronization Rules
+
+Invoice Returned
+
+↓
+
+Order Returned
+
+↓
+
+Quotation Sent
+
+---
+
+Order Returned
+
+↓
+
+Invoice Returned
+
+↓
+
+Quotation Sent
+
+---
+
+# Cancel Synchronization Rules
+
+Invoice Cancelled
+
+↓
+
+Order Cancelled
+
+↓
+
+Quotation Sent
+
+---
+
+Order Cancelled
+
+↓
+
+Invoice Cancelled
+
+↓
+
+Quotation Sent
+
+---
+
+# Editing Rules
+
+Editing a Quotation should update related Order and Invoice information where applicable.
+
+Editing an Order should update Invoice information if linked.
+
+Editing an Invoice should never modify Quotation details unless required for synchronization.
+
+---
+
+# Database Rules
+
+Maintain proper parent-child relationships.
+
+Use foreign keys or references where applicable.
+
+Never leave orphan Orders or Invoices.
+
+Always validate parent existence before creating child records.
+
+Use database transactions so that if one operation fails, all related operations roll back to maintain data consistency.
+
+---
+
+# Dashboard Synchronization
+
+Whenever any document is:
+
+* Created
+* Updated
+* Deleted
+* Returned
+* Cancelled
+* Accepted
+* Rejected
+
+Automatically refresh:
+
+* Dashboard counts
+* Reports
+* Customer history
+* Search results
+* Filters
+* Recent activity
+* Statistics
+
+No manual refresh should be required.
+
+---
+
+# Audit Trail
+
+Maintain logs for:
+
+* Status changes
+* User actions
+* Document creation
+* Document deletion
+* Returns
+* Cancellations
+* Acceptance
+* Rejections
+
+Include:
+
+* User
+* Date
+* Time
+* Old Status
+* New Status
+
+---
+
+# Final Requirements
+
+* Do not rebuild the project.
+* Continue from the existing implementation.
+* Keep the current UI design unchanged.
+* Keep existing APIs wherever possible.
+* Preserve all existing data.
+* Maintain backward compatibility.
+* Remove the **Convert to Order** button once an Order is automatically created.
+* Automatically generate and download the PDF when a quotation is marked as **Sent**.
+* Add a **Delete** action for quotations even after they are **Accepted**.
+* Add **GST** and **Date Range** filters to Quotations and Invoices.
+* Ensure all status changes, edits, returns, cancellations, and deletions are synchronized across **Quotations**, **Orders**, **Invoices**, **Customers**, **Dashboard**, and **Reports**.
+* Test every workflow (Quotation → Order → Invoice, Order → Invoice, and Direct Invoice) to ensure there are no broken references, duplicate records, orphan records, or inconsistent statuses anywhere in the ERP system.

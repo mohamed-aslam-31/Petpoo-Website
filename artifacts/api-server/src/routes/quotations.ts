@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, and, sql, or, inArray } from "drizzle-orm";
+import { eq, ilike, and, sql, or, inArray, gte, lte } from "drizzle-orm";
 import { z } from "zod";
-import { db, quotationsTable, customersTable, ordersTable, productsTable, stockMovementsTable } from "@workspace/db";
+import { db, quotationsTable, customersTable, ordersTable, invoicesTable, productsTable, stockMovementsTable } from "@workspace/db";
+import { logAudit } from "../lib/audit";
 
 const router: IRouter = Router();
 
@@ -232,6 +233,8 @@ async function doConvertToOrder(quotationId: number): Promise<{ orderId: number;
     notes: q.notes ? `From Quotation ${q.quotationNumber}. ${q.notes}` : `From Quotation ${q.quotationNumber}`,
     items: orderItems,
     meta: quotationMeta,
+    createdFrom: "quotation",
+    quotationId,
   } as any).returning();
 
   const orderNumber = `ORD${String(tempOrder.id).padStart(6, "0")}`;
@@ -252,7 +255,46 @@ async function doConvertToOrder(quotationId: number): Promise<{ orderId: number;
     }
   }
 
+  await logAudit({ entityType: "order", entityId: order.id, entityNumber: orderNumber, action: "created", newStatus: "pending", notes: `Auto-created from quotation ${q.quotationNumber}` });
+
   return { orderId: order.id, orderNumber: order.orderNumber, customerId, customerName };
+}
+
+/**
+ * Cascade-delete the order (and its invoice, if any) that was auto-created from a
+ * quotation, restoring stock along the way. Used when a quotation's status changes
+ * away from "accepted", or when the quotation itself is deleted.
+ */
+async function cascadeDeleteConvertedOrder(quotation: any, reason: string) {
+  const orderId = quotation.convertedOrderId;
+  if (!orderId) return;
+
+  await db.transaction(async (tx) => {
+    const [order] = await tx.select().from(ordersTable).where(eq(ordersTable.id, orderId));
+    if (!order) return;
+
+    const [invoice] = await tx.select().from(invoicesTable).where(eq(invoicesTable.orderId, orderId));
+    if (invoice) {
+      const invoiceItems = Array.isArray(invoice.items) ? invoice.items : (typeof invoice.items === "string" ? JSON.parse(invoice.items as string) : []);
+      for (const item of invoiceItems) {
+        if (item.productId && item.quantity > 0) {
+          await adjustStockForOrder(item.productId, "increase", item.quantity, `Invoice ${invoice.invoiceNumber} - cascade delete (${reason})`);
+        }
+      }
+      await tx.delete(invoicesTable).where(eq(invoicesTable.id, invoice.id));
+      await logAudit({ entityType: "invoice", entityId: invoice.id, entityNumber: invoice.invoiceNumber, action: "cascaded_delete", oldStatus: invoice.status, notes: reason }, tx);
+    } else if (order.status === "pending") {
+      const orderItems = Array.isArray(order.items) ? order.items : (typeof order.items === "string" ? JSON.parse(order.items as string) : []);
+      for (const item of orderItems) {
+        if (item.productId && item.quantity > 0) {
+          await adjustStockForOrder(item.productId, "increase", item.quantity, `Order ${order.orderNumber} - cascade delete (${reason})`);
+        }
+      }
+    }
+
+    await tx.delete(ordersTable).where(eq(ordersTable.id, orderId));
+    await logAudit({ entityType: "order", entityId: order.id, entityNumber: order.orderNumber, action: "cascaded_delete", oldStatus: order.status, notes: reason }, tx);
+  });
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -263,9 +305,19 @@ router.get("/quotations", async (req, res): Promise<void> => {
   const offset = (page - 1) * limit;
   const search = req.query.search as string | undefined;
   const status = req.query.status as string | undefined;
+  const type = req.query.type as string | undefined;
+  const dateFrom = req.query.dateFrom as string | undefined;
+  const dateTo = req.query.dateTo as string | undefined;
 
   const conditions: any[] = [];
   if (status) conditions.push(eq(quotationsTable.status, status));
+  if (type) conditions.push(eq(quotationsTable.type, type));
+  if (dateFrom) conditions.push(gte(quotationsTable.createdAt, new Date(dateFrom)));
+  if (dateTo) {
+    const to = new Date(dateTo);
+    to.setHours(23, 59, 59, 999);
+    conditions.push(lte(quotationsTable.createdAt, to));
+  }
   if (search) {
     conditions.push(or(
       ilike(quotationsTable.quotationNumber, `%${search}%`),
@@ -462,8 +514,15 @@ router.patch("/quotations/:id", async (req, res): Promise<void> => {
     if ("otherCharge" in data) updates.otherCharge = String(parseNum(data.otherCharge));
   }
 
+  const [existingBefore] = await db.select().from(quotationsTable).where(eq(quotationsTable.id, id));
+  if (!existingBefore) { res.status(404).json({ error: "Quotation not found" }); return; }
+
   const [quotation] = await db.update(quotationsTable).set(updates).where(eq(quotationsTable.id, id)).returning();
   if (!quotation) { res.status(404).json({ error: "Quotation not found" }); return; }
+
+  if ("status" in data && data.status !== existingBefore.status) {
+    await logAudit({ entityType: "quotation", entityId: quotation.id, entityNumber: quotation.quotationNumber, action: "status_changed", oldStatus: existingBefore.status, newStatus: data.status });
+  }
 
   let customerDbName: string | null = null;
   if (!quotation.isNewCustomer && quotation.customerId) {
@@ -485,7 +544,17 @@ router.patch("/quotations/:id", async (req, res): Promise<void> => {
       .from(quotationsTable)
       .leftJoin(customersTable, eq(customersTable.id, quotationsTable.customerId as any))
       .where(eq(quotationsTable.id, id));
-    if (refreshed) return res.json(parseQuotation(refreshed.q, refreshed.customerDbName));
+    if (refreshed) { res.json(parseQuotation(refreshed.q, refreshed.customerDbName)); return; }
+  } else if ("status" in data && existingBefore.status === "accepted" && existingBefore.convertedOrderId) {
+    // Status moved away from "accepted" (e.g. back to sent/rejected/draft) — cascade-delete
+    // the auto-created order (and its invoice, if any), restoring stock along the way.
+    await cascadeDeleteConvertedOrder(existingBefore, `Quotation ${quotation.quotationNumber} status changed to ${data.status}`);
+    const [refreshed] = await db
+      .select({ q: quotationsTable, customerDbName: customersTable.name })
+      .from(quotationsTable)
+      .leftJoin(customersTable, eq(customersTable.id, quotationsTable.customerId as any))
+      .where(eq(quotationsTable.id, id));
+    if (refreshed) { res.json(parseQuotation(refreshed.q, refreshed.customerDbName)); return; }
   }
 
   res.json(parseQuotation(quotation, customerDbName));
@@ -495,8 +564,19 @@ router.patch("/quotations/:id", async (req, res): Promise<void> => {
 router.delete("/quotations/:id", async (req, res): Promise<void> => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [existing] = await db.select().from(quotationsTable).where(eq(quotationsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Quotation not found" }); return; }
+
+  if (existing.convertedOrderId) {
+    await cascadeDeleteConvertedOrder(existing, `Quotation ${existing.quotationNumber} was deleted`);
+  }
+
   const [q] = await db.delete(quotationsTable).where(eq(quotationsTable.id, id)).returning();
   if (!q) { res.status(404).json({ error: "Quotation not found" }); return; }
+
+  await logAudit({ entityType: "quotation", entityId: q.id, entityNumber: q.quotationNumber, action: "deleted", oldStatus: q.status });
+
   res.sendStatus(204);
 });
 

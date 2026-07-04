@@ -314,6 +314,14 @@ export interface OrderItem {
   quantity: number;
 }
 
+export type OrderCreatedFromProperty = typeof OrderCreatedFromProperty[keyof typeof OrderCreatedFromProperty];
+
+
+export const OrderCreatedFromProperty = {
+  quotation: 'quotation',
+  direct: 'direct',
+} as const;
+
 export interface Order {
   id: number;
   orderNumber: string;
@@ -325,6 +333,11 @@ export interface Order {
   invoiceId?: number | null;
   /** @nullable */
   invoiceNumber?: string | null;
+  /** @nullable */
+  quotationId?: number | null;
+  /** @nullable */
+  quotationNumber?: string | null;
+  createdFrom?: OrderCreatedFromProperty;
   /** @nullable */
   notes?: string | null;
   items?: OrderItem[];
@@ -349,6 +362,14 @@ export interface OrderInput {
   notes?: string;
   items: OrderItemInput[];
 }
+
+export type OrderCreatedFrom = typeof OrderCreatedFrom[keyof typeof OrderCreatedFrom];
+
+
+export const OrderCreatedFrom = {
+  quotation: 'quotation',
+  direct: 'direct',
+} as const;
 
 export interface OrderUpdate {
   customerId?: number;
@@ -409,6 +430,15 @@ export interface InvoiceItem {
   total: number;
 }
 
+export type InvoiceCreatedFrom = typeof InvoiceCreatedFrom[keyof typeof InvoiceCreatedFrom];
+
+
+export const InvoiceCreatedFrom = {
+  quotation: 'quotation',
+  order: 'order',
+  direct: 'direct',
+} as const;
+
 export interface Invoice {
   id: number;
   invoiceNumber: string;
@@ -418,6 +448,11 @@ export interface Invoice {
   orderId?: number | null;
   /** @nullable */
   orderNumber?: string | null;
+  /** @nullable */
+  quotationId?: number | null;
+  /** @nullable */
+  quotationNumber?: string | null;
+  createdFrom?: InvoiceCreatedFrom;
   type: string;
   status: string;
   subtotal: number;
@@ -505,6 +540,39 @@ export interface InvoiceUpdate {
   dueDate?: string;
   notes?: string;
   items?: InvoiceItemInput[];
+}
+
+export type AuditLogEntryEntityType = typeof AuditLogEntryEntityType[keyof typeof AuditLogEntryEntityType];
+
+
+export const AuditLogEntryEntityType = {
+  quotation: 'quotation',
+  order: 'order',
+  invoice: 'invoice',
+} as const;
+
+export interface AuditLogEntry {
+  id: number;
+  entityType: AuditLogEntryEntityType;
+  entityId: number;
+  /** @nullable */
+  entityNumber?: string | null;
+  action: string;
+  /** @nullable */
+  oldStatus?: string | null;
+  /** @nullable */
+  newStatus?: string | null;
+  userLabel: string;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface AuditLogPage {
+  data: AuditLogEntry[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 export interface Payment {
@@ -732,9 +800,34 @@ search?: string;
 status?: string;
 dateFrom?: string;
 dateTo?: string;
+createdFrom?: ListOrdersCreatedFrom;
 page?: number;
 limit?: number;
 };
+
+export type ListOrdersCreatedFrom = typeof ListOrdersCreatedFrom[keyof typeof ListOrdersCreatedFrom];
+
+
+export const ListOrdersCreatedFrom = {
+  quotation: 'quotation',
+  direct: 'direct',
+} as const;
+
+export type ListAuditLogParams = {
+entityType?: ListAuditLogEntityType;
+entityId?: number;
+page?: number;
+limit?: number;
+};
+
+export type ListAuditLogEntityType = typeof ListAuditLogEntityType[keyof typeof ListAuditLogEntityType];
+
+
+export const ListAuditLogEntityType = {
+  quotation: 'quotation',
+  order: 'order',
+  invoice: 'invoice',
+} as const;
 
 export type ListInvoicesParams = {
 search?: string;
@@ -743,9 +836,19 @@ type?: string;
 customerId?: number;
 dateFrom?: string;
 dateTo?: string;
+createdFrom?: ListInvoicesCreatedFrom;
 page?: number;
 limit?: number;
 };
+
+export type ListInvoicesCreatedFrom = typeof ListInvoicesCreatedFrom[keyof typeof ListInvoicesCreatedFrom];
+
+
+export const ListInvoicesCreatedFrom = {
+  quotation: 'quotation',
+  order: 'order',
+  direct: 'direct',
+} as const;
 
 export type ListPaymentsParams = {
 search?: string;

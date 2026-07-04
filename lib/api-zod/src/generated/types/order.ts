@@ -5,6 +5,7 @@
  * ShopFlow ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { OrderCreatedFromProperty } from './orderCreatedFromProperty';
 import type { OrderItem } from './orderItem';
 
 export interface Order {
@@ -18,6 +19,11 @@ export interface Order {
   invoiceId?: number | null;
   /** @nullable */
   invoiceNumber?: string | null;
+  /** @nullable */
+  quotationId?: number | null;
+  /** @nullable */
+  quotationNumber?: string | null;
+  createdFrom?: OrderCreatedFromProperty;
   /** @nullable */
   notes?: string | null;
   items?: OrderItem[];

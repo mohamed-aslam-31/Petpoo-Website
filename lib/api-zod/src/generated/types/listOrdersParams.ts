@@ -5,12 +5,14 @@
  * ShopFlow ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { ListOrdersCreatedFrom } from './listOrdersCreatedFrom';
 
 export type ListOrdersParams = {
 search?: string;
 status?: string;
 dateFrom?: string;
 dateTo?: string;
+createdFrom?: ListOrdersCreatedFrom;
 page?: number;
 limit?: number;
 };

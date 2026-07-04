@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, sql, gte, lte, or } from "drizzle-orm";
-import { db, ordersTable, invoicesTable, customersTable, productsTable, stockMovementsTable } from "@workspace/db";
+import { db, ordersTable, invoicesTable, customersTable, productsTable, stockMovementsTable, quotationsTable } from "@workspace/db";
 import {
   CreateOrderBody,
   GetOrderParams,
@@ -11,11 +11,13 @@ import {
   CancelOrderParams,
   ReturnOrderParams,
 } from "@workspace/api-zod";
+import { logAudit } from "../lib/audit";
 
 const router: IRouter = Router();
 
 function parseOrder(o: any, customerName?: string, invoiceNumber?: string | null) {
   const items = Array.isArray(o.items) ? o.items : (typeof o.items === "string" ? JSON.parse(o.items) : []);
+  const meta = o.meta ?? null;
   return {
     id: o.id,
     orderNumber: o.orderNumber,
@@ -25,10 +27,13 @@ function parseOrder(o: any, customerName?: string, invoiceNumber?: string | null
     orderDate: o.orderDate,
     invoiceId: o.invoiceId ?? null,
     invoiceNumber: invoiceNumber ?? null,
+    quotationId: o.quotationId ?? null,
+    quotationNumber: o.quotationId ? (meta?.quotationNumber ?? null) : null,
+    createdFrom: o.createdFrom ?? "direct",
     notes: o.notes ?? null,
     items,
     /** Quotation-level charges/type so CompleteOrder dialog can pre-fill */
-    meta: o.meta ?? null,
+    meta,
     createdAt: o.createdAt instanceof Date ? o.createdAt.toISOString() : o.createdAt,
   };
 }
@@ -40,6 +45,10 @@ function generateOrderNumber(id: number) {
 function generateInvoiceNumber(id: number) {
   const year = new Date().getFullYear();
   return `INV${year}${String(id).padStart(5, "0")}`;
+}
+
+function parseItems(raw: any): any[] {
+  return Array.isArray(raw) ? raw : (typeof raw === "string" ? JSON.parse(raw) : []);
 }
 
 async function enrichItemNames(items: any[]) {
@@ -100,20 +109,30 @@ async function restoreOrderStock(items: any[], orderNumber: string, reasonSuffix
   }
 }
 
-function calcInvoiceTotals(items: any[], discount: number, transport: number, packageCharge: number, otherCharge: number) {
-  let subtotal = 0;
-  let cgst = 0, sgst = 0;
-  const parsedItems = items.map((item: any) => {
-    const lineTotal = item.quantity * item.unitPrice - (item.discount ?? 0);
-    const lineGst = lineTotal * ((item.gstPercent ?? 0) / 100);
-    cgst += lineGst / 2;
-    sgst += lineGst / 2;
-    subtotal += lineTotal;
-    return { ...item, total: lineTotal + lineGst };
+/**
+ * If an order was auto-created from a quotation, reverting/removing the order
+ * must revert the parent quotation back to "sent" and clear the conversion link.
+ */
+async function revertQuotationForOrder(order: any, reason: string) {
+  if (!order.quotationId) return;
+  await db.transaction(async (tx) => {
+    const [quotation] = await tx.select().from(quotationsTable).where(eq(quotationsTable.id, order.quotationId));
+    if (!quotation) return;
+
+    await tx.update(quotationsTable)
+      .set({ status: "sent", convertedOrderId: null, convertedOrderNumber: null } as any)
+      .where(eq(quotationsTable.id, quotation.id));
+
+    await logAudit({
+      entityType: "quotation",
+      entityId: quotation.id,
+      entityNumber: quotation.quotationNumber,
+      action: "cascaded_status",
+      oldStatus: quotation.status,
+      newStatus: "sent",
+      notes: reason,
+    }, tx);
   });
-  const gstAmount = cgst + sgst;
-  const total = subtotal + gstAmount + transport + packageCharge + otherCharge - discount;
-  return { subtotal, cgst, sgst, igst: 0, gstAmount, total, parsedItems };
 }
 
 router.get("/orders", async (req, res): Promise<void> => {
@@ -124,9 +143,11 @@ router.get("/orders", async (req, res): Promise<void> => {
   const status = req.query.status as string | undefined;
   const dateFrom = req.query.dateFrom as string | undefined;
   const dateTo = req.query.dateTo as string | undefined;
+  const createdFrom = req.query.createdFrom as string | undefined;
 
   const conditions = [];
   if (status) conditions.push(eq(ordersTable.status, status));
+  if (createdFrom) conditions.push(eq(ordersTable.createdFrom, createdFrom));
   if (dateFrom) conditions.push(gte(ordersTable.createdAt, new Date(dateFrom)));
   if (dateTo) {
     const to = new Date(dateTo);
@@ -188,6 +209,7 @@ router.post("/orders", async (req, res): Promise<void> => {
     orderDate: orderDate ?? new Date().toISOString().slice(0, 10),
     notes: notes ?? null,
     items: enrichedItems,
+    createdFrom: "direct",
   } as any).returning();
 
   const orderNumber = generateOrderNumber(temp.id);
@@ -195,6 +217,8 @@ router.post("/orders", async (req, res): Promise<void> => {
 
   // Booking reserves stock
   await deductOrderStock(enrichedItems, orderNumber);
+
+  await logAudit({ entityType: "order", entityId: order.id, entityNumber: order.orderNumber, action: "created", newStatus: order.status });
 
   res.status(201).json(parseOrder(order, customer.name));
 });
@@ -224,7 +248,7 @@ router.patch("/orders/:id", async (req, res): Promise<void> => {
   const updates: any = {};
 
   if (body.items && Array.isArray(body.items)) {
-    const oldItems = Array.isArray(existing.items) ? existing.items : (typeof existing.items === "string" ? JSON.parse(existing.items as string) : []);
+    const oldItems = parseItems(existing.items);
     await restoreOrderStock(oldItems, existing.orderNumber, " - edit reversal");
 
     const enrichedItems = await enrichItemNames(body.items);
@@ -247,13 +271,41 @@ router.delete("/orders/:id", async (req, res): Promise<void> => {
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
   const [existing] = await db.select().from(ordersTable).where(eq(ordersTable.id, params.data.id));
-  if (existing && existing.status === "pending") {
-    const oldItems = Array.isArray(existing.items) ? existing.items : (typeof existing.items === "string" ? JSON.parse(existing.items as string) : []);
+  if (!existing) { res.status(404).json({ error: "Order not found" }); return; }
+
+  if (existing.status === "pending") {
+    const oldItems = parseItems(existing.items);
     await restoreOrderStock(oldItems, existing.orderNumber, " - deleted");
+  } else if (existing.status === "completed") {
+    // Cascade-delete the linked invoice and restore stock at its final quantities
+    const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.orderId, existing.id));
+    if (invoice) {
+      const invoiceItems = parseItems(invoice.items);
+      await restoreOrderStock(invoiceItems, existing.orderNumber, " - order deleted (cascade)");
+      await db.delete(invoicesTable).where(eq(invoicesTable.id, invoice.id));
+      await logAudit({
+        entityType: "invoice",
+        entityId: invoice.id,
+        entityNumber: invoice.invoiceNumber,
+        action: "cascaded_delete",
+        oldStatus: invoice.status,
+        notes: `Deleted because parent order ${existing.orderNumber} was deleted`,
+      });
+    }
   }
 
-  const [order] = await db.delete(ordersTable).where(eq(ordersTable.id, params.data.id)).returning();
-  if (!order) { res.status(404).json({ error: "Order not found" }); return; }
+  await db.delete(ordersTable).where(eq(ordersTable.id, params.data.id));
+
+  await logAudit({
+    entityType: "order",
+    entityId: existing.id,
+    entityNumber: existing.orderNumber,
+    action: "deleted",
+    oldStatus: existing.status,
+  });
+
+  await revertQuotationForOrder(existing, `Order ${existing.orderNumber} was deleted`);
+
   res.sendStatus(204);
 });
 
@@ -291,6 +343,8 @@ router.post("/orders/:id/complete", async (req, res): Promise<void> => {
     invoiceNumber: "TEMP",
     customerId: order.customerId,
     orderId: order.id,
+    quotationId: order.quotationId ?? null,
+    createdFrom: order.quotationId ? "quotation" : "order",
     type: invoiceType,
     status,
     subtotal: String(subtotal),
@@ -315,7 +369,7 @@ router.post("/orders/:id/complete", async (req, res): Promise<void> => {
   const [invoice] = await db.update(invoicesTable).set({ invoiceNumber }).where(eq(invoicesTable.id, tempInvoice.id)).returning();
 
   // Reconcile stock: order items were already deducted at booking time; adjust to match final invoice quantities
-  const orderItems = Array.isArray(order.items) ? order.items : (typeof order.items === "string" ? JSON.parse(order.items as string) : []);
+  const orderItems = parseItems(order.items);
   const orderQtyByProduct = new Map<number, number>();
   for (const item of orderItems) orderQtyByProduct.set(item.productId, (orderQtyByProduct.get(item.productId) ?? 0) + item.quantity);
 
@@ -331,6 +385,9 @@ router.post("/orders/:id/complete", async (req, res): Promise<void> => {
 
   await db.update(ordersTable).set({ status: "completed" }).where(eq(ordersTable.id, order.id));
 
+  await logAudit({ entityType: "order", entityId: order.id, entityNumber: order.orderNumber, action: "status_changed", oldStatus: "pending", newStatus: "completed" });
+  await logAudit({ entityType: "invoice", entityId: invoice.id, entityNumber: invoice.invoiceNumber, action: "created", newStatus: invoice.status, notes: `Generated from order ${order.orderNumber}` });
+
   res.status(201).json({
     id: invoice.id,
     invoiceNumber: invoice.invoiceNumber,
@@ -338,6 +395,9 @@ router.post("/orders/:id/complete", async (req, res): Promise<void> => {
     customerName: customer.name,
     orderId: invoice.orderId,
     orderNumber: order.orderNumber,
+    quotationId: invoice.quotationId ?? null,
+    quotationNumber: order.meta && (order.meta as any).quotationNumber ? (order.meta as any).quotationNumber : null,
+    createdFrom: invoice.createdFrom,
     type: invoice.type,
     status: invoice.status,
     subtotal: parseFloat(String(invoice.subtotal)),
@@ -369,11 +429,15 @@ router.patch("/orders/:id/cancel", async (req, res): Promise<void> => {
   if (!order) { res.status(404).json({ error: "Order not found" }); return; }
   if (order.status !== "pending") { res.status(400).json({ error: "Only pending orders can be cancelled" }); return; }
 
-  const items = Array.isArray(order.items) ? order.items : (typeof order.items === "string" ? JSON.parse(order.items as string) : []);
+  const items = parseItems(order.items);
   await restoreOrderStock(items, order.orderNumber, " - cancelled");
 
   const [updated] = await db.update(ordersTable).set({ status: "cancelled" }).where(eq(ordersTable.id, order.id)).returning();
   const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, updated.customerId));
+
+  await logAudit({ entityType: "order", entityId: order.id, entityNumber: order.orderNumber, action: "status_changed", oldStatus: "pending", newStatus: "cancelled" });
+  await revertQuotationForOrder(order, `Order ${order.orderNumber} was cancelled`);
+
   res.json(parseOrder(updated, cust?.name ?? ""));
 });
 
@@ -389,18 +453,37 @@ router.patch("/orders/:id/return", async (req, res): Promise<void> => {
   const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.orderId, order.id));
 
   // Restore stock based on the invoice's final item quantities (falls back to order items if no invoice found)
-  const itemsSource = invoice
-    ? (Array.isArray(invoice.items) ? invoice.items : (typeof invoice.items === "string" ? JSON.parse(invoice.items as string) : []))
-    : (Array.isArray(order.items) ? order.items : (typeof order.items === "string" ? JSON.parse(order.items as string) : []));
+  const itemsSource = invoice ? parseItems(invoice.items) : parseItems(order.items);
   await restoreOrderStock(itemsSource, order.orderNumber, " - returned");
 
   if (invoice) {
     await db.update(invoicesTable).set({ status: "returned" }).where(eq(invoicesTable.id, invoice.id));
+    await logAudit({ entityType: "invoice", entityId: invoice.id, entityNumber: invoice.invoiceNumber, action: "cascaded_status", oldStatus: invoice.status, newStatus: "returned", notes: `Order ${order.orderNumber} was returned` });
   }
 
   const [updated] = await db.update(ordersTable).set({ status: "returned" }).where(eq(ordersTable.id, order.id)).returning();
   const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, updated.customerId));
+
+  await logAudit({ entityType: "order", entityId: order.id, entityNumber: order.orderNumber, action: "status_changed", oldStatus: "completed", newStatus: "returned" });
+  await revertQuotationForOrder(order, `Order ${order.orderNumber} was returned`);
+
   res.json(parseOrder(updated, cust?.name ?? ""));
 });
+
+function calcInvoiceTotals(items: any[], discount: number, transport: number, packageCharge: number, otherCharge: number) {
+  let subtotal = 0;
+  let cgst = 0, sgst = 0;
+  const parsedItems = items.map((item: any) => {
+    const lineTotal = item.quantity * item.unitPrice - (item.discount ?? 0);
+    const lineGst = lineTotal * ((item.gstPercent ?? 0) / 100);
+    cgst += lineGst / 2;
+    sgst += lineGst / 2;
+    subtotal += lineTotal;
+    return { ...item, total: lineTotal + lineGst };
+  });
+  const gstAmount = cgst + sgst;
+  const total = subtotal + gstAmount + transport + packageCharge + otherCharge - discount;
+  return { subtotal, cgst, sgst, igst: 0, gstAmount, total, parsedItems };
+}
 
 export default router;

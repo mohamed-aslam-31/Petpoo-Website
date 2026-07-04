@@ -1,17 +1,22 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, sql, gte, lte, or } from "drizzle-orm";
-import { db, invoicesTable, ordersTable, customersTable, productsTable, stockMovementsTable } from "@workspace/db";
+import { db, invoicesTable, ordersTable, customersTable, productsTable, stockMovementsTable, quotationsTable } from "@workspace/db";
 import {
   CreateInvoiceBody,
   GetInvoiceParams,
   UpdateInvoiceParams,
   DeleteInvoiceParams,
 } from "@workspace/api-zod";
+import { logAudit } from "../lib/audit";
 
 const router: IRouter = Router();
 
-function parseInvoice(inv: any, customerName?: string, orderNumber?: string | null) {
-  const items = Array.isArray(inv.items) ? inv.items : (typeof inv.items === "string" ? JSON.parse(inv.items) : []);
+function parseItems(raw: any): any[] {
+  return Array.isArray(raw) ? raw : (typeof raw === "string" ? JSON.parse(raw) : []);
+}
+
+function parseInvoice(inv: any, customerName?: string, orderNumber?: string | null, quotationNumber?: string | null) {
+  const items = parseItems(inv.items);
   return {
     id: inv.id,
     invoiceNumber: inv.invoiceNumber,
@@ -19,6 +24,9 @@ function parseInvoice(inv: any, customerName?: string, orderNumber?: string | nu
     customerName: customerName ?? inv.customerName ?? "",
     orderId: inv.orderId ?? null,
     orderNumber: orderNumber ?? null,
+    quotationId: inv.quotationId ?? null,
+    quotationNumber: quotationNumber ?? null,
+    createdFrom: inv.createdFrom ?? "direct",
     type: inv.type,
     status: inv.status,
     subtotal: parseFloat(String(inv.subtotal ?? "0")),
@@ -98,12 +106,54 @@ async function deductInvoiceStock(items: any[], invoiceNumber: string) {
 }
 
 /** Reverse stock deductions for all items */
-async function reverseInvoiceStock(items: any[], invoiceNumber: string) {
+async function reverseInvoiceStock(items: any[], invoiceNumber: string, reasonSuffix = " - edit reversal") {
   for (const item of items) {
     if (item.productId && item.quantity > 0) {
-      await adjustStock(item.productId, "increase", item.quantity, `Invoice ${invoiceNumber} - edit reversal`);
+      await adjustStock(item.productId, "increase", item.quantity, `Invoice ${invoiceNumber}${reasonSuffix}`);
     }
   }
+}
+
+/**
+ * When an order-linked invoice is cancelled, returned or deleted, sync the parent
+ * order (and, transitively, its parent quotation) so the whole chain stays consistent.
+ */
+async function cascadeToOrderAndQuotation(invoice: any, newOrderStatus: "pending" | "returned", reason: string) {
+  if (!invoice.orderId) return;
+  await db.transaction(async (tx) => {
+    const [order] = await tx.select().from(ordersTable).where(eq(ordersTable.id, invoice.orderId));
+    if (!order) return;
+    if (order.status === newOrderStatus) return;
+
+    await tx.update(ordersTable).set({ status: newOrderStatus }).where(eq(ordersTable.id, order.id));
+    await logAudit({
+      entityType: "order",
+      entityId: order.id,
+      entityNumber: order.orderNumber,
+      action: "cascaded_status",
+      oldStatus: order.status,
+      newStatus: newOrderStatus,
+      notes: reason,
+    }, tx);
+
+    if (order.quotationId) {
+      const [quotation] = await tx.select().from(quotationsTable).where(eq(quotationsTable.id, order.quotationId));
+      if (quotation && quotation.status !== "sent") {
+        await tx.update(quotationsTable)
+          .set({ status: "sent", convertedOrderId: null, convertedOrderNumber: null } as any)
+          .where(eq(quotationsTable.id, quotation.id));
+        await logAudit({
+          entityType: "quotation",
+          entityId: quotation.id,
+          entityNumber: quotation.quotationNumber,
+          action: "cascaded_status",
+          oldStatus: quotation.status,
+          newStatus: "sent",
+          notes: reason,
+        }, tx);
+      }
+    }
+  });
 }
 
 router.get("/invoices", async (req, res): Promise<void> => {
@@ -116,11 +166,13 @@ router.get("/invoices", async (req, res): Promise<void> => {
   const customerId = req.query.customerId ? parseInt(String(req.query.customerId), 10) : undefined;
   const dateFrom = req.query.dateFrom as string | undefined;
   const dateTo = req.query.dateTo as string | undefined;
+  const createdFrom = req.query.createdFrom as string | undefined;
 
   const conditions = [];
   if (status) conditions.push(eq(invoicesTable.status, status));
   if (type) conditions.push(eq(invoicesTable.type, type));
   if (customerId) conditions.push(eq(invoicesTable.customerId, customerId));
+  if (createdFrom) conditions.push(eq(invoicesTable.createdFrom, createdFrom));
   if (dateFrom) conditions.push(gte(invoicesTable.createdAt, new Date(dateFrom)));
   if (dateTo) {
     const to = new Date(dateTo);
@@ -143,16 +195,17 @@ router.get("/invoices", async (req, res): Promise<void> => {
     .where(where);
 
   const rows = await db
-    .select({ inv: invoicesTable, customerName: customersTable.name, orderNumber: ordersTable.orderNumber })
+    .select({ inv: invoicesTable, customerName: customersTable.name, orderNumber: ordersTable.orderNumber, quotationNumber: quotationsTable.quotationNumber })
     .from(invoicesTable)
     .leftJoin(customersTable, eq(customersTable.id, invoicesTable.customerId))
     .leftJoin(ordersTable, eq(ordersTable.id, invoicesTable.orderId))
+    .leftJoin(quotationsTable, eq(quotationsTable.id, invoicesTable.quotationId))
     .where(where)
     .orderBy(sql`${invoicesTable.createdAt} desc`)
     .limit(limit)
     .offset(offset);
 
-  res.json({ data: rows.map(r => parseInvoice(r.inv, r.customerName ?? "", r.orderNumber)), total: countResult.count, page, limit });
+  res.json({ data: rows.map(r => parseInvoice(r.inv, r.customerName ?? "", r.orderNumber, r.quotationNumber)), total: countResult.count, page, limit });
 });
 
 router.post("/invoices", async (req, res): Promise<void> => {
@@ -176,6 +229,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
     customerId,
     type,
     status: status ?? "processing",
+    createdFrom: "direct",
     subtotal: String(subtotal),
     discount: String(discountAmt),
     cgst: String(cgst),
@@ -200,6 +254,8 @@ router.post("/invoices", async (req, res): Promise<void> => {
   // Standalone invoices (not generated from an order) deduct stock directly
   await deductInvoiceStock(parsedItems, invoiceNumber);
 
+  await logAudit({ entityType: "invoice", entityId: invoice.id, entityNumber: invoice.invoiceNumber, action: "created", newStatus: invoice.status });
+
   res.status(201).json(parseInvoice(invoice, customer.name));
 });
 
@@ -207,13 +263,14 @@ router.get("/invoices/:id", async (req, res): Promise<void> => {
   const params = GetInvoiceParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const [row] = await db
-    .select({ inv: invoicesTable, customerName: customersTable.name, orderNumber: ordersTable.orderNumber })
+    .select({ inv: invoicesTable, customerName: customersTable.name, orderNumber: ordersTable.orderNumber, quotationNumber: quotationsTable.quotationNumber })
     .from(invoicesTable)
     .leftJoin(customersTable, eq(customersTable.id, invoicesTable.customerId))
     .leftJoin(ordersTable, eq(ordersTable.id, invoicesTable.orderId))
+    .leftJoin(quotationsTable, eq(quotationsTable.id, invoicesTable.quotationId))
     .where(eq(invoicesTable.id, params.data.id));
   if (!row) { res.status(404).json({ error: "Invoice not found" }); return; }
-  res.json(parseInvoice(row.inv, row.customerName ?? "", row.orderNumber));
+  res.json(parseInvoice(row.inv, row.customerName ?? "", row.orderNumber, row.quotationNumber));
 });
 
 router.patch("/invoices/:id", async (req, res): Promise<void> => {
@@ -226,11 +283,13 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
   const body = req.body as any;
   const updates: any = {};
 
+  const isTerminalTransition = body.status && ["cancelled", "returned"].includes(body.status) && !["cancelled", "returned"].includes(existing.status);
+
   // If items provided and this invoice isn't order-linked, recalc totals and adjust stock directly.
   // Order-linked invoices keep locked products; qty/price/gst/discount edits still recalc totals but don't touch stock here (handled via order return flow).
   if (body.items && Array.isArray(body.items)) {
     if (!existing.orderId) {
-      const oldItems = Array.isArray(existing.items) ? existing.items : (typeof existing.items === "string" ? JSON.parse(existing.items as string) : []);
+      const oldItems = parseItems(existing.items);
       await reverseInvoiceStock(oldItems, existing.invoiceNumber);
     }
 
@@ -272,6 +331,11 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
       await deductInvoiceStock(parsedItems, invoice.invoiceNumber);
     }
 
+    if (isTerminalTransition) {
+      await logAudit({ entityType: "invoice", entityId: invoice.id, entityNumber: invoice.invoiceNumber, action: "status_changed", oldStatus: existing.status, newStatus: invoice.status });
+      await cascadeToOrderAndQuotation(invoice, invoice.status === "returned" ? "returned" : "pending", `Invoice ${invoice.invoiceNumber} was ${invoice.status}`);
+    }
+
     const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, invoice.customerId));
     res.json(parseInvoice(invoice, cust?.name ?? ""));
     return;
@@ -297,8 +361,20 @@ router.patch("/invoices/:id", async (req, res): Promise<void> => {
   if (body.packageCharge !== undefined) updates.packageCharge = String(body.packageCharge);
   if (body.otherCharge !== undefined) updates.otherCharge = String(body.otherCharge);
 
+  // Terminal status transitions (cancelled/returned) restore stock exactly once
+  if (isTerminalTransition) {
+    const items = parseItems(existing.items);
+    await reverseInvoiceStock(items, existing.invoiceNumber, ` - ${body.status}`);
+  }
+
   const [invoice] = await db.update(invoicesTable).set(updates).where(eq(invoicesTable.id, params.data.id)).returning();
   if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
+
+  if (isTerminalTransition) {
+    await logAudit({ entityType: "invoice", entityId: invoice.id, entityNumber: invoice.invoiceNumber, action: "status_changed", oldStatus: existing.status, newStatus: invoice.status });
+    await cascadeToOrderAndQuotation(invoice, invoice.status === "returned" ? "returned" : "pending", `Invoice ${invoice.invoiceNumber} was ${invoice.status}`);
+  }
+
   const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, invoice.customerId));
   res.json(parseInvoice(invoice, cust?.name ?? ""));
 });
@@ -307,15 +383,20 @@ router.delete("/invoices/:id", async (req, res): Promise<void> => {
   const params = DeleteInvoiceParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
 
-  // Reverse stock deductions before deleting (only for standalone, non-order-linked invoices)
   const [existing] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, params.data.id));
-  if (existing && !existing.orderId) {
-    const oldItems = Array.isArray(existing.items) ? existing.items : (typeof existing.items === "string" ? JSON.parse(existing.items as string) : []);
-    await reverseInvoiceStock(oldItems, existing.invoiceNumber);
+  if (!existing) { res.status(404).json({ error: "Invoice not found" }); return; }
+
+  // Reverse stock deductions before deleting, unless already cancelled/returned (already reversed)
+  if (!["cancelled", "returned"].includes(existing.status)) {
+    const oldItems = parseItems(existing.items);
+    await reverseInvoiceStock(oldItems, existing.invoiceNumber, " - deleted");
   }
 
-  const [invoice] = await db.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id)).returning();
-  if (!invoice) { res.status(404).json({ error: "Invoice not found" }); return; }
+  await db.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id));
+
+  await logAudit({ entityType: "invoice", entityId: existing.id, entityNumber: existing.invoiceNumber, action: "deleted", oldStatus: existing.status });
+  await cascadeToOrderAndQuotation(existing, "pending", `Invoice ${existing.invoiceNumber} was deleted`);
+
   res.sendStatus(204);
 });
 

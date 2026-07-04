@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AuditLogPage,
   Brand,
   BrandInput,
   BrandUpdate,
@@ -46,6 +47,7 @@ import type {
   InvoiceUpdate,
   InvoicesPage,
   LedgerEntry,
+  ListAuditLogParams,
   ListCustomersParams,
   ListEmployeesParams,
   ListExpensesParams,
@@ -2877,6 +2879,90 @@ export const useReturnOrder = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getReturnOrderMutationOptions(options));
     }
+
+export const getListAuditLogUrl = (params?: ListAuditLogParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/audit-log?${stringifiedParams}` : `/api/audit-log`
+}
+
+/**
+ * @summary List audit trail entries
+ */
+export const listAuditLog = async (params?: ListAuditLogParams, options?: RequestInit): Promise<AuditLogPage> => {
+
+  return customFetch<AuditLogPage>(getListAuditLogUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAuditLogQueryKey = (params?: ListAuditLogParams,) => {
+    return [
+    `/api/audit-log`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAuditLogQueryOptions = <TData = Awaited<ReturnType<typeof listAuditLog>>, TError = ErrorType<unknown>>(params?: ListAuditLogParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAuditLog>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAuditLogQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAuditLog>>> = ({ signal }) => listAuditLog(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAuditLog>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAuditLogQueryResult = NonNullable<Awaited<ReturnType<typeof listAuditLog>>>
+export type ListAuditLogQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List audit trail entries
+ */
+
+export function useListAuditLog<TData = Awaited<ReturnType<typeof listAuditLog>>, TError = ErrorType<unknown>>(
+ params?: ListAuditLogParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAuditLog>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAuditLogQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListInvoicesUrl = (params?: ListInvoicesParams,) => {
   const normalizedParams = new URLSearchParams();

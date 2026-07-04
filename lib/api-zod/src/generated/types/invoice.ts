@@ -5,6 +5,7 @@
  * ShopFlow ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { InvoiceCreatedFrom } from './invoiceCreatedFrom';
 import type { InvoiceItem } from './invoiceItem';
 
 export interface Invoice {
@@ -16,6 +17,11 @@ export interface Invoice {
   orderId?: number | null;
   /** @nullable */
   orderNumber?: string | null;
+  /** @nullable */
+  quotationId?: number | null;
+  /** @nullable */
+  quotationNumber?: string | null;
+  createdFrom?: InvoiceCreatedFrom;
   type: string;
   status: string;
   subtotal: number;
