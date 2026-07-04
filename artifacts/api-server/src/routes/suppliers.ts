@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, sql } from "drizzle-orm";
-import { db, suppliersTable } from "@workspace/db";
+import { db, suppliersTable, paymentsTable } from "@workspace/db";
 import {
   CreateSupplierBody,
   UpdateSupplierBody,
@@ -78,6 +78,39 @@ router.delete("/suppliers/:id", async (req, res): Promise<void> => {
   const [supplier] = await db.delete(suppliersTable).where(eq(suppliersTable.id, params.data.id)).returning();
   if (!supplier) { res.status(404).json({ error: "Supplier not found" }); return; }
   res.sendStatus(204);
+});
+
+router.get("/suppliers/:id/ledger", async (req, res): Promise<void> => {
+  const params = GetSupplierParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  const payments = await db
+    .select()
+    .from(paymentsTable)
+    .where(and(eq(paymentsTable.entityType, "supplier"), eq(paymentsTable.entityId, params.data.id)))
+    .orderBy(paymentsTable.createdAt);
+
+  // From the business's perspective:
+  //   "paid" = we paid the supplier  → credit (reduces what we owe)
+  //   "received" = supplier paid us  → debit (unusual; e.g. a refund from supplier)
+  const entries = payments.map((p) => ({
+    id: p.id,
+    date: p.createdAt.toISOString(),
+    description: `Payment - ${p.method}${p.notes ? ` (${p.notes})` : ""}`,
+    debit: p.type === "received" ? parseFloat(String(p.amount ?? "0")) : 0,
+    credit: p.type === "paid" ? parseFloat(String(p.amount ?? "0")) : 0,
+    balance: 0,
+    type: "payment",
+    referenceId: p.id,
+  }));
+
+  let balance = 0;
+  for (const e of entries) {
+    balance = parseFloat((balance + e.debit - e.credit).toFixed(2));
+    e.balance = balance;
+  }
+
+  res.json(entries);
 });
 
 export default router;

@@ -31,5 +31,7 @@ export interface Customer {
   status?: string;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  dwollaCustomerId?: string | null;
   createdAt: string;
 }

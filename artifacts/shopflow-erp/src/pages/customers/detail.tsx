@@ -1,12 +1,18 @@
 import { useState } from "react";
 import { useRoute, Link } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetCustomer,
   useGetCustomerLedger,
+  useGetCustomerBalance,
+  useGetCustomerDwollaStatus,
+  useLinkCustomerDwolla,
   useListInvoices,
   useListOrders,
   getGetCustomerQueryKey,
   getGetCustomerLedgerQueryKey,
+  getGetCustomerBalanceQueryKey,
+  getGetCustomerDwollaStatusQueryKey,
   getListInvoicesQueryKey,
   getListOrdersQueryKey,
 } from "@workspace/api-client-react";
@@ -19,8 +25,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import {
   Phone, Mail, MapPin, CreditCard, ArrowLeft, Edit, Plus,
-  TrendingUp, TrendingDown, IndianRupee, Printer,
+  TrendingUp, TrendingDown, IndianRupee, Printer, Wallet, Link2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { PaymentFormDialog } from "../payments/payment-form-dialog";
 import { CustomerFormDialog } from "./customer-form-dialog";
 import { printStatement } from "@/lib/print-statement";
@@ -30,12 +37,29 @@ export function CustomerDetail() {
   const customerId = params?.id ? parseInt(params.id, 10) : 0;
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: customer, isLoading: isLoadingCustomer } = useGetCustomer(customerId, {
     query: { enabled: !!customerId, queryKey: getGetCustomerQueryKey(customerId) },
   });
   const { data: ledger, isLoading: isLoadingLedger } = useGetCustomerLedger(customerId, {
     query: { enabled: !!customerId, queryKey: getGetCustomerLedgerQueryKey(customerId) },
+  });
+  const { data: balanceData, isLoading: isLoadingBalance } = useGetCustomerBalance(customerId, {
+    query: { enabled: !!customerId, queryKey: getGetCustomerBalanceQueryKey(customerId) },
+  });
+  const { data: dwollaStatus } = useGetCustomerDwollaStatus({
+    query: { queryKey: getGetCustomerDwollaStatusQueryKey(), staleTime: 60_000 },
+  });
+  const linkDwolla = useLinkCustomerDwolla({
+    mutation: {
+      onSuccess: () => {
+        toast.success("Customer linked to Dwolla successfully");
+        queryClient.invalidateQueries({ queryKey: getGetCustomerQueryKey(customerId) });
+        queryClient.invalidateQueries({ queryKey: getGetCustomerBalanceQueryKey(customerId) });
+      },
+      onError: (e: any) => toast.error(e?.message ?? "Failed to link to Dwolla"),
+    },
   });
   const { data: invoicesData, isLoading: isLoadingInvoices } = useListInvoices(
     { customerId, limit: 50 },
@@ -150,6 +174,40 @@ export function CustomerDetail() {
             )}
             <div className="pt-2 border-t text-xs text-muted-foreground">
               Customer since {format(new Date(customer.createdAt), "MMM yyyy")}
+            </div>
+
+            {/* Dwolla Balance */}
+            <div className="pt-2 border-t">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
+                <Wallet className="h-3.5 w-3.5" /> Dwolla Balance
+              </div>
+              {isLoadingBalance ? (
+                <Skeleton className="h-6 w-24" />
+              ) : !customer.dwollaCustomerId ? (
+                <div className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground">Not linked to Dwolla</p>
+                  {!dwollaStatus?.configured ? (
+                    <p className="text-xs text-muted-foreground italic">Dwolla not configured — set DWOLLA_CLIENT_ID &amp; DWOLLA_CLIENT_SECRET to enable</p>
+                  ) : customer.email ? (
+                    <Button
+                      size="sm" variant="outline" className="w-full gap-1.5 text-xs h-7"
+                      disabled={linkDwolla.isPending}
+                      onClick={() => linkDwolla.mutate({ id: customerId })}
+                    >
+                      <Link2 className="h-3 w-3" />
+                      {linkDwolla.isPending ? "Linking…" : "Link to Dwolla"}
+                    </Button>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">Add an email to enable Dwolla linking</p>
+                  )}
+                </div>
+              ) : balanceData?.balance ? (
+                <div className="text-lg font-bold text-primary">
+                  {balanceData.balance.currency ?? "USD"} {parseFloat(balanceData.balance.value ?? "0").toLocaleString()}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No balance available</p>
+              )}
             </div>
           </CardContent>
         </Card>

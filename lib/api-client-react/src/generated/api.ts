@@ -28,10 +28,12 @@ import type {
   CategoryInput,
   CategoryUpdate,
   Customer,
+  CustomerBalance,
   CustomerInput,
   CustomerUpdate,
   CustomersPage,
   DashboardSummary,
+  DwollaStatus,
   Employee,
   EmployeeInput,
   EmployeeUpdate,
@@ -1961,6 +1963,230 @@ export function useGetCustomerLedger<TData = Awaited<ReturnType<typeof getCustom
 
 
 
+export const getGetCustomerDwollaStatusUrl = () => {
+
+
+
+
+  return `/api/customers/dwolla-status`
+}
+
+/**
+ * @summary Returns whether Dwolla is configured in this environment
+ */
+export const getCustomerDwollaStatus = async ( options?: RequestInit): Promise<DwollaStatus> => {
+
+  return customFetch<DwollaStatus>(getGetCustomerDwollaStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCustomerDwollaStatusQueryKey = () => {
+    return [
+    `/api/customers/dwolla-status`
+    ] as const;
+    }
+
+
+export const getGetCustomerDwollaStatusQueryOptions = <TData = Awaited<ReturnType<typeof getCustomerDwollaStatus>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomerDwollaStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCustomerDwollaStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCustomerDwollaStatus>>> = ({ signal }) => getCustomerDwollaStatus({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCustomerDwollaStatus>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCustomerDwollaStatusQueryResult = NonNullable<Awaited<ReturnType<typeof getCustomerDwollaStatus>>>
+export type GetCustomerDwollaStatusQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Returns whether Dwolla is configured in this environment
+ */
+
+export function useGetCustomerDwollaStatus<TData = Awaited<ReturnType<typeof getCustomerDwollaStatus>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomerDwollaStatus>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCustomerDwollaStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetCustomerBalanceUrl = (id: number,) => {
+
+
+
+
+  return `/api/customers/${id}/balance`
+}
+
+/**
+ * @summary Get a customer's Dwolla wallet balance
+ */
+export const getCustomerBalance = async (id: number, options?: RequestInit): Promise<CustomerBalance> => {
+
+  return customFetch<CustomerBalance>(getGetCustomerBalanceUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCustomerBalanceQueryKey = (id: number,) => {
+    return [
+    `/api/customers/${id}/balance`
+    ] as const;
+    }
+
+
+export const getGetCustomerBalanceQueryOptions = <TData = Awaited<ReturnType<typeof getCustomerBalance>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomerBalance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCustomerBalanceQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCustomerBalance>>> = ({ signal }) => getCustomerBalance(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCustomerBalance>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCustomerBalanceQueryResult = NonNullable<Awaited<ReturnType<typeof getCustomerBalance>>>
+export type GetCustomerBalanceQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get a customer's Dwolla wallet balance
+ */
+
+export function useGetCustomerBalance<TData = Awaited<ReturnType<typeof getCustomerBalance>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCustomerBalance>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCustomerBalanceQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getLinkCustomerDwollaUrl = (id: number,) => {
+
+
+
+
+  return `/api/customers/${id}/link-dwolla`
+}
+
+/**
+ * @summary Link a customer to a Dwolla wallet
+ */
+export const linkCustomerDwolla = async (id: number, options?: RequestInit): Promise<Customer> => {
+
+  return customFetch<Customer>(getLinkCustomerDwollaUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getLinkCustomerDwollaMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof linkCustomerDwolla>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof linkCustomerDwolla>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['linkCustomerDwolla'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof linkCustomerDwolla>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  linkCustomerDwolla(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LinkCustomerDwollaMutationResult = NonNullable<Awaited<ReturnType<typeof linkCustomerDwolla>>>
+
+    export type LinkCustomerDwollaMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Link a customer to a Dwolla wallet
+ */
+export const useLinkCustomerDwolla = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof linkCustomerDwolla>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof linkCustomerDwolla>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getLinkCustomerDwollaMutationOptions(options));
+    }
+
 export const getListSuppliersUrl = (params?: ListSuppliersParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -2314,6 +2540,83 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getDeleteSupplierMutationOptions(options));
     }
+
+export const getGetSupplierLedgerUrl = (id: number,) => {
+
+
+
+
+  return `/api/suppliers/${id}/ledger`
+}
+
+/**
+ * @summary Get supplier payment ledger
+ */
+export const getSupplierLedger = async (id: number, options?: RequestInit): Promise<LedgerEntry[]> => {
+
+  return customFetch<LedgerEntry[]>(getGetSupplierLedgerUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSupplierLedgerQueryKey = (id: number,) => {
+    return [
+    `/api/suppliers/${id}/ledger`
+    ] as const;
+    }
+
+
+export const getGetSupplierLedgerQueryOptions = <TData = Awaited<ReturnType<typeof getSupplierLedger>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierLedger>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSupplierLedgerQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSupplierLedger>>> = ({ signal }) => getSupplierLedger(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSupplierLedger>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSupplierLedgerQueryResult = NonNullable<Awaited<ReturnType<typeof getSupplierLedger>>>
+export type GetSupplierLedgerQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get supplier payment ledger
+ */
+
+export function useGetSupplierLedger<TData = Awaited<ReturnType<typeof getSupplierLedger>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSupplierLedger>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSupplierLedgerQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getListOrdersUrl = (params?: ListOrdersParams,) => {
   const normalizedParams = new URLSearchParams();

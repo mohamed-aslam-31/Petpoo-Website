@@ -19,6 +19,7 @@ export const customersTable = pgTable("customers", {
   type: text("type").notNull().default("retail"),
   status: text("status").notNull().default("active"),
   notes: text("notes"),
+  dwollaCustomerId: text("dwolla_customer_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

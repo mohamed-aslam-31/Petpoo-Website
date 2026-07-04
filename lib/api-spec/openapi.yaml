@@ -528,6 +528,57 @@ paths:
                 items:
                   $ref: "#/components/schemas/LedgerEntry"
 
+  /customers/dwolla-status:
+    get:
+      operationId: getCustomerDwollaStatus
+      tags: [customers]
+      summary: Returns whether Dwolla is configured in this environment
+      responses:
+        "200":
+          description: Dwolla config status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DwollaStatus"
+
+  /customers/{id}/balance:
+    get:
+      operationId: getCustomerBalance
+      tags: [customers]
+      summary: Get a customer's Dwolla wallet balance
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Customer Dwolla balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerBalance"
+
+  /customers/{id}/link-dwolla:
+    post:
+      operationId: linkCustomerDwolla
+      tags: [customers]
+      summary: Link a customer to a Dwolla wallet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated customer with Dwolla link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
   # Suppliers
   /suppliers:
     get:
@@ -623,6 +674,27 @@ paths:
       responses:
         "204":
           description: Deleted
+
+  /suppliers/{id}/ledger:
+    get:
+      operationId: getSupplierLedger
+      tags: [suppliers]
+      summary: Get supplier payment ledger
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Supplier ledger entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LedgerEntry"
 
   # Orders
   /orders:
@@ -1499,6 +1571,7 @@ components:
         type:           { type: string }
         status:         { type: string }
         notes:          { type: ["string", "null"] }
+        dwollaCustomerId: { type: ["string", "null"] }
         createdAt:      { type: string }
 
     CustomersPage:
@@ -1543,6 +1616,24 @@ components:
         type:           { type: string }
         status:         { type: string }
         notes:          { type: string }
+
+    DwollaStatus:
+      type: object
+      required: [configured]
+      properties:
+        configured: { type: boolean }
+
+    CustomerBalance:
+      type: object
+      required: [linked]
+      properties:
+        linked:   { type: boolean }
+        balance:
+          nullable: true
+          type: object
+          properties:
+            value:    { type: string }
+            currency: { type: string }
 
     LedgerEntry:
       type: object

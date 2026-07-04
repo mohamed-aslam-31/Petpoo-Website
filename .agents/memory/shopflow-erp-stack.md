@@ -1,30 +1,37 @@
 ---
 name: ShopFlow ERP stack
-description: Key config for the ShopFlow ERP project — ports, workflows, patterns, and gotchas.
+description: Key stack decisions, port, workflow, and API patterns for this project.
 ---
 
-## Ports & Workflows
-- Frontend: port 5000, workflow `artifacts/shopflow-erp: web`, cmd: `cd artifacts/shopflow-erp && PORT=5000 BASE_PATH=/ pnpm exec vite --config vite.config.ts --host 0.0.0.0`
-- API server: port 8080, workflow `artifacts/api-server: API Server`, cmd: `cd artifacts/api-server && node ./build.mjs && PORT=8080 NODE_ENV=development node --enable-source-maps ./dist/index.mjs`
-- DATABASE_URL is configured in environment secrets (do not store the value here)
-- The bare `pnpm run dev` script for api-server (which chains `pnpm run build && pnpm run start` as nested npm-script processes) reliably fails Replit's workflow port-detection even though the server does bind and respond — nested pnpm/npm script process trees seem to break the port checker. Run the build+node command directly in the workflow instead (see cmd above). Same applies to frontend: `vite` isn't on bare PATH, must use `pnpm exec vite` with PORT/BASE_PATH exported inline, not via `pnpm --filter run dev`.
+## Runtime / ports
+- API server: port 8080, workflow `artifacts/api-server: API Server`
+- Frontend: port 5000, workflow `artifacts/shopflow-erp: web`
+- API command: `node ./build.mjs && PORT=8080 node --enable-source-maps ./dist/index.mjs`
 
-## API Pattern
-- All generated hooks in `lib/api-client-react/src/generated/api.ts`
-- All generated Zod types in `lib/api-zod/src/generated/types/`
-- Query key functions: `getList{Entity}QueryKey(params?)` — pass params to the queryKey for cache scoping by page/search
+## Codegen
+- After every OpenAPI spec change run: `pnpm --filter @workspace/api-spec run codegen`
+- This regenerates `lib/api-client-react/src/generated/api.ts` and the zod types
+- The codegen causes a momentary Vite pre-transform error on the generated files (race condition) — Vite recovers automatically; not a real error
 
-## CRUD Pattern
-- Form dialogs: `useForm` + `zodResolver` + `useCreateX`/`useUpdateX` hooks, invalidate queryKey on success
-- Delete: `useDeleteX` + `AlertDialog` confirmation, invalidate queryKey on success
-- Pagination: `page` state + `PAGE_SIZE=20`, pass `{ page, limit }` to list hooks
+## DB push
+- Schema changes: edit `lib/db/src/schema/*.ts`, then `pnpm --filter @workspace/db run push`
+- No migration files needed for dev; push applies directly
 
-## Auth
-- Demo mode: localStorage flag `shopflow_auth`, any credentials work
+## API route ordering in Express
+- Static segments MUST be defined before dynamic `:id` routes in the same router
+- e.g. `GET /customers/dwolla-status` must come before `GET /customers/:id`
 
-## Gotchas
-- `numeric`/`decimal` DB columns come back as strings — always `parseFloat()` before JSON
-- Order/invoice items in JSONB — use `items: OrderItemInput[]` shape
-- Auto-generated codes (CUST0001, ORD000001) inserted as "TEMP" then updated after getting the auto-increment id
-- Duplicate workflow instances (e.g. both `API Server` and `artifacts/api-server: API Server`) can leave a stale `node dist/index.mjs` process holding port 8080 after edits, causing EADDRINUSE on restart with the OLD compiled code still serving requests (stale schema/columns). Fix: `pgrep -af "dist/index.mjs"` and `kill -9` the stale pid(s) before restarting the workflow.
-- Orders module: cancel/return endpoints are `PATCH /api/orders/:id/cancel` and `PATCH /api/orders/:id/return` (not POST).
+## Dwolla integration (Task #6)
+- `artifacts/api-server/src/dwolla.ts` — client module, call `isDwollaConfigured()` before any API call
+- Routes: `GET /customers/dwolla-status`, `POST /customers/:id/link-dwolla`, `GET /customers/:id/balance`
+- All Dwolla routes return 503 when `DWOLLA_CLIENT_ID` or `DWOLLA_CLIENT_SECRET` are missing
+- Frontend checks `useGetCustomerDwollaStatus()` to disable the Link button before the user clicks
+
+## Ledger patterns
+- Customer ledger: built from invoices + payment entries; payment date uses `i.updatedAt` (not `createdAt`)
+- Supplier ledger: built from `paymentsTable` filtered by `entityType = "supplier"` and `entityId = supplierId`
+- Running balance: computed server-side, returned as `balance` field on each `LedgerEntry`
+
+## Print statements
+- `printStatement(entity, entries)` accepts `StatementEntry[]` directly — use this when you have ledger data
+- `printSupplierStatement` was removed in favour of `printStatement` with ledger entries

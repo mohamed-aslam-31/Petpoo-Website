@@ -9,6 +9,7 @@ import {
   DeleteCustomerParams,
   GetCustomerLedgerParams,
 } from "@workspace/api-zod";
+import { isDwollaConfigured, createDwollaCustomer, getCustomerDwollaBalance } from "../dwolla";
 
 const router: IRouter = Router();
 
@@ -30,6 +31,7 @@ function parseCustomer(c: any) {
     type: c.type,
     status: c.status,
     notes: c.notes ?? null,
+    dwollaCustomerId: c.dwollaCustomerId ?? null,
     createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : c.createdAt,
   };
 }
@@ -119,6 +121,10 @@ router.post("/customers", async (req, res): Promise<void> => {
   res.status(201).json(parseCustomer(customer));
 });
 
+router.get("/customers/dwolla-status", async (_req, res): Promise<void> => {
+  res.json({ configured: isDwollaConfigured() });
+});
+
 router.get("/customers/:id", async (req, res): Promise<void> => {
   const params = GetCustomerParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
@@ -164,7 +170,7 @@ router.get("/customers/:id/ledger", async (req, res): Promise<void> => {
     const invoiceTotal = parseFloat(String(i.total ?? "0"));
     const paid = parseFloat(String(i.paidAmount ?? "0"));
     entries.push({ id: `invoice-${i.id}`, date: i.createdAt.toISOString(), description: `Invoice #${i.invoiceNumber}`, debit: invoiceTotal, credit: 0, balance: 0, type: "invoice", referenceId: i.id });
-    if (paid > 0) entries.push({ id: `invoice-pay-${i.id}`, date: i.createdAt.toISOString(), description: `Payment at invoice #${i.invoiceNumber} (${i.paymentMethod ?? "cash"})`, debit: 0, credit: paid, balance: 0, type: "payment", referenceId: i.id });
+    if (paid > 0) entries.push({ id: `invoice-pay-${i.id}`, date: i.updatedAt.toISOString(), description: `Payment at invoice #${i.invoiceNumber} (${i.paymentMethod ?? "cash"})`, debit: 0, credit: paid, balance: 0, type: "payment", referenceId: i.id });
   });
 
   payments.forEach(p => {
@@ -180,6 +186,60 @@ router.get("/customers/:id/ledger", async (req, res): Promise<void> => {
   });
 
   res.json(entries);
+});
+
+router.post("/customers/:id/link-dwolla", async (req, res): Promise<void> => {
+  const params = GetCustomerParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  if (!isDwollaConfigured()) {
+    res.status(503).json({ error: "Dwolla is not configured. Set DWOLLA_CLIENT_ID, DWOLLA_CLIENT_SECRET, and DWOLLA_ENV in your environment secrets." });
+    return;
+  }
+
+  const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, params.data.id));
+  if (!customer) { res.status(404).json({ error: "Customer not found" }); return; }
+
+  if (customer.dwollaCustomerId) {
+    res.status(409).json({ error: "Customer is already linked to Dwolla", dwollaCustomerId: customer.dwollaCustomerId });
+    return;
+  }
+
+  if (!customer.email) {
+    res.status(422).json({ error: "Customer must have an email address to link to Dwolla" });
+    return;
+  }
+
+  const dwollaCustomerId = await createDwollaCustomer({ name: customer.name, email: customer.email });
+  const [updated] = await db
+    .update(customersTable)
+    .set({ dwollaCustomerId } as any)
+    .where(eq(customersTable.id, params.data.id))
+    .returning();
+
+  const outstanding = await computeOutstanding(params.data.id);
+  res.json({ ...parseCustomer(updated), outstanding });
+});
+
+router.get("/customers/:id/balance", async (req, res): Promise<void> => {
+  const params = GetCustomerParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  if (!isDwollaConfigured()) {
+    res.status(503).json({ error: "Dwolla is not configured. Set DWOLLA_CLIENT_ID, DWOLLA_CLIENT_SECRET, and DWOLLA_ENV in your environment secrets." });
+    return;
+  }
+
+  const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, params.data.id));
+  if (!customer) { res.status(404).json({ error: "Customer not found" }); return; }
+
+  if (!customer.dwollaCustomerId) {
+    res.json({ linked: false, balance: null });
+    return;
+  }
+
+  const balance = await getCustomerDwollaBalance(customer.dwollaCustomerId);
+  res.json({ linked: true, balance });
 });
 
 export default router;

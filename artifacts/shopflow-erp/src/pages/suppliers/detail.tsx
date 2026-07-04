@@ -2,9 +2,9 @@ import { useState } from "react";
 import { useRoute, Link } from "wouter";
 import {
   useGetSupplier,
-  useListPayments,
+  useGetSupplierLedger,
   getGetSupplierQueryKey,
-  getListPaymentsQueryKey,
+  getGetSupplierLedgerQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,12 +13,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
 import {
-  Phone, Mail, MapPin, CreditCard, ArrowLeft, Edit, Plus,
-  ArrowUpRight, ArrowDownRight, RefreshCcw, Printer,
+  Phone, Mail, MapPin, CreditCard, ArrowLeft, Edit, Plus, Printer,
 } from "lucide-react";
 import { PaymentFormDialog } from "../payments/payment-form-dialog";
 import { SupplierFormDialog } from "./supplier-form-dialog";
-import { printSupplierStatement } from "@/lib/print-statement";
+import { printStatement } from "@/lib/print-statement";
 
 export function SupplierDetail() {
   const [, params] = useRoute("/suppliers/:id");
@@ -29,10 +28,9 @@ export function SupplierDetail() {
   const { data: supplier, isLoading: isLoadingSupplier } = useGetSupplier(supplierId, {
     query: { enabled: !!supplierId, queryKey: getGetSupplierQueryKey(supplierId) },
   });
-  const { data: paymentsData, isLoading: isLoadingPayments } = useListPayments(
-    { search: supplier?.name, limit: 100 },
-    { query: { enabled: !!supplier?.name, queryKey: getListPaymentsQueryKey({ search: supplier?.name, limit: 100 }) } },
-  );
+  const { data: ledger, isLoading: isLoadingLedger } = useGetSupplierLedger(supplierId, {
+    query: { enabled: !!supplierId, queryKey: getGetSupplierLedgerQueryKey(supplierId) },
+  });
 
   if (isLoadingSupplier) {
     return <div className="space-y-4"><Skeleton className="h-32 w-full rounded-xl" /><Skeleton className="h-64 w-full rounded-xl" /></div>;
@@ -46,31 +44,9 @@ export function SupplierDetail() {
     );
   }
 
-  const payments = paymentsData?.data?.filter(
-    (p) => p.entityName?.toLowerCase().includes(supplier.name.toLowerCase())
-  ) ?? [];
-  const totalPaid = payments.filter((p) => p.type === "paid").reduce((s, p) => s + Number(p.amount || 0), 0);
-  const totalReceived = payments.filter((p) => p.type === "received").reduce((s, p) => s + Number(p.amount || 0), 0);
-
-  const getTypeInfo = (type: string) => {
-    switch (type.toLowerCase()) {
-      case "received": return { icon: ArrowDownRight, color: "text-green-600", label: "Received" };
-      case "paid": return { icon: ArrowUpRight, color: "text-amber-600", label: "Paid" };
-      case "refund": return { icon: RefreshCcw, color: "text-purple-600", label: "Refund" };
-      default: return { icon: ArrowDownRight, color: "text-slate-600", label: type };
-    }
-  };
-
-  const getMethodColor = (method: string) => {
-    switch (method.toLowerCase()) {
-      case "cash": return "bg-emerald-100 text-emerald-700";
-      case "upi": return "bg-blue-100 text-blue-700";
-      case "card": return "bg-violet-100 text-violet-700";
-      case "bank": return "bg-indigo-100 text-indigo-700";
-      case "cheque": return "bg-amber-100 text-amber-700";
-      default: return "bg-slate-100 text-slate-700";
-    }
-  };
+  const totalPaid = (ledger ?? []).reduce((s, e) => s + (Number(e.credit) || 0), 0);
+  const totalReceived = (ledger ?? []).reduce((s, e) => s + (Number(e.debit) || 0), 0);
+  const currentBalance = ledger && ledger.length > 0 ? Number(ledger[ledger.length - 1].balance) : 0;
 
   return (
     <div className="space-y-6">
@@ -91,9 +67,9 @@ export function SupplierDetail() {
         <div className="flex gap-2 shrink-0">
           <Button
             variant="outline" size="sm" className="gap-2"
-            onClick={() => printSupplierStatement(
-              { name: supplier.name, code: supplier.supplierCode, phone: supplier.phone, email: supplier.email, address: supplier.address, gstNumber: supplier.gstNumber, outstanding: supplier.outstanding, type: "supplier" },
-              payments
+            onClick={() => printStatement(
+              { name: supplier.name, code: supplier.supplierCode, phone: supplier.phone, email: supplier.email ?? undefined, address: supplier.address ?? undefined, gstNumber: supplier.gstNumber ?? undefined, outstanding: Number(supplier.outstanding ?? 0), type: "supplier" },
+              (ledger ?? []).map((e) => ({ date: e.date, description: e.description, type: e.type, debit: Number(e.debit), credit: Number(e.credit), balance: Number(e.balance) }))
             )}
           ><Printer className="h-4 w-4" /> Print Statement</Button>
           <Button variant="outline" size="sm" className="gap-2" onClick={() => setEditOpen(true)}><Edit className="h-4 w-4" /> Edit</Button>
@@ -104,10 +80,10 @@ export function SupplierDetail() {
       {/* Summary Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Outstanding", value: `₹${Number(supplier.outstanding || 0).toLocaleString()}`, color: supplier.outstanding && supplier.outstanding > 0 ? "text-red-600" : "text-green-600", bg: supplier.outstanding && supplier.outstanding > 0 ? "bg-red-50" : "bg-green-50" },
+          { label: "Net Balance", value: `₹${currentBalance.toLocaleString()}`, color: currentBalance > 0 ? "text-red-600" : "text-green-600", bg: currentBalance > 0 ? "bg-red-50" : "bg-green-50" },
           { label: "Total Paid Out", value: `₹${totalPaid.toLocaleString()}`, color: "text-amber-600", bg: "bg-amber-50" },
           { label: "Total Received", value: `₹${totalReceived.toLocaleString()}`, color: "text-green-600", bg: "bg-green-50" },
-          { label: "Transactions", value: payments.length, color: "text-violet-600", bg: "bg-violet-50" },
+          { label: "Transactions", value: (ledger ?? []).length, color: "text-violet-600", bg: "bg-violet-50" },
         ].map((s) => (
           <Card key={s.label} className="border-0 shadow-sm">
             <CardContent className="p-4">
@@ -157,12 +133,12 @@ export function SupplierDetail() {
           </CardContent>
         </Card>
 
-        {/* Payments Table */}
+        {/* Ledger Table */}
         <Card className="lg:col-span-3">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
-              <CardTitle className="text-base">Payment History</CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">All transactions with this supplier</p>
+              <CardTitle className="text-base">Ledger</CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">Running balance of all transactions with this supplier</p>
             </div>
             <Button size="sm" variant="outline" className="gap-1 shrink-0" onClick={() => setPaymentOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> Record Payment
@@ -173,48 +149,41 @@ export function SupplierDetail() {
               <TableHeader className="bg-muted/50">
                 <TableRow>
                   <TableHead>Date</TableHead>
-                  <TableHead>Reference</TableHead>
-                  <TableHead>Method</TableHead>
+                  <TableHead>Description</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead className="text-right">Amount (₹)</TableHead>
+                  <TableHead className="text-right">Debit (₹)</TableHead>
+                  <TableHead className="text-right">Credit (₹)</TableHead>
+                  <TableHead className="text-right">Balance (₹)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoadingPayments ? Array(4).fill(0).map((_, i) => (
-                  <TableRow key={i}><TableCell><Skeleton className="h-4 w-24" /></TableCell><TableCell><Skeleton className="h-4 w-32" /></TableCell><TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell><TableCell><Skeleton className="h-5 w-20" /></TableCell><TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell></TableRow>
-                )) : payments.length === 0 ? (
+                {isLoadingLedger ? Array(4).fill(0).map((_, i) => (
+                  <TableRow key={i}><TableCell><Skeleton className="h-4 w-24" /></TableCell><TableCell><Skeleton className="h-4 w-48" /></TableCell><TableCell><Skeleton className="h-5 w-16 rounded-full" /></TableCell><TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell><TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell><TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell></TableRow>
+                )) : !ledger || ledger.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
-                      No payments recorded yet. Click "Record Payment" to add one.
+                    <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                      No transactions yet. Click "Record Payment" to add one.
                     </TableCell>
                   </TableRow>
-                ) : payments.map((payment) => {
-                  const typeInfo = getTypeInfo(payment.type);
-                  const TypeIcon = typeInfo.icon;
-                  return (
-                    <TableRow key={payment.id} className="hover:bg-muted/30">
-                      <TableCell className="text-muted-foreground whitespace-nowrap text-sm">{format(new Date(payment.createdAt), "MMM d, yyyy")}</TableCell>
-                      <TableCell className="font-mono text-sm text-muted-foreground">{payment.referenceNumber}</TableCell>
-                      <TableCell><Badge variant="secondary" className={`uppercase text-[10px] tracking-wider ${getMethodColor(payment.method)}`}>{payment.method}</Badge></TableCell>
-                      <TableCell>
-                        <div className={`flex items-center gap-1.5 font-medium text-sm ${typeInfo.color}`}>
-                          <TypeIcon className="h-3.5 w-3.5" /> {typeInfo.label}
-                        </div>
-                      </TableCell>
-                      <TableCell className={`text-right font-bold ${payment.type === "received" ? "text-green-600" : "text-amber-600"}`}>
-                        {payment.type === "received" ? "+" : "-"}₹{Number(payment.amount).toLocaleString()}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                ) : ledger.map((entry) => (
+                  <TableRow key={entry.id} className="hover:bg-muted/30">
+                    <TableCell className="text-muted-foreground whitespace-nowrap text-sm">{format(new Date(entry.date), "MMM d, yyyy")}</TableCell>
+                    <TableCell className="font-medium text-sm">{entry.description}</TableCell>
+                    <TableCell><Badge variant="outline" className="text-[10px] uppercase tracking-wider">{entry.type}</Badge></TableCell>
+                    <TableCell className="text-right font-medium text-red-600">{Number(entry.debit) > 0 ? `₹${Number(entry.debit).toLocaleString()}` : "—"}</TableCell>
+                    <TableCell className="text-right font-medium text-green-700">{Number(entry.credit) > 0 ? `₹${Number(entry.credit).toLocaleString()}` : "—"}</TableCell>
+                    <TableCell className={`text-right font-bold ${Number(entry.balance) > 0 ? "text-amber-600" : "text-green-600"}`}>₹{Number(entry.balance).toLocaleString()}</TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
-            {payments.length > 0 && (
+            {ledger && ledger.length > 0 && (
               <div className="border-t p-4 flex items-center justify-between bg-muted/20">
-                <div className="text-sm text-muted-foreground">{payments.length} transaction{payments.length !== 1 ? "s" : ""}</div>
+                <div className="text-sm text-muted-foreground">{ledger.length} transaction{ledger.length !== 1 ? "s" : ""}</div>
                 <div className="flex items-center gap-6 text-sm font-medium">
-                  <span className="text-green-600">Received: ₹{totalReceived.toLocaleString()}</span>
-                  <span className="text-amber-600">Paid: ₹{totalPaid.toLocaleString()}</span>
+                  <span className="text-green-700">Paid Out: ₹{totalPaid.toLocaleString()}</span>
+                  <span className="text-red-600">Received: ₹{totalReceived.toLocaleString()}</span>
+                  <span className={currentBalance > 0 ? "text-amber-600" : "text-green-600"}>Net: ₹{currentBalance.toLocaleString()}</span>
                 </div>
               </div>
             )}

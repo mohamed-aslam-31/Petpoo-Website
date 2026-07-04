@@ -208,6 +208,8 @@ export interface Customer {
   status?: string;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  dwollaCustomerId?: string | null;
   createdAt: string;
 }
 
@@ -248,6 +250,20 @@ export interface CustomerUpdate {
   type?: string;
   status?: string;
   notes?: string;
+}
+
+export interface DwollaStatus {
+  configured: boolean;
+}
+
+export type CustomerBalanceBalance = {
+  value?: string;
+  currency?: string;
+} | null;
+
+export interface CustomerBalance {
+  linked: boolean;
+  balance?: CustomerBalanceBalance;
 }
 
 export interface LedgerEntry {

@@ -453,6 +453,7 @@ export const ListCustomersResponse = zod.object({
   "type": zod.string().optional(),
   "status": zod.string().optional(),
   "notes": zod.string().nullish(),
+  "dwollaCustomerId": zod.string().nullish(),
   "createdAt": zod.string()
 })),
   "total": zod.number(),
@@ -499,6 +500,7 @@ export const CreateCustomerResponse = zod.object({
   "type": zod.string().optional(),
   "status": zod.string().optional(),
   "notes": zod.string().nullish(),
+  "dwollaCustomerId": zod.string().nullish(),
   "createdAt": zod.string()
 })
 
@@ -524,6 +526,7 @@ export const GetCustomerResponse = zod.object({
   "type": zod.string().optional(),
   "status": zod.string().optional(),
   "notes": zod.string().nullish(),
+  "dwollaCustomerId": zod.string().nullish(),
   "createdAt": zod.string()
 })
 
@@ -565,6 +568,7 @@ export const UpdateCustomerResponse = zod.object({
   "type": zod.string().optional(),
   "status": zod.string().optional(),
   "notes": zod.string().nullish(),
+  "dwollaCustomerId": zod.string().nullish(),
   "createdAt": zod.string()
 })
 
@@ -591,6 +595,59 @@ export const GetCustomerLedgerResponseItem = zod.object({
   "referenceId": zod.number().nullish()
 })
 export const GetCustomerLedgerResponse = zod.array(GetCustomerLedgerResponseItem)
+
+
+/**
+ * @summary Returns whether Dwolla is configured in this environment
+ */
+export const GetCustomerDwollaStatusResponse = zod.object({
+  "configured": zod.boolean()
+})
+
+
+/**
+ * @summary Get a customer's Dwolla wallet balance
+ */
+export const GetCustomerBalanceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetCustomerBalanceResponse = zod.object({
+  "linked": zod.boolean(),
+  "balance": zod.object({
+  "value": zod.string().optional(),
+  "currency": zod.string().optional()
+}).nullish()
+})
+
+
+/**
+ * @summary Link a customer to a Dwolla wallet
+ */
+export const LinkCustomerDwollaParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const LinkCustomerDwollaResponse = zod.object({
+  "id": zod.number(),
+  "customerCode": zod.string(),
+  "name": zod.string(),
+  "phone": zod.string(),
+  "email": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "city": zod.string().nullish(),
+  "state": zod.string().nullish(),
+  "shopName": zod.string().nullish(),
+  "landlineNumber": zod.string().nullish(),
+  "gstNumber": zod.string().nullish(),
+  "creditLimit": zod.number().optional(),
+  "outstanding": zod.number().optional(),
+  "type": zod.string().optional(),
+  "status": zod.string().optional(),
+  "notes": zod.string().nullish(),
+  "dwollaCustomerId": zod.string().nullish(),
+  "createdAt": zod.string()
+})
 
 
 /**
@@ -705,6 +762,26 @@ export const DeleteSupplierParams = zod.object({
 })
 
 export const DeleteSupplierResponse = zod.void()
+
+
+/**
+ * @summary Get supplier payment ledger
+ */
+export const GetSupplierLedgerParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetSupplierLedgerResponseItem = zod.object({
+  "id": zod.number(),
+  "date": zod.string(),
+  "description": zod.string(),
+  "debit": zod.number(),
+  "credit": zod.number(),
+  "balance": zod.number(),
+  "type": zod.string(),
+  "referenceId": zod.number().nullish()
+})
+export const GetSupplierLedgerResponse = zod.array(GetSupplierLedgerResponseItem)
 
 
 /**
