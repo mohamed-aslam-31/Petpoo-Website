@@ -128,13 +128,15 @@ async function adjustStockForOrder(
   type: "increase" | "decrease",
   quantity: number,
   reason: string,
+  tx?: any,
 ) {
-  const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
+  const dbOrTx = tx ?? db;
+  const [product] = await dbOrTx.select().from(productsTable).where(eq(productsTable.id, productId));
   if (!product || quantity <= 0) return;
   const beforeStock = product.currentStock;
   const afterStock = type === "increase" ? beforeStock + quantity : Math.max(0, beforeStock - quantity);
-  await db.update(productsTable).set({ currentStock: afterStock }).where(eq(productsTable.id, productId));
-  await db.insert(stockMovementsTable).values({
+  await dbOrTx.update(productsTable).set({ currentStock: afterStock }).where(eq(productsTable.id, productId));
+  await dbOrTx.insert(stockMovementsTable).values({
     productId, type, quantity, beforeStock, afterStock, reason, notes: null,
   } as any);
 }
@@ -264,6 +266,8 @@ async function doConvertToOrder(quotationId: number): Promise<{ orderId: number;
  * Cascade-delete the order (and its invoice, if any) that was auto-created from a
  * quotation, restoring stock along the way. Used when a quotation's status changes
  * away from "accepted", or when the quotation itself is deleted.
+ * Also clears convertedOrderId / convertedOrderNumber on the quotation row so there
+ * are no stale references after the order is gone.
  */
 async function cascadeDeleteConvertedOrder(quotation: any, reason: string) {
   const orderId = quotation.convertedOrderId;
@@ -271,14 +275,21 @@ async function cascadeDeleteConvertedOrder(quotation: any, reason: string) {
 
   await db.transaction(async (tx) => {
     const [order] = await tx.select().from(ordersTable).where(eq(ordersTable.id, orderId));
-    if (!order) return;
+
+    if (!order) {
+      // Order already gone — just wipe the stale link on the quotation.
+      await tx.update(quotationsTable)
+        .set({ convertedOrderId: null, convertedOrderNumber: null } as any)
+        .where(eq(quotationsTable.id, quotation.id));
+      return;
+    }
 
     const [invoice] = await tx.select().from(invoicesTable).where(eq(invoicesTable.orderId, orderId));
     if (invoice) {
       const invoiceItems = Array.isArray(invoice.items) ? invoice.items : (typeof invoice.items === "string" ? JSON.parse(invoice.items as string) : []);
       for (const item of invoiceItems) {
         if (item.productId && item.quantity > 0) {
-          await adjustStockForOrder(item.productId, "increase", item.quantity, `Invoice ${invoice.invoiceNumber} - cascade delete (${reason})`);
+          await adjustStockForOrder(item.productId, "increase", item.quantity, `Invoice ${invoice.invoiceNumber} - cascade delete (${reason})`, tx);
         }
       }
       await tx.delete(invoicesTable).where(eq(invoicesTable.id, invoice.id));
@@ -287,13 +298,18 @@ async function cascadeDeleteConvertedOrder(quotation: any, reason: string) {
       const orderItems = Array.isArray(order.items) ? order.items : (typeof order.items === "string" ? JSON.parse(order.items as string) : []);
       for (const item of orderItems) {
         if (item.productId && item.quantity > 0) {
-          await adjustStockForOrder(item.productId, "increase", item.quantity, `Order ${order.orderNumber} - cascade delete (${reason})`);
+          await adjustStockForOrder(item.productId, "increase", item.quantity, `Order ${order.orderNumber} - cascade delete (${reason})`, tx);
         }
       }
     }
 
     await tx.delete(ordersTable).where(eq(ordersTable.id, orderId));
     await logAudit({ entityType: "order", entityId: order.id, entityNumber: order.orderNumber, action: "cascaded_delete", oldStatus: order.status, notes: reason }, tx);
+
+    // Clear the conversion link so the quotation has no stale order reference.
+    await tx.update(quotationsTable)
+      .set({ convertedOrderId: null, convertedOrderNumber: null } as any)
+      .where(eq(quotationsTable.id, quotation.id));
   });
 }
 
@@ -412,6 +428,14 @@ router.post("/quotations/bulk-delete", async (req, res): Promise<void> => {
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "ids must be a non-empty array of integers" }); return; }
 
+  // Fetch all quotations first so we can cascade-delete any linked orders/invoices.
+  const quotations = await db.select().from(quotationsTable).where(inArray(quotationsTable.id, parsed.data.ids));
+  for (const q of quotations) {
+    if ((q as any).convertedOrderId) {
+      await cascadeDeleteConvertedOrder(q, `Quotation ${q.quotationNumber} was bulk-deleted`);
+    }
+  }
+
   const deleted = await db.delete(quotationsTable)
     .where(inArray(quotationsTable.id, parsed.data.ids))
     .returning({ id: quotationsTable.id });
@@ -430,15 +454,16 @@ router.patch("/quotations/bulk-status", async (req, res): Promise<void> => {
 
   const { ids, status } = parsed.data;
 
-  const updated = await db.update(quotationsTable)
-    .set({ status })
-    .where(inArray(quotationsTable.id, ids))
-    .returning({ id: quotationsTable.id });
-
   let ordersCreated = 0;
   const conversionErrors: string[] = [];
 
   if (status === "accepted") {
+    // Update status first, then trigger order creation (doConvertToOrder is idempotent).
+    const updated = await db.update(quotationsTable)
+      .set({ status })
+      .where(inArray(quotationsTable.id, ids))
+      .returning({ id: quotationsTable.id });
+
     for (const row of updated) {
       try {
         await doConvertToOrder(row.id);
@@ -447,9 +472,40 @@ router.patch("/quotations/bulk-status", async (req, res): Promise<void> => {
         conversionErrors.push(`ID ${row.id}: ${err.message}`);
       }
     }
-  }
 
-  res.json({ updated: updated.length, ordersCreated, conversionErrors });
+    res.json({ updated: updated.length, ordersCreated, conversionErrors });
+  } else {
+    // Cascade-delete any linked orders BEFORE changing status so that a cascade
+    // failure leaves the quotation in a consistent "accepted" state (no status drift).
+    const toDeconvert = await db.select()
+      .from(quotationsTable)
+      .where(and(inArray(quotationsTable.id, ids), eq(quotationsTable.status, "accepted")));
+
+    // Track IDs whose cascade failed so we can exclude them from the status update.
+    // A failed cascade means the linked order/invoice is still alive — updating the
+    // quotation status anyway would create an orphan + status drift.
+    const failedCascadeIds = new Set<number>();
+    for (const q of toDeconvert) {
+      if ((q as any).convertedOrderId) {
+        try {
+          await cascadeDeleteConvertedOrder(q, `Quotation ${q.quotationNumber} bulk-status changed to ${status}`);
+        } catch (err: any) {
+          conversionErrors.push(`ID ${q.id}: ${err.message}`);
+          failedCascadeIds.add(q.id);
+        }
+      }
+    }
+
+    const safeIds = ids.filter(id => !failedCascadeIds.has(id));
+    const updated = safeIds.length > 0
+      ? await db.update(quotationsTable)
+          .set({ status })
+          .where(inArray(quotationsTable.id, safeIds))
+          .returning({ id: quotationsTable.id })
+      : [];
+
+    res.json({ updated: updated.length, ordersCreated, conversionErrors });
+  }
 });
 
 // GET /quotations/:id
@@ -517,6 +573,25 @@ router.patch("/quotations/:id", async (req, res): Promise<void> => {
   const [existingBefore] = await db.select().from(quotationsTable).where(eq(quotationsTable.id, id));
   if (!existingBefore) { res.status(404).json({ error: "Quotation not found" }); return; }
 
+  const isMovingAwayFromAccepted =
+    "status" in data &&
+    data.status !== "accepted" &&
+    existingBefore.status === "accepted" &&
+    !!(existingBefore as any).convertedOrderId;
+
+  // Cascade-delete the linked order BEFORE updating status so that a cascade failure
+  // leaves the quotation in a consistent "accepted" state (no status drift without cleanup).
+  if (isMovingAwayFromAccepted) {
+    await cascadeDeleteConvertedOrder(
+      existingBefore,
+      `Quotation ${existingBefore.quotationNumber} status changed to ${data.status}`,
+    );
+    // cascadeDeleteConvertedOrder already cleared convertedOrderId/Number; make sure
+    // the main update doesn't accidentally re-set them to stale values.
+    delete (updates as any).convertedOrderId;
+    delete (updates as any).convertedOrderNumber;
+  }
+
   const [quotation] = await db.update(quotationsTable).set(updates).where(eq(quotationsTable.id, id)).returning();
   if (!quotation) { res.status(404).json({ error: "Quotation not found" }); return; }
 
@@ -538,26 +613,15 @@ router.patch("/quotations/:id", async (req, res): Promise<void> => {
       // Status is already saved as accepted; log but don't fail the PATCH
       console.error(`Auto-convert failed for quotation ${id}:`, err.message);
     }
-    // Re-fetch so parseQuotation includes the persisted convertedOrderId/Number
-    const [refreshed] = await db
-      .select({ q: quotationsTable, customerDbName: customersTable.name })
-      .from(quotationsTable)
-      .leftJoin(customersTable, eq(customersTable.id, quotationsTable.customerId as any))
-      .where(eq(quotationsTable.id, id));
-    if (refreshed) { res.json(parseQuotation(refreshed.q, refreshed.customerDbName)); return; }
-  } else if ("status" in data && existingBefore.status === "accepted" && existingBefore.convertedOrderId) {
-    // Status moved away from "accepted" (e.g. back to sent/rejected/draft) — cascade-delete
-    // the auto-created order (and its invoice, if any), restoring stock along the way.
-    await cascadeDeleteConvertedOrder(existingBefore, `Quotation ${quotation.quotationNumber} status changed to ${data.status}`);
-    const [refreshed] = await db
-      .select({ q: quotationsTable, customerDbName: customersTable.name })
-      .from(quotationsTable)
-      .leftJoin(customersTable, eq(customersTable.id, quotationsTable.customerId as any))
-      .where(eq(quotationsTable.id, id));
-    if (refreshed) { res.json(parseQuotation(refreshed.q, refreshed.customerDbName)); return; }
   }
 
-  res.json(parseQuotation(quotation, customerDbName));
+  // Always re-fetch so the response reflects the latest convertedOrderId/Number state.
+  const [refreshed] = await db
+    .select({ q: quotationsTable, customerDbName: customersTable.name })
+    .from(quotationsTable)
+    .leftJoin(customersTable, eq(customersTable.id, quotationsTable.customerId as any))
+    .where(eq(quotationsTable.id, id));
+  res.json(parseQuotation(refreshed?.q ?? quotation, refreshed?.customerDbName ?? customerDbName));
 });
 
 // DELETE /quotations/:id

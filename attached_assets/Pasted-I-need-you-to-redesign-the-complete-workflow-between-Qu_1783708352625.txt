@@ -1,0 +1,118 @@
+I need you to redesign the complete workflow between Quotation, Order, and Invoice. These three modules must always stay synchronized.
+
+Workflow Rules
+1. Quotation Workflow
+
+When a quotation is created:
+
+Draft
+Do NOT create Order.
+Do NOT create Invoice.
+Sent
+Do NOT create Order.
+Do NOT create Invoice.
+Accepted
+Automatically create an Order.
+Invoice should NOT be created yet.
+Rejected
+Do NOT create Order.
+Do NOT create Invoice.
+2. Quotation Status Changes
+
+If an Accepted quotation already created an Order, then:
+
+If quotation changes from Accepted → Draft
+Delete the linked Order.
+Delete the linked Invoice (if exists).
+If quotation changes from Accepted → Rejected
+Delete the linked Order.
+Delete the linked Invoice (if exists).
+If quotation is Deleted
+Delete the linked Order.
+Delete the linked Invoice.
+
+There must never be orphan Orders or Invoices.
+
+3. Order Workflow
+
+Orders should only be created from an Accepted Quotation.
+
+If an Order is deleted:
+
+Delete the linked Invoice.
+Do NOT delete the quotation.
+Change the quotation status back to Sent.
+
+Example:
+
+Quotation (Accepted)
+↓
+Order Created
+↓
+User deletes Order
+↓
+Quotation Status = Sent
+↓
+Invoice Deleted
+
+4. Invoice Workflow
+
+Invoices should only be created from a completed Order.
+
+Workflow:
+
+Quotation (Accepted)
+↓
+Order Created
+↓
+Order Completed
+↓
+Invoice Created
+
+5. Invoice Delete Rules
+
+If an Invoice is deleted:
+
+Delete the linked Order.
+Change the Quotation status back to Sent.
+Do NOT delete the quotation.
+
+Result:
+
+Invoice Deleted
+↓
+Order Deleted
+↓
+Quotation Status = Sent
+
+6. Relationship Rules
+
+Each document must store its parent references.
+
+Quotation
+
+quotationId
+status
+
+Order
+
+orderId
+quotationId
+
+Invoice
+
+invoiceId
+orderId
+quotationId
+
+Never create duplicate Orders or duplicate Invoices for the same Quotation.
+
+7. Cascade Delete Rules
+Action	Quotation	Order	Invoice
+Draft Quotation	Keep	No Order	No Invoice
+Sent Quotation	Keep	No Order	No Invoice
+Accept Quotation	Accepted	Create Order	No Invoice
+Reject Quotation	Rejected	Delete Order	Delete Invoice
+Delete Quotation	Delete	Delete Order	Delete Invoice
+Delete Order	Change Quotation → Sent	Delete Order	Delete Invoice
+Delete Invoice	Change Quotation → Sent	Delete Order	Delete Invoice

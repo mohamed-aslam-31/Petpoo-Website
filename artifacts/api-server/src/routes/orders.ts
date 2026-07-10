@@ -65,22 +65,24 @@ async function enrichItemNames(items: any[]) {
   return result;
 }
 
-/** Adjust a single product's stock and record a movement */
+/** Adjust a single product's stock and record a movement. Pass `tx` to run inside an existing transaction. */
 async function adjustStock(
   productId: number,
   type: "increase" | "decrease" | "damage" | "lost" | "return",
   quantity: number,
   reason: string,
   notes?: string,
+  tx?: any,
 ) {
-  const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
+  const dbOrTx = tx ?? db;
+  const [product] = await dbOrTx.select().from(productsTable).where(eq(productsTable.id, productId));
   if (!product || quantity <= 0) return;
   const beforeStock = product.currentStock;
   const afterStock = type === "increase" || type === "return"
     ? beforeStock + quantity
     : Math.max(0, beforeStock - quantity);
-  await db.update(productsTable).set({ currentStock: afterStock }).where(eq(productsTable.id, productId));
-  await db.insert(stockMovementsTable).values({
+  await dbOrTx.update(productsTable).set({ currentStock: afterStock }).where(eq(productsTable.id, productId));
+  await dbOrTx.insert(stockMovementsTable).values({
     productId,
     type,
     quantity,
@@ -273,38 +275,55 @@ router.delete("/orders/:id", async (req, res): Promise<void> => {
   const [existing] = await db.select().from(ordersTable).where(eq(ordersTable.id, params.data.id));
   if (!existing) { res.status(404).json({ error: "Order not found" }); return; }
 
-  if (existing.status === "pending") {
-    const oldItems = parseItems(existing.items);
-    await restoreOrderStock(oldItems, existing.orderNumber, " - deleted");
-  } else if (existing.status === "completed") {
-    // Cascade-delete the linked invoice and restore stock at its final quantities
-    const [invoice] = await db.select().from(invoicesTable).where(eq(invoicesTable.orderId, existing.id));
-    if (invoice) {
-      const invoiceItems = parseItems(invoice.items);
-      await restoreOrderStock(invoiceItems, existing.orderNumber, " - order deleted (cascade)");
-      await db.delete(invoicesTable).where(eq(invoicesTable.id, invoice.id));
-      await logAudit({
-        entityType: "invoice",
-        entityId: invoice.id,
-        entityNumber: invoice.invoiceNumber,
-        action: "cascaded_delete",
-        oldStatus: invoice.status,
-        notes: `Deleted because parent order ${existing.orderNumber} was deleted`,
-      });
+  // All mutations run in one transaction so stock, invoice, order, and quotation changes
+  // are atomic — a partial failure can't leave orphan records or incorrect stock counts.
+  await db.transaction(async (tx) => {
+    // Always look up a linked invoice unconditionally — regardless of order status —
+    // so we never leave an orphan invoice even in corrupt/legacy data scenarios.
+    const [invoice] = await tx.select().from(invoicesTable).where(eq(invoicesTable.orderId, existing.id));
+
+    if (existing.status === "pending") {
+      // Pending orders: stock was reserved at booking — restore it.
+      // (A pending order should have no invoice, but delete defensively if found.)
+      const oldItems = parseItems(existing.items);
+      for (const item of oldItems) {
+        if (item.productId && item.quantity > 0) {
+          await adjustStock(item.productId, "increase", item.quantity, `Order ${existing.orderNumber} - deleted`, undefined, tx);
+        }
+      }
+    } else if (existing.status === "completed") {
+      // Completed orders: stock was locked at invoice creation — restore from invoice quantities.
+      if (invoice) {
+        const invoiceItems = parseItems(invoice.items);
+        for (const item of invoiceItems) {
+          if (item.productId && item.quantity > 0) {
+            await adjustStock(item.productId, "increase", item.quantity, `Order ${existing.orderNumber} - order deleted (cascade)`, undefined, tx);
+          }
+        }
+      }
     }
-  }
+    // Returned/cancelled orders: stock was already restored when returned/cancelled — no adjustment.
 
-  await db.delete(ordersTable).where(eq(ordersTable.id, params.data.id));
+    // Delete the linked invoice (if any) for every order status.
+    if (invoice) {
+      await tx.delete(invoicesTable).where(eq(invoicesTable.id, invoice.id));
+      await logAudit({ entityType: "invoice", entityId: invoice.id, entityNumber: invoice.invoiceNumber, action: "cascaded_delete", oldStatus: invoice.status, notes: `Deleted because parent order ${existing.orderNumber} was deleted` }, tx);
+    }
 
-  await logAudit({
-    entityType: "order",
-    entityId: existing.id,
-    entityNumber: existing.orderNumber,
-    action: "deleted",
-    oldStatus: existing.status,
+    await tx.delete(ordersTable).where(eq(ordersTable.id, params.data.id));
+    await logAudit({ entityType: "order", entityId: existing.id, entityNumber: existing.orderNumber, action: "deleted", oldStatus: existing.status }, tx);
+
+    // Revert the parent quotation to "sent" and clear the conversion link.
+    if (existing.quotationId) {
+      const [quotation] = await tx.select().from(quotationsTable).where(eq(quotationsTable.id, existing.quotationId));
+      if (quotation) {
+        await tx.update(quotationsTable)
+          .set({ status: "sent", convertedOrderId: null, convertedOrderNumber: null } as any)
+          .where(eq(quotationsTable.id, quotation.id));
+        await logAudit({ entityType: "quotation", entityId: quotation.id, entityNumber: quotation.quotationNumber, action: "cascaded_status", oldStatus: quotation.status, newStatus: "sent", notes: `Order ${existing.orderNumber} was deleted` }, tx);
+      }
+    }
   });
-
-  await revertQuotationForOrder(existing, `Order ${existing.orderNumber} was deleted`);
 
   res.sendStatus(204);
 });

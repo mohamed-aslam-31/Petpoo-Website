@@ -70,22 +70,24 @@ function calcInvoiceTotals(items: any[], discount: number, transport: number, pa
   return { subtotal, cgst, sgst, igst: 0, gstAmount, total, parsedItems };
 }
 
-/** Adjust a single product's stock and record a movement */
+/** Adjust a single product's stock and record a movement. Pass `tx` to run inside an existing transaction. */
 async function adjustStock(
   productId: number,
   type: "increase" | "decrease" | "damage" | "lost" | "return",
   quantity: number,
   reason: string,
   notes?: string,
+  tx?: any,
 ) {
-  const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
+  const dbOrTx = tx ?? db;
+  const [product] = await dbOrTx.select().from(productsTable).where(eq(productsTable.id, productId));
   if (!product || quantity <= 0) return;
   const beforeStock = product.currentStock;
   const afterStock = type === "increase" || type === "return"
     ? beforeStock + quantity
     : Math.max(0, beforeStock - quantity);
-  await db.update(productsTable).set({ currentStock: afterStock }).where(eq(productsTable.id, productId));
-  await db.insert(stockMovementsTable).values({
+  await dbOrTx.update(productsTable).set({ currentStock: afterStock }).where(eq(productsTable.id, productId));
+  await dbOrTx.insert(stockMovementsTable).values({
     productId,
     type,
     quantity,
@@ -105,11 +107,11 @@ async function deductInvoiceStock(items: any[], invoiceNumber: string) {
   }
 }
 
-/** Reverse stock deductions for all items */
-async function reverseInvoiceStock(items: any[], invoiceNumber: string, reasonSuffix = " - edit reversal") {
+/** Reverse stock deductions for all items. Pass `tx` to run inside an existing transaction. */
+async function reverseInvoiceStock(items: any[], invoiceNumber: string, reasonSuffix = " - edit reversal", tx?: any) {
   for (const item of items) {
     if (item.productId && item.quantity > 0) {
-      await adjustStock(item.productId, "increase", item.quantity, `Invoice ${invoiceNumber}${reasonSuffix}`);
+      await adjustStock(item.productId, "increase", item.quantity, `Invoice ${invoiceNumber}${reasonSuffix}`, undefined, tx);
     }
   }
 }
@@ -386,16 +388,36 @@ router.delete("/invoices/:id", async (req, res): Promise<void> => {
   const [existing] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, params.data.id));
   if (!existing) { res.status(404).json({ error: "Invoice not found" }); return; }
 
-  // Reverse stock deductions before deleting, unless already cancelled/returned (already reversed)
-  if (!["cancelled", "returned"].includes(existing.status)) {
-    const oldItems = parseItems(existing.items);
-    await reverseInvoiceStock(oldItems, existing.invoiceNumber, " - deleted");
-  }
+  // All mutations run in one transaction: stock reversal, invoice delete, order delete,
+  // and quotation revert are atomic — a partial failure can't leave orphan records.
+  await db.transaction(async (tx) => {
+    // Reverse stock, unless already cancelled/returned (stock was restored at that point)
+    if (!["cancelled", "returned"].includes(existing.status)) {
+      await reverseInvoiceStock(parseItems(existing.items), existing.invoiceNumber, " - deleted", tx);
+    }
 
-  await db.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id));
+    await tx.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id));
+    await logAudit({ entityType: "invoice", entityId: existing.id, entityNumber: existing.invoiceNumber, action: "deleted", oldStatus: existing.status }, tx);
 
-  await logAudit({ entityType: "invoice", entityId: existing.id, entityNumber: existing.invoiceNumber, action: "deleted", oldStatus: existing.status });
-  await cascadeToOrderAndQuotation(existing, "pending", `Invoice ${existing.invoiceNumber} was deleted`);
+    // Per spec: deleting an invoice must also delete the linked order and revert the quotation to "sent".
+    if (existing.orderId) {
+      const [order] = await tx.select().from(ordersTable).where(eq(ordersTable.id, existing.orderId));
+      if (order) {
+        await tx.delete(ordersTable).where(eq(ordersTable.id, order.id));
+        await logAudit({ entityType: "order", entityId: order.id, entityNumber: order.orderNumber, action: "cascaded_delete", oldStatus: order.status, notes: `Invoice ${existing.invoiceNumber} was deleted` }, tx);
+
+        if (order.quotationId) {
+          const [quotation] = await tx.select().from(quotationsTable).where(eq(quotationsTable.id, order.quotationId));
+          if (quotation) {
+            await tx.update(quotationsTable)
+              .set({ status: "sent", convertedOrderId: null, convertedOrderNumber: null } as any)
+              .where(eq(quotationsTable.id, quotation.id));
+            await logAudit({ entityType: "quotation", entityId: quotation.id, entityNumber: quotation.quotationNumber, action: "cascaded_status", oldStatus: quotation.status, newStatus: "sent", notes: `Invoice ${existing.invoiceNumber} was deleted` }, tx);
+          }
+        }
+      }
+    }
+  });
 
   res.sendStatus(204);
 });
