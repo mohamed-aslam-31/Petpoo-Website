@@ -26,11 +26,16 @@ description: Key stack decisions, port, workflow, and API patterns for this proj
 - Static segments MUST be defined before dynamic `:id` routes in the same router
 - e.g. `GET /customers/dwolla-status` must come before `GET /customers/:id`
 
-## Dwolla integration (Task #6)
+## Dwolla integration
 - `artifacts/api-server/src/dwolla.ts` — client module, call `isDwollaConfigured()` before any API call
 - Routes: `GET /customers/dwolla-status`, `POST /customers/:id/link-dwolla`, `GET /customers/:id/balance`
 - All Dwolla routes return 503 when `DWOLLA_CLIENT_ID` or `DWOLLA_CLIENT_SECRET` are missing
 - Frontend checks `useGetCustomerDwollaStatus()` to disable the Link button before the user clicks
+
+## Port topology
+- Fixed assignment: frontend (webview) MUST stay on port 5000, API server on 8080 (console) — the platform requires webview output type to use port 5000.
+- **Why:** swapping them makes the preview pane show the API server (no UI, looks blank) since preview always points at port 5000.
+- Vite's `/api` proxy target in `vite.config.ts` must match the API server's actual port whenever either port changes.
 
 ## Ledger patterns
 - Customer ledger: built from invoices + payment entries; payment date uses `i.updatedAt` (not `createdAt`)
