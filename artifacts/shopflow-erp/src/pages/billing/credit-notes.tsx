@@ -71,7 +71,7 @@ const schema = z.object({
   // A credit note is a reversal document — it can only be created against an existing invoice.
   invoiceId: z.coerce.number().min(1, "An invoice must be selected"),
   customerId: z.coerce.number().min(1, "Customer required"),
-  type: z.enum(["return", "damaged", "wrong_amount"]),
+  type: z.enum(["return"]),
   amount: z.coerce.number().min(0),
   reason: z.string().optional(),
   notes: z.string().optional(),
@@ -82,8 +82,6 @@ type FormValues = z.infer<typeof schema>;
 
 const TYPE_INFO = {
   return: { label: "Return Products", desc: "Customer returns products — stock increases and outstanding reduces.", color: "bg-blue-50 border-blue-200 text-blue-800" },
-  damaged: { label: "Damaged Products", desc: "Products are damaged. Customer keeps goods — outstanding reduces (revenue loss).", color: "bg-amber-50 border-amber-200 text-amber-800" },
-  wrong_amount: { label: "Wrong Invoice Amount", desc: "Invoice was overcharged — difference is credited and outstanding reduces.", color: "bg-purple-50 border-purple-200 text-purple-800" },
 };
 
 // ── Credit Note Form Dialog ───────────────────────────────────────────────────
@@ -177,8 +175,6 @@ function CreditNoteFormDialog({ open, onOpenChange }: { open: boolean; onOpenCha
                   <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                   <SelectContent>
                     <SelectItem value="return">Return Products</SelectItem>
-                    <SelectItem value="damaged">Damaged Products</SelectItem>
-                    <SelectItem value="wrong_amount">Wrong Invoice Amount</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -361,7 +357,7 @@ export function CreditNotes() {
       </div>
 
       {/* Info cards */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         {Object.entries(TYPE_INFO).map(([key, info]) => (
           <div key={key} className={`p-4 rounded-md border ${info.color}`}>
             <p className="font-semibold text-sm">{info.label}</p>
