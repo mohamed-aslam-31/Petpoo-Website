@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, sql, ilike } from "drizzle-orm";
 import { z } from "zod";
 import { db, creditNotesTable, customersTable, invoicesTable, productsTable, stockMovementsTable } from "@workspace/db";
+import { logAudit } from "../lib/audit";
 
 const router: IRouter = Router();
 
@@ -16,8 +17,8 @@ const ReturnItemSchema = z.object({
 });
 
 const CreateCreditNoteSchema = z.object({
-  invoiceId: z.number().int().optional().nullable(),
-  invoiceNumber: z.string().optional().nullable(),
+  // Credit notes are reversal documents — they must always reference an existing invoice.
+  invoiceId: z.number().int().positive({ message: "A credit note must be linked to an invoice" }),
   customerId: z.number().int().positive(),
   type: z.enum(["return", "damaged", "wrong_amount"]),
   amount: z.number().min(0),
@@ -33,6 +34,10 @@ const PatchCreditNoteSchema = z.object({
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+class HttpError extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
+
 function parseNum(v: any) { return parseFloat(String(v ?? "0")); }
 
 function generateCreditNoteNumber(id: number) {
@@ -59,16 +64,16 @@ function parseCreditNote(cn: any, customerName?: string) {
   };
 }
 
-async function increaseStock(productId: number, quantity: number, reason: string) {
+async function increaseStock(productId: number, quantity: number, reason: string, tx: Pick<typeof db, "select" | "update" | "insert"> = db) {
   // quantity must be a positive integer (DB schema uses integer)
   const intQty = Math.round(quantity);
   if (intQty <= 0) return;
-  const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
+  const [product] = await tx.select().from(productsTable).where(eq(productsTable.id, productId));
   if (!product) return;
   const beforeStock = product.currentStock;
   const afterStock = beforeStock + intQty;
-  await db.update(productsTable).set({ currentStock: afterStock }).where(eq(productsTable.id, productId));
-  await db.insert(stockMovementsTable).values({
+  await tx.update(productsTable).set({ currentStock: afterStock }).where(eq(productsTable.id, productId));
+  await tx.insert(stockMovementsTable).values({
     productId,
     type: "return",
     quantity: intQty,
@@ -144,58 +149,91 @@ router.post("/credit-notes", async (req, res): Promise<void> => {
 
   const data = parsed.data;
 
-  // Verify customer exists
-  const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, data.customerId));
-  if (!customer) { res.status(404).json({ error: "Customer not found" }); return; }
+  try {
+    const creditNote = await db.transaction(async (tx) => {
+      // Verify customer exists
+      const [customer] = await tx.select().from(customersTable).where(eq(customersTable.id, data.customerId));
+      if (!customer) throw new HttpError(404, "Customer not found");
 
-  // Verify invoice if provided, and enforce invoice-customer consistency
-  let invoiceNumber: string | null = data.invoiceNumber ?? null;
-  if (data.invoiceId) {
-    const [inv] = await db.select().from(invoicesTable).where(eq(invoicesTable.id, data.invoiceId));
-    if (!inv) { res.status(404).json({ error: "Invoice not found" }); return; }
-    if (inv.customerId !== data.customerId) {
-      res.status(400).json({ error: "Invoice does not belong to the selected customer" });
-      return;
-    }
-    invoiceNumber = inv.invoiceNumber;
-  }
-
-  const [temp] = await db.insert(creditNotesTable).values({
-    creditNoteNumber: "TEMP",
-    invoiceId: data.invoiceId ?? null,
-    invoiceNumber: invoiceNumber ?? null,
-    customerId: data.customerId,
-    type: data.type,
-    amount: String(data.amount),
-    reason: data.reason ?? null,
-    items: (data.items ?? []) as any,
-    status: "pending",
-    notes: data.notes ?? null,
-  } as any).returning();
-
-  const creditNoteNumber = generateCreditNoteNumber(temp.id);
-  const [creditNote] = await db.update(creditNotesTable)
-    .set({ creditNoteNumber })
-    .where(eq(creditNotesTable.id, temp.id))
-    .returning();
-
-  // For "return" type: increase stock for each returned item (integer quantities)
-  if (data.type === "return" && data.items && data.items.length > 0) {
-    for (const item of data.items) {
-      if (item.productId && item.quantity > 0) {
-        await increaseStock(item.productId, item.quantity, `Credit Note ${creditNoteNumber} - customer return`);
+      // Lock the invoice row for the duration of this transaction so two concurrent
+      // credit-note creations against the same invoice can't both pass the
+      // amount/quantity checks below and jointly over-credit it.
+      const [inv] = await tx.select().from(invoicesTable).where(eq(invoicesTable.id, data.invoiceId)).for("update");
+      if (!inv) throw new HttpError(404, "Invoice not found");
+      if (inv.customerId !== data.customerId) throw new HttpError(400, "Invoice does not belong to the selected customer");
+      if (["cancelled", "returned"].includes(inv.status)) {
+        throw new HttpError(400, `Cannot issue a credit note against a ${inv.status} invoice`);
       }
-    }
+      const invoiceNumber = inv.invoiceNumber;
+
+      // Fetch existing credit notes against this invoice (read after the lock, so this
+      // reflects any concurrently-committed writes) to enforce integrity limits.
+      const existingNotes = await tx.select().from(creditNotesTable).where(eq(creditNotesTable.invoiceId, inv.id));
+      const invoiceTotal = parseNum(inv.total);
+      const alreadyCredited = existingNotes.reduce((sum, n) => sum + parseNum(n.amount), 0);
+      if (alreadyCredited + data.amount > invoiceTotal + 0.01) {
+        throw new HttpError(400, `Credit amount exceeds the invoice's remaining creditable balance (₹${(invoiceTotal - alreadyCredited).toFixed(2)} left)`);
+      }
+
+      if (data.type === "return" && data.items && data.items.length > 0) {
+        const invoiceItems = Array.isArray(inv.items) ? inv.items as any[] : [];
+        const invoiceQtyByProduct = new Map<number, number>();
+        for (const it of invoiceItems) invoiceQtyByProduct.set(it.productId, (invoiceQtyByProduct.get(it.productId) ?? 0) + (it.quantity ?? 0));
+
+        const alreadyReturnedByProduct = new Map<number, number>();
+        for (const n of existingNotes) {
+          if (n.type !== "return") continue;
+          const items = Array.isArray(n.items) ? n.items as any[] : [];
+          for (const it of items) alreadyReturnedByProduct.set(it.productId, (alreadyReturnedByProduct.get(it.productId) ?? 0) + (it.quantity ?? 0));
+        }
+
+        for (const item of data.items) {
+          const invoicedQty = invoiceQtyByProduct.get(item.productId) ?? 0;
+          const alreadyReturned = alreadyReturnedByProduct.get(item.productId) ?? 0;
+          if (item.quantity + alreadyReturned > invoicedQty) {
+            throw new HttpError(400, `Return quantity for product ${item.productId} exceeds the quantity invoiced (invoiced ${invoicedQty}, already returned ${alreadyReturned})`);
+          }
+        }
+      }
+
+      const [temp] = await tx.insert(creditNotesTable).values({
+        creditNoteNumber: "TEMP",
+        invoiceId: data.invoiceId,
+        invoiceNumber,
+        customerId: data.customerId,
+        type: data.type,
+        amount: String(data.amount),
+        reason: data.reason ?? null,
+        items: (data.items ?? []) as any,
+        status: "pending",
+        notes: data.notes ?? null,
+      } as any).returning();
+
+      const creditNoteNumber = generateCreditNoteNumber(temp.id);
+      const [savedNote] = await tx.update(creditNotesTable)
+        .set({ creditNoteNumber })
+        .where(eq(creditNotesTable.id, temp.id))
+        .returning();
+
+      // For "return" type: increase stock for each returned item (integer quantities)
+      if (data.type === "return" && data.items && data.items.length > 0) {
+        for (const item of data.items) {
+          if (item.productId && item.quantity > 0) {
+            await increaseStock(item.productId, item.quantity, `Credit Note ${creditNoteNumber} - customer return`, tx);
+          }
+        }
+      }
+
+      await logAudit({ entityType: "credit_note", entityId: savedNote.id, entityNumber: savedNote.creditNoteNumber, action: "created", newStatus: savedNote.status, notes: `Against invoice ${invoiceNumber}` }, tx);
+
+      return { ...savedNote, customerName: customer.name };
+    });
+
+    res.status(201).json(parseCreditNote(creditNote, creditNote.customerName));
+  } catch (err) {
+    if (err instanceof HttpError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
   }
-
-  // Reduce customer outstanding by credit amount (all types)
-  const currentOutstanding = parseNum(customer.outstanding);
-  const newOutstanding = Math.max(0, currentOutstanding - data.amount);
-  await db.update(customersTable)
-    .set({ outstanding: String(newOutstanding) })
-    .where(eq(customersTable.id, data.customerId));
-
-  res.status(201).json(parseCreditNote(creditNote, customer.name));
 });
 
 // GET /credit-notes/:id
@@ -261,6 +299,7 @@ router.delete("/credit-notes/:id", async (req, res): Promise<void> => {
   }
 
   await db.delete(creditNotesTable).where(eq(creditNotesTable.id, id));
+  await logAudit({ entityType: "credit_note", entityId: cn.id, entityNumber: cn.creditNoteNumber, action: "deleted", oldStatus: cn.status });
   res.sendStatus(204);
 });
 

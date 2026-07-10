@@ -12,6 +12,7 @@ import {
   ReturnOrderParams,
 } from "@workspace/api-zod";
 import { logAudit } from "../lib/audit";
+import { cascadeDeleteCreditNotesForInvoice } from "../lib/credit-notes";
 
 const router: IRouter = Router();
 
@@ -306,6 +307,8 @@ router.delete("/orders/:id", async (req, res): Promise<void> => {
 
     // Delete the linked invoice (if any) for every order status.
     if (invoice) {
+      // A credit note can only exist while its invoice does — unwind any first.
+      await cascadeDeleteCreditNotesForInvoice(invoice.id, `Order ${existing.orderNumber} was deleted`, tx);
       await tx.delete(invoicesTable).where(eq(invoicesTable.id, invoice.id));
       await logAudit({ entityType: "invoice", entityId: invoice.id, entityNumber: invoice.invoiceNumber, action: "cascaded_delete", oldStatus: invoice.status, notes: `Deleted because parent order ${existing.orderNumber} was deleted` }, tx);
     }

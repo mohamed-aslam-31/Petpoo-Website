@@ -18,7 +18,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Search, Plus, MoreHorizontal, Trash2, Edit, Info } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Trash2, Info } from "lucide-react";
 
 const PAGE_SIZE = 20;
 const QK = ["credit-notes"] as const;
@@ -68,7 +68,8 @@ const returnItemSchema = z.object({
 });
 
 const schema = z.object({
-  invoiceId: z.coerce.number().optional().nullable(),
+  // A credit note is a reversal document — it can only be created against an existing invoice.
+  invoiceId: z.coerce.number().min(1, "An invoice must be selected"),
   customerId: z.coerce.number().min(1, "Customer required"),
   type: z.enum(["return", "damaged", "wrong_amount"]),
   amount: z.coerce.number().min(0),
@@ -89,11 +90,14 @@ const TYPE_INFO = {
 function CreditNoteFormDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const form = useForm<FormValues>({
     resolver: zodResolver(schema) as any,
-    defaultValues: { invoiceId: null, customerId: 0, type: "return", amount: 0, reason: "", notes: "", items: [] },
+    defaultValues: { invoiceId: undefined, customerId: 0, type: "return", amount: 0, reason: "", notes: "", items: [] },
   });
-  const { fields, append, remove } = useFieldArray({ control: form.control, name: "items" as any });
+  const { fields } = useFieldArray({ control: form.control, name: "items" as any });
   const { data: customers } = useListCustomers({ limit: 300 });
+  // Credit notes can only be issued against non-cancelled/returned invoices — those
+  // already had their stock/financial effects reversed.
   const { data: invoices } = useListInvoices({ limit: 200 });
+  const creditableInvoices = (invoices?.data ?? []).filter((i: any) => !["cancelled", "returned"].includes(i.status));
   const createMutation = useCreateCreditNote();
 
   const creditType = form.watch("type");
@@ -136,11 +140,12 @@ function CreditNoteFormDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   }, [JSON.stringify(watchedItems?.map((i: any) => ({ q: i.quantity, p: i.unitPrice })))]);
 
   useEffect(() => {
-    if (!open) form.reset({ invoiceId: null, customerId: 0, type: "return", amount: 0, reason: "", notes: "", items: [] });
+    if (!open) form.reset({ invoiceId: undefined, customerId: 0, type: "return", amount: 0, reason: "", notes: "", items: [] });
   }, [open]);
 
   function onSubmit(values: FormValues) {
     const payload: any = {
+      invoiceId: values.invoiceId,
       customerId: values.customerId,
       type: values.type,
       amount: values.amount,
@@ -148,11 +153,6 @@ function CreditNoteFormDialog({ open, onOpenChange }: { open: boolean; onOpenCha
       notes: values.notes,
       items: values.type === "return" ? (values.items ?? []) : [],
     };
-    if (values.invoiceId) {
-      payload.invoiceId = values.invoiceId;
-      const inv = invoices?.data?.find((i: any) => i.id === Number(values.invoiceId));
-      if (inv) payload.invoiceNumber = inv.invoiceNumber;
-    }
     createMutation.mutate(payload, { onSuccess: () => onOpenChange(false) });
   }
 
@@ -192,18 +192,17 @@ function CreditNoteFormDialog({ open, onOpenChange }: { open: boolean; onOpenCha
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              {/* Linked Invoice (optional) */}
+              {/* Linked Invoice (required — a credit note always reverses an existing invoice) */}
               <FormField control={form.control} name="invoiceId" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Linked Invoice <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                  <FormLabel>Invoice</FormLabel>
                   <Select
-                    onValueChange={(v) => field.onChange(v === "none" ? null : Number(v))}
-                    value={field.value ? String(field.value) : "none"}
+                    onValueChange={(v) => field.onChange(Number(v))}
+                    value={field.value ? String(field.value) : ""}
                   >
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select invoice" /></SelectTrigger></FormControl>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select invoice to credit" /></SelectTrigger></FormControl>
                     <SelectContent>
-                      <SelectItem value="none">No linked invoice</SelectItem>
-                      {invoices?.data?.map((inv: any) => (
+                      {creditableInvoices.map((inv: any) => (
                         <SelectItem key={inv.id} value={String(inv.id)}>
                           {inv.invoiceNumber} — {inv.customerName} (₹{Number(inv.total).toLocaleString("en-IN")})
                         </SelectItem>
@@ -214,14 +213,14 @@ function CreditNoteFormDialog({ open, onOpenChange }: { open: boolean; onOpenCha
                 </FormItem>
               )} />
 
-              {/* Customer */}
+              {/* Customer — always derived from the selected invoice */}
               <FormField control={form.control} name="customerId" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Customer</FormLabel>
-                  <Select onValueChange={(v) => field.onChange(Number(v))} value={field.value ? String(field.value) : ""}>
+                  <Select value={field.value ? String(field.value) : ""} disabled>
                     <FormControl>
-                      <SelectTrigger disabled={!!invoiceId}>
-                        <SelectValue placeholder="Select customer" />
+                      <SelectTrigger disabled>
+                        <SelectValue placeholder="Select an invoice first" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -243,41 +242,30 @@ function CreditNoteFormDialog({ open, onOpenChange }: { open: boolean; onOpenCha
 
             <Separator />
 
-            {/* Return items table — only for "return" type */}
+            {/* Return items table — only for "return" type, always sourced from the selected invoice */}
             {creditType === "return" && (
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-medium">Items to Return</h4>
-                  {!invoiceId && (
-                    <Button type="button" variant="outline" size="sm" className="gap-1"
-                      onClick={() => append({ productId: 0, productName: "", quantity: 1, unitPrice: 0, amount: 0 } as any)}>
-                      <Plus className="h-3 w-3" /> Add Item
-                    </Button>
-                  )}
-                </div>
+                <h4 className="text-sm font-medium">Items to Return</h4>
                 {fields.length === 0 && (
                   <p className="text-sm text-muted-foreground text-center py-4">
-                    {invoiceId ? "Invoice items will appear here." : "Add items being returned."}
+                    {invoiceId ? "This invoice has no items." : "Select an invoice to see its items."}
                   </p>
                 )}
                 {fields.map((field, index) => {
                   const item = watchedItems?.[index] as any;
                   return (
                     <div key={field.id} className="grid grid-cols-12 gap-2 items-end p-2 rounded-md bg-muted/30">
-                      <div className="col-span-4">
+                      <div className="col-span-5">
                         <label className="text-xs font-medium mb-1 block">Product</label>
-                        <Input readOnly={!!invoiceId} disabled={!!invoiceId} className="h-8 text-xs"
-                          value={item?.productName || ""}
-                          onChange={(e) => form.setValue(`items.${index}.productName` as any, e.target.value)}
-                        />
+                        <Input readOnly disabled className="h-8 text-xs" value={item?.productName || ""} />
                       </div>
                       <div className="col-span-2">
                         <label className="text-xs font-medium mb-1 block">Return Qty</label>
-                        <Input type="number" step="0.01" className="h-8 text-xs" {...form.register(`items.${index}.quantity` as any)} />
+                        <Input type="number" step="1" min="0" className="h-8 text-xs" {...form.register(`items.${index}.quantity` as any)} />
                       </div>
                       <div className="col-span-2">
                         <label className="text-xs font-medium mb-1 block">Unit Price</label>
-                        <Input type="number" step="0.01" className="h-8 text-xs" readOnly={!!invoiceId}
+                        <Input type="number" step="0.01" className="h-8 text-xs" readOnly disabled
                           {...form.register(`items.${index}.unitPrice` as any)} />
                       </div>
                       <div className="col-span-3">
@@ -285,13 +273,6 @@ function CreditNoteFormDialog({ open, onOpenChange }: { open: boolean; onOpenCha
                         <Input type="number" step="0.01" className="h-8 text-xs bg-muted" readOnly
                           value={((Number(item?.quantity) || 0) * (Number(item?.unitPrice) || 0)).toFixed(2)}
                         />
-                      </div>
-                      <div className="col-span-1 flex justify-end">
-                        {!invoiceId && (
-                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => remove(index)}>
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
                       </div>
                     </div>
                   );

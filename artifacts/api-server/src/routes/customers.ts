@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, sql, gte, lte } from "drizzle-orm";
-import { db, customersTable, invoicesTable, paymentsTable } from "@workspace/db";
+import { db, customersTable, invoicesTable, paymentsTable, creditNotesTable } from "@workspace/db";
 import {
   CreateCustomerBody,
   UpdateCustomerBody,
@@ -36,10 +36,10 @@ function parseCustomer(c: any) {
   };
 }
 
-/** Compute real-time outstanding for a customer from invoices − payments (orders carry no money; returned invoices are excluded) */
+/** Compute real-time outstanding for a customer from invoices − payments − credit notes (orders carry no money; returned invoices are excluded) */
 async function computeOutstanding(customerId: number): Promise<number> {
   const invoices = await db
-    .select({ total: invoicesTable.total, paidAmount: invoicesTable.paidAmount, status: invoicesTable.status })
+    .select({ id: invoicesTable.id, total: invoicesTable.total, paidAmount: invoicesTable.paidAmount, status: invoicesTable.status })
     .from(invoicesTable)
     .where(eq(invoicesTable.customerId, customerId));
 
@@ -53,11 +53,23 @@ async function computeOutstanding(customerId: number): Promise<number> {
       eq(paymentsTable.entityId, customerId),
     ));
 
+  // Credit notes reduce what the customer owes for the invoice they were issued against.
+  // Once an invoice is fully "returned" its own total is dropped from debits (the return
+  // flow already reversed stock/financials directly), so any credit notes still attached
+  // to it must be excluded too — otherwise their amount would be double-subtracted.
+  const creditNotesRows = await db
+    .select({ amount: creditNotesTable.amount, invoiceId: creditNotesTable.invoiceId })
+    .from(creditNotesTable)
+    .where(eq(creditNotesTable.customerId, customerId));
+  const activeInvoiceIdSet = new Set(activeInvoices.map((i) => i.id));
+  const creditNotes = creditNotesRows.filter((c) => activeInvoiceIdSet.has(c.invoiceId));
+
   const totalDebits = activeInvoices.reduce((s, i) => s + parseFloat(String(i.total ?? "0")), 0);
 
   const totalCredits =
     activeInvoices.reduce((s, i) => s + parseFloat(String(i.paidAmount ?? "0")), 0) +
-    payments.reduce((s, p) => s + parseFloat(String(p.amount ?? "0")), 0);
+    payments.reduce((s, p) => s + parseFloat(String(p.amount ?? "0")), 0) +
+    creditNotes.reduce((s, c) => s + parseFloat(String(c.amount ?? "0")), 0);
 
   return Math.max(0, totalDebits - totalCredits);
 }

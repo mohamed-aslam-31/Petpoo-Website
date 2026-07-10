@@ -1,6 +1,6 @@
 import { db, auditLogTable } from "@workspace/db";
 
-export type AuditEntityType = "quotation" | "order" | "invoice";
+export type AuditEntityType = "quotation" | "order" | "invoice" | "credit_note";
 
 /**
  * Insert an audit trail entry. Accepts an optional `tx` (transaction handle)

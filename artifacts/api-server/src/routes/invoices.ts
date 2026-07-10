@@ -8,6 +8,7 @@ import {
   DeleteInvoiceParams,
 } from "@workspace/api-zod";
 import { logAudit } from "../lib/audit";
+import { cascadeDeleteCreditNotesForInvoice } from "../lib/credit-notes";
 
 const router: IRouter = Router();
 
@@ -395,6 +396,9 @@ router.delete("/invoices/:id", async (req, res): Promise<void> => {
     if (!["cancelled", "returned"].includes(existing.status)) {
       await reverseInvoiceStock(parseItems(existing.items), existing.invoiceNumber, " - deleted", tx);
     }
+
+    // A credit note can only exist while its invoice does — unwind any first.
+    await cascadeDeleteCreditNotesForInvoice(existing.id, `Invoice ${existing.invoiceNumber} was deleted`, tx);
 
     await tx.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id));
     await logAudit({ entityType: "invoice", entityId: existing.id, entityNumber: existing.invoiceNumber, action: "deleted", oldStatus: existing.status }, tx);

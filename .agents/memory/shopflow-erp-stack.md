@@ -35,3 +35,10 @@ description: Key stack decisions, port, workflow, and API patterns for this proj
 ## Print statements
 - `printStatement(entity, entries)` accepts `StatementEntry[]` directly — use this when you have ledger data
 - `printSupplierStatement` was removed in favour of `printStatement` with ledger entries
+
+## Credit Note business rule
+- A Credit Note must always reference an existing Invoice (`invoiceId` is NOT NULL in schema) — never standalone. Only creatable against non-cancelled/returned invoices, capped at the invoice's remaining creditable amount, and (for "return" type) at each product's remaining un-returned invoiced quantity.
+- **Why:** a credit note is a reversal document; without a linked invoice there's nothing to reverse, and the old optional-invoice model allowed orphaned/duplicate credits with no audit trail.
+- Deleting an Invoice (directly, or cascaded from Order/Quotation deletion) must cascade-delete its Credit Notes first, reversing their stock/outstanding effects (`artifacts/api-server/src/lib/credit-notes.ts:cascadeDeleteCreditNotesForInvoice`) — run inside the same transaction as the invoice delete.
+- Credit-note creation runs inside a transaction with `SELECT ... FOR UPDATE` on the invoice row, so concurrent creates against the same invoice can't jointly exceed its amount/quantity caps.
+- Customer `outstanding` is always recomputed on read from invoices − payments − credit notes (see `computeOutstanding` in `customers.ts`), scoped to non-returned invoices; the `customersTable.outstanding` column itself is effectively unused/stale — don't trust it directly.
