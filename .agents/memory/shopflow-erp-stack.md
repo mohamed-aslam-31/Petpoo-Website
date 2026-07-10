@@ -3,6 +3,11 @@ name: ShopFlow ERP stack
 description: Key stack decisions, port, workflow, and API patterns for this project.
 ---
 
+## Setup after import
+- `pnpm install` at repo root installs the monorepo's node_modules (esbuild, vite, etc.) — a fresh import/clone won't have them yet, causing `ERR_MODULE_NOT_FOUND: esbuild` and `vite not found` on first workflow run.
+- **Why:** node_modules is gitignored; imported repos ship code only.
+- The API server workflow can report a false-positive port-open timeout on first boot (esbuild bundling + pino transports take a while) even though it ends up listening fine — check the tail of its log for "Server listening" before assuming it's broken.
+
 ## Runtime / ports
 - API server: port 8080, workflow `artifacts/api-server: API Server`
 - Frontend: port 5000, workflow `artifacts/shopflow-erp: web`
