@@ -8,6 +8,8 @@ description: Key stack decisions, port, workflow, and API patterns for this proj
 - **Why:** node_modules is gitignored; imported repos ship code only.
 - The API server workflow can report a false-positive port-open timeout on first boot (esbuild bundling + pino transports take a while) even though it ends up listening fine — check the tail of its log for "Server listening" before assuming it's broken.
 
+- A fresh/re-imported DB has no tables until `pnpm --filter @workspace/db run push` is run explicitly — `setup.sh` does this, but if you skip it the API server boots fine yet every list endpoint 500s with a generic "Failed query" (no root cause logged). After pushing schema, restart the API server workflow — connections opened before the push can keep failing even after tables exist.
+
 ## Runtime / ports
 - API server: port 8080, workflow `artifacts/api-server: API Server`
 - Frontend: port 5000, workflow `artifacts/shopflow-erp: web`
