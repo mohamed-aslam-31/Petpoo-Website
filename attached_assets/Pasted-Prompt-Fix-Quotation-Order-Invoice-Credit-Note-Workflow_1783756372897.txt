@@ -1,0 +1,219 @@
+Prompt: Fix Quotation → Order → Invoice → Credit Note Workflow
+
+I need you to redesign the complete workflow between Quotation, Order, Invoice, and Credit Note. These four modules must always stay synchronized while maintaining proper accounting and inventory integrity.
+
+1. Quotation Workflow
+
+When a quotation is created:
+
+Draft
+Do NOT create Order.
+Do NOT create Invoice.
+Do NOT create Credit Note.
+Sent
+Do NOT create Order.
+Do NOT create Invoice.
+Do NOT create Credit Note.
+Accepted
+Automatically create an Order.
+Do NOT create Invoice.
+Do NOT create Credit Note.
+Rejected
+Do NOT create Order.
+Do NOT create Invoice.
+Do NOT create Credit Note.
+2. Quotation Status Changes
+
+If an Accepted quotation already created an Order:
+
+Accepted → Draft
+Delete linked Order.
+Delete linked Invoice (if exists).
+Delete linked Credit Note (if exists).
+Accepted → Rejected
+Delete linked Order.
+Delete linked Invoice.
+Delete linked Credit Note.
+Delete Quotation
+Delete linked Order.
+Delete linked Invoice.
+Delete linked Credit Note.
+
+There must never be orphan Orders, Invoices, or Credit Notes.
+
+3. Order Workflow
+
+Orders are created only from an Accepted Quotation.
+
+If an Order is deleted:
+
+Delete linked Invoice.
+Delete linked Credit Note.
+Change Quotation status back to Sent.
+Do NOT delete the Quotation.
+4. Invoice Workflow
+
+Invoices are created only from a Completed Order.
+
+Workflow:
+
+Quotation (Accepted)
+↓
+Order Created
+↓
+Order Completed
+↓
+Invoice Created
+
+When an Invoice is created:
+
+Reduce stock automatically.
+Record the sales amount.
+Create accounting entries.
+Credit Note is NOT created.
+5. Credit Note Workflow
+
+Credit Notes can only be created from an existing Invoice.
+
+Reasons:
+
+Customer Return
+Cancelled Sale
+Damaged Goods
+Wrong Price
+Wrong Quantity
+Refund
+
+Credit Notes must NEVER be created directly from a Quotation or Order.
+
+Workflow:
+
+Quotation
+↓
+Order
+↓
+Invoice
+↓
+Credit Note
+
+6. Automatic Credit Note Creation
+
+If the user chooses:
+
+Return Goods
+
+Automatically:
+
+Create Credit Note.
+Increase returned stock.
+Reduce invoice amount.
+Update customer balance.
+Record accounting reversal.
+Cancel Finalized Invoice
+
+Automatically:
+
+Create Credit Note.
+Reverse the invoice amount.
+Increase stock (if items returned).
+Mark Invoice as Cancelled via Credit Note.
+Keep Invoice for audit history.
+7. Credit Note Delete Rules
+
+If a Credit Note is deleted:
+
+Restore the Invoice amount.
+Reduce stock again (only if stock was previously returned).
+Restore customer outstanding balance.
+Remove accounting reversal.
+
+Do NOT delete:
+
+Invoice
+Order
+Quotation
+
+Deleting a Credit Note should only reverse the Credit Note itself.
+
+8. Inventory Rules
+Quotation
+
+Stock = No Change
+
+Order
+
+Stock = No Change (optional reservation only)
+
+Invoice
+
+Reduce stock automatically.
+
+Example:
+
+Stock = 100
+
+Invoice = 5 pcs
+
+Stock = 95
+
+Credit Note
+
+Increase stock automatically (if goods are physically returned).
+
+Example:
+
+Stock = 95
+
+Return = 2 pcs
+
+Stock = 97
+
+9. Accounting Rules
+Invoice
+Increase Sales
+Increase Customer Receivable
+Credit Note
+Reduce Sales
+Reduce Customer Receivable
+Record Refund/Credit
+10. Relationship Rules
+
+Quotation
+
+quotationId
+status
+
+Order
+
+orderId
+quotationId
+
+Invoice
+
+invoiceId
+orderId
+quotationId
+
+Credit Note
+
+creditNoteId
+invoiceId
+orderId
+quotationId
+reason
+
+Each document must reference its parent.
+
+11. Cascade Rules
+Action	Quotation	Order	Invoice	Credit Note
+Draft Quotation	Keep	None	None	None
+Sent Quotation	Keep	None	None	None
+Accept Quotation	Accepted	Create	None	None
+Reject Quotation	Rejected	Delete	Delete	Delete
+Delete Quotation	Delete	Delete	Delete	Delete
+Delete Order	Sent	Delete	Delete	Delete
+Complete Order	Accepted	Completed	Create	None
+Invoice Created	Accepted	Completed	Created	None
+Return Goods	No Change	No Change	Keep	Create
+Cancel Finalized Invoice	No Change	No Change	Keep (Cancelled via Credit Note)	Create
+Delete Credit Note	No Change	No Change	Restore Invoice	Delete Credit Note Only
