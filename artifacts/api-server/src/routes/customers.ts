@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, sql, gte, lte } from "drizzle-orm";
-import { db, customersTable, invoicesTable, paymentsTable, creditNotesTable } from "@workspace/db";
+import { db, customersTable, invoicesTable, paymentsTable } from "@workspace/db";
 import {
   CreateCustomerBody,
   UpdateCustomerBody,
@@ -10,6 +10,7 @@ import {
   GetCustomerLedgerParams,
 } from "@workspace/api-zod";
 import { isDwollaConfigured, createDwollaCustomer, getCustomerDwollaBalance } from "../dwolla";
+import { computeOutstanding } from "../lib/credit-limit";
 
 const router: IRouter = Router();
 
@@ -34,44 +35,6 @@ function parseCustomer(c: any) {
     dwollaCustomerId: c.dwollaCustomerId ?? null,
     createdAt: c.createdAt instanceof Date ? c.createdAt.toISOString() : c.createdAt,
   };
-}
-
-/** Compute real-time outstanding for a customer from invoices − payments − credit notes (orders carry no money; returned invoices are excluded) */
-async function computeOutstanding(customerId: number): Promise<number> {
-  const invoices = await db
-    .select({ id: invoicesTable.id, total: invoicesTable.total, paidAmount: invoicesTable.paidAmount, status: invoicesTable.status })
-    .from(invoicesTable)
-    .where(eq(invoicesTable.customerId, customerId));
-
-  const activeInvoices = invoices.filter(i => i.status !== "returned");
-
-  const payments = await db
-    .select({ amount: paymentsTable.amount })
-    .from(paymentsTable)
-    .where(and(
-      eq(paymentsTable.entityType, "customer"),
-      eq(paymentsTable.entityId, customerId),
-    ));
-
-  // Credit notes reduce what the customer owes for the invoice they were issued against.
-  // Once an invoice is fully "returned" its own total is dropped from debits (the return
-  // flow already reversed stock/financials directly), so any credit notes still attached
-  // to it must be excluded too — otherwise their amount would be double-subtracted.
-  const creditNotesRows = await db
-    .select({ amount: creditNotesTable.amount, invoiceId: creditNotesTable.invoiceId })
-    .from(creditNotesTable)
-    .where(eq(creditNotesTable.customerId, customerId));
-  const activeInvoiceIdSet = new Set(activeInvoices.map((i) => i.id));
-  const creditNotes = creditNotesRows.filter((c) => activeInvoiceIdSet.has(c.invoiceId));
-
-  const totalDebits = activeInvoices.reduce((s, i) => s + parseFloat(String(i.total ?? "0")), 0);
-
-  const totalCredits =
-    activeInvoices.reduce((s, i) => s + parseFloat(String(i.paidAmount ?? "0")), 0) +
-    payments.reduce((s, p) => s + parseFloat(String(p.amount ?? "0")), 0) +
-    creditNotes.reduce((s, c) => s + parseFloat(String(c.amount ?? "0")), 0);
-
-  return Math.max(0, totalDebits - totalCredits);
 }
 
 function generateCode(prefix: string, id: number) {
@@ -145,6 +108,21 @@ router.get("/customers/:id", async (req, res): Promise<void> => {
 
   const outstanding = await computeOutstanding(params.data.id);
   res.json({ ...parseCustomer(customer), outstanding });
+});
+
+router.get("/customers/:id/credit-status", async (req, res): Promise<void> => {
+  const params = GetCustomerParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+  const [customer] = await db.select({ creditLimit: customersTable.creditLimit }).from(customersTable).where(eq(customersTable.id, params.data.id));
+  if (!customer) { res.status(404).json({ error: "Customer not found" }); return; }
+
+  const creditLimit = parseFloat(String(customer.creditLimit ?? "0"));
+  const outstanding = await computeOutstanding(params.data.id);
+  const availableCredit = creditLimit <= 0 ? 0 : parseFloat(Math.max(0, creditLimit - outstanding).toFixed(2));
+  const creditStatus: "within_limit" | "over_limit" | "no_limit" =
+    creditLimit <= 0 ? "no_limit" : outstanding > creditLimit ? "over_limit" : "within_limit";
+
+  res.json({ creditLimit, outstanding, availableCredit, creditStatus });
 });
 
 router.patch("/customers/:id", async (req, res): Promise<void> => {

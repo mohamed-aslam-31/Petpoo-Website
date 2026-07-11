@@ -31,6 +31,8 @@ import { toast } from "sonner";
 import { PaymentFormDialog } from "../payments/payment-form-dialog";
 import { CustomerFormDialog } from "./customer-form-dialog";
 import { printStatement } from "@/lib/print-statement";
+import { useCreditStatus } from "@/hooks/use-credit-status";
+import { CreditLimitStatus } from "@/components/credit-limit-status";
 
 export function CustomerDetail() {
   const [, params] = useRoute("/customers/:id");
@@ -48,6 +50,7 @@ export function CustomerDetail() {
   const { data: balanceData, isLoading: isLoadingBalance } = useGetCustomerBalance(customerId, {
     query: { enabled: !!customerId, queryKey: getGetCustomerBalanceQueryKey(customerId) },
   });
+  const { data: creditStatus } = useCreditStatus(customerId || null);
   const { data: dwollaStatus } = useGetCustomerDwollaStatus({
     query: { queryKey: getGetCustomerDwollaStatusQueryKey(), staleTime: 60_000 },
   });
@@ -137,6 +140,14 @@ export function CustomerDetail() {
           </Card>
         ))}
       </div>
+
+      {/* Credit Status Panel */}
+      {creditStatus && creditStatus.creditStatus !== "no_limit" && (
+        <div className="rounded-lg border border-border/60 bg-card p-4 space-y-2">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Credit Status</h3>
+          <CreditLimitStatus data={creditStatus} />
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">

@@ -5,6 +5,7 @@ import { db, quotationsTable, customersTable, ordersTable, invoicesTable, produc
 import { logAudit } from "../lib/audit";
 import { cascadeDeleteCreditNotesForInvoice } from "../lib/credit-notes";
 import { deleteAccountingEntriesFor } from "../lib/accounting";
+import { checkCreditLimit, creditLimitErrorBody } from "../lib/credit-limit";
 
 const router: IRouter = Router();
 
@@ -463,6 +464,31 @@ router.patch("/quotations/bulk-status", async (req, res): Promise<void> => {
   const conversionErrors: string[] = [];
 
   if (status === "accepted") {
+    const isAdminOverride = req.headers["x-admin-override"] === "true";
+
+    if (!isAdminOverride) {
+      // Pre-check credit limits for all quotations before committing any status changes
+      const quotationRows = await db.select().from(quotationsTable).where(inArray(quotationsTable.id, ids));
+      for (const q of quotationRows) {
+        if (!q.isNewCustomer && q.customerId) {
+          const creditCheck = await checkCreditLimit(q.customerId, parseNum((q as any).total ?? 0));
+          if (!creditCheck.allowed) {
+            conversionErrors.push(`${q.quotationNumber}: Credit limit exceeded (excess ₹${creditCheck.excessAmount.toFixed(2)})`);
+          }
+        }
+      }
+      if (conversionErrors.length > 0) {
+        res.status(422).json({
+          error: "CREDIT_LIMIT_EXCEEDED",
+          message: `${conversionErrors.length} quotation(s) would exceed customer credit limits.`,
+          updated: 0,
+          ordersCreated: 0,
+          conversionErrors,
+        });
+        return;
+      }
+    }
+
     // Update status first, then trigger order creation (doConvertToOrder is idempotent).
     const updated = await db.update(quotationsTable)
       .set({ status })
@@ -595,6 +621,18 @@ router.patch("/quotations/:id", async (req, res): Promise<void> => {
     // the main update doesn't accidentally re-set them to stale values.
     delete (updates as any).convertedOrderId;
     delete (updates as any).convertedOrderNumber;
+  }
+
+  // Credit limit check: block quotation acceptance if it would exceed the customer's limit.
+  // Check BEFORE the DB update so no state changes occur on a rejected request.
+  if (data.status === "accepted" && existingBefore.status !== "accepted" && !existingBefore.isNewCustomer && existingBefore.customerId) {
+    const isAdminOverride = req.headers["x-admin-override"] === "true";
+    const quotationTotal = parseNum((existingBefore as any).total ?? 0);
+    const creditCheck = await checkCreditLimit(existingBefore.customerId, quotationTotal);
+    if (!creditCheck.allowed && !isAdminOverride) {
+      res.status(422).json(creditLimitErrorBody(creditCheck));
+      return;
+    }
   }
 
   const [quotation] = await db.update(quotationsTable).set(updates).where(eq(quotationsTable.id, id)).returning();

@@ -20,6 +20,8 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Search, Plus, MoreHorizontal, Trash2, Edit, Eye, FileText, ArrowRight, Filter, X, ChevronDown } from "lucide-react";
+import { CreditLimitWarning, type CreditLimitErrorData } from "@/components/credit-limit-warning";
+import { isAdmin } from "@/lib/auth";
 
 const PAGE_SIZE = 20;
 const QK = ["quotations"] as const;
@@ -29,11 +31,17 @@ const STATUSES = ["draft", "sent", "accepted", "rejected"] as const;
 type QuotationStatus = typeof STATUSES[number];
 
 // ── API helpers ───────────────────────────────────────────────────────────────
-async function apiFetch(path: string, init?: RequestInit) {
-  const res = await fetch(`/api${path}`, { headers: { "Content-Type": "application/json" }, ...init });
+async function apiFetch(path: string, init?: RequestInit, extraHeaders?: Record<string, string>) {
+  const res = await fetch(`/api${path}`, {
+    headers: { "Content-Type": "application/json", ...extraHeaders },
+    ...init,
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error ?? `Request failed ${res.status}`);
+    const error: any = new Error(err.message ?? err.error ?? `Request failed ${res.status}`);
+    error.status = res.status;
+    error.data = err;
+    throw error;
   }
   if (res.status === 204) return null;
   return res.json();
@@ -58,9 +66,14 @@ function useCreateQuotation() {
 function useUpdateQuotation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: any }) => apiFetch(`/quotations/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    mutationFn: ({ id, data, override }: { id: number; data: any; override?: boolean }) =>
+      apiFetch(`/quotations/${id}`, { method: "PATCH", body: JSON.stringify(data) },
+        override ? { "X-Admin-Override": "true" } : undefined),
     onSuccess: () => { qc.invalidateQueries({ queryKey: QK }); toast.success("Quotation updated"); },
-    onError: (e: any) => toast.error(e.message ?? "Failed to update"),
+    onError: (e: any) => {
+      if ((e as any)?.data?.error === "CREDIT_LIMIT_EXCEEDED") return; // handled by component
+      toast.error(e.message ?? "Failed to update");
+    },
   });
 }
 
@@ -85,10 +98,18 @@ function useBulkDelete() {
 function useBulkStatus() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ ids, status }: { ids: number[]; status: string }) =>
-      apiFetch("/quotations/bulk-status", { method: "PATCH", body: JSON.stringify({ ids, status }) }),
+    mutationFn: ({ ids, status, override }: { ids: number[]; status: string; override?: boolean }) =>
+      apiFetch("/quotations/bulk-status", { method: "PATCH", body: JSON.stringify({ ids, status }) },
+        override ? { "X-Admin-Override": "true" } : undefined),
     onSuccess: (data: any) => { qc.invalidateQueries({ queryKey: QK }); toast.success(`Updated ${data?.updated ?? 0} quotation(s)`); },
-    onError: (e: any) => toast.error(e.message ?? "Bulk status update failed"),
+    onError: (e: any) => {
+      if ((e as any)?.data?.error === "CREDIT_LIMIT_EXCEEDED") {
+        const errors: string[] = (e as any).data?.conversionErrors ?? [];
+        toast.error(`Credit limit exceeded for ${errors.length} quotation(s). An admin can override.`);
+        return;
+      }
+      toast.error(e.message ?? "Bulk status update failed");
+    },
   });
 }
 
@@ -266,6 +287,9 @@ function QuotationFormDialog({ open, onOpenChange, quotation }: { open: boolean;
   const { data: products } = useListProducts({ limit: 500 });
   const createMutation = useCreateQuotation();
   const updateMutation = useUpdateQuotation();
+  const [creditError, setCreditError] = useState<CreditLimitErrorData | null>(null);
+  const [pendingPayload, setPendingPayload] = useState<{ id: number; data: any } | null>(null);
+  const [adminOverride, setAdminOverride] = useState(false);
 
   const customerMode = form.watch("customerMode" as any);
   const qType = form.watch("type");
@@ -273,6 +297,9 @@ function QuotationFormDialog({ open, onOpenChange, quotation }: { open: boolean;
 
   useEffect(() => {
     if (!open) return;
+    setCreditError(null);
+    setAdminOverride(false);
+    setPendingPayload(null);
     if (quotation) {
       form.reset({
         customerMode: quotation.isNewCustomer ? "new" : "existing",
@@ -345,7 +372,17 @@ function QuotationFormDialog({ open, onOpenChange, quotation }: { open: boolean;
       });
     }
     if (isEditing && quotation) {
-      updateMutation.mutate({ id: quotation.id, data: payload }, { onSuccess: () => onOpenChange(false) });
+      setPendingPayload({ id: quotation.id, data: payload });
+      setCreditError(null);
+      updateMutation.mutate(
+        { id: quotation.id, data: payload, override: adminOverride },
+        {
+          onSuccess: () => { setCreditError(null); setAdminOverride(false); onOpenChange(false); },
+          onError: (e: any) => {
+            if (e?.data?.error === "CREDIT_LIMIT_EXCEEDED") setCreditError(e.data);
+          },
+        },
+      );
     } else {
       createMutation.mutate(payload, { onSuccess: () => onOpenChange(false) });
     }
@@ -472,9 +509,25 @@ function QuotationFormDialog({ open, onOpenChange, quotation }: { open: boolean;
 
             <FormField control={form.control} name={"notes" as any} render={({ field }) => (<FormItem><FormLabel>Notes</FormLabel><FormControl><Input placeholder="Optional notes..." {...field} /></FormControl></FormItem>)} />
 
+            {/* Credit limit error + admin override */}
+            {creditError && (
+              <CreditLimitWarning
+                data={creditError}
+                isAdmin={isAdmin()}
+                adminOverride={adminOverride}
+                onToggleOverride={setAdminOverride}
+              />
+            )}
+
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" disabled={isPending}>{isPending ? "Saving..." : isEditing ? "Save Changes" : "Create Quotation"}</Button>
+              <Button
+                type="submit"
+                disabled={isPending || (!!creditError && !adminOverride)}
+                variant={creditError && adminOverride ? "destructive" : "default"}
+              >
+                {isPending ? "Saving..." : creditError && adminOverride ? "Override & Save" : isEditing ? "Save Changes" : "Create Quotation"}
+              </Button>
             </DialogFooter>
           </form>
         </Form>

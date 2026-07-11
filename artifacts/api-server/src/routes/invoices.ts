@@ -10,6 +10,7 @@ import {
 import { logAudit } from "../lib/audit";
 import { cascadeDeleteCreditNotesForInvoice } from "../lib/credit-notes";
 import { recordInvoiceEntries, recordCreditNoteEntries, deleteAccountingEntriesFor } from "../lib/accounting";
+import { checkCreditLimit, creditLimitErrorBody } from "../lib/credit-limit";
 
 const router: IRouter = Router();
 
@@ -236,6 +237,14 @@ router.post("/invoices", async (req, res): Promise<void> => {
   const otherAmt = parseFloat(String(otherCharge));
   const { subtotal, cgst, sgst, igst, gstAmount, total, parsedItems } = calcInvoiceTotals(items as any[], discountAmt, transportAmt, packageAmt, otherAmt);
   const paymentStatus = (paidAmount ?? 0) >= total ? "paid" : (paidAmount ?? 0) > 0 ? "partial" : "unpaid";
+
+  // ── Credit limit enforcement ──────────────────────────────────────────────
+  const isAdminOverride = req.headers["x-admin-override"] === "true";
+  const creditCheck = await checkCreditLimit(customerId, total);
+  if (!creditCheck.allowed && !isAdminOverride) {
+    res.status(422).json(creditLimitErrorBody(creditCheck));
+    return;
+  }
 
   const [temp] = await db.insert(invoicesTable).values({
     invoiceNumber: "TEMP",

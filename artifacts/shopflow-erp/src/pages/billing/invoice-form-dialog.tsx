@@ -3,9 +3,8 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import {
-  useCreateInvoice,
   useUpdateInvoice,
   useListCustomers,
   useListProducts,
@@ -20,6 +19,10 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Trash2, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { useCreditStatus } from "@/hooks/use-credit-status";
+import { CreditLimitStatus } from "@/components/credit-limit-status";
+import { CreditLimitWarning, type CreditLimitErrorData } from "@/components/credit-limit-warning";
+import { isAdmin } from "@/lib/auth";
 
 const itemSchema = z.object({
   productId: z.coerce.number().min(1, "Product required"),
@@ -76,11 +79,20 @@ export function InvoiceFormDialog({
 }: { open: boolean; onOpenChange: (v: boolean) => void; invoice?: InvoiceToEdit | null }) {
   const isEditing = !!invoice;
   const queryClient = useQueryClient();
+  const [adminOverride, setAdminOverride] = useState(false);
+  const [creditError, setCreditError] = useState<CreditLimitErrorData | null>(null);
+
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: empty });
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "items" });
 
   const { data: customers } = useListCustomers({ limit: 200 });
   const { data: products } = useListProducts({ limit: 200 });
+
+  // Watch customerId to show credit status
+  const watchedCustomerId = form.watch("customerId");
+  const { data: creditStatus } = useCreditStatus(
+    !isEditing && watchedCustomerId > 0 ? watchedCustomerId : null,
+  );
 
   // Normalise invoice type — strip legacy values
   function normaliseType(t: string): "gst" | "non_gst" {
@@ -117,14 +129,39 @@ export function InvoiceFormDialog({
         form.reset({ ...empty, dueDate: new Date().toISOString().split("T")[0] });
       }
     }
+    if (!open) {
+      setAdminOverride(false);
+      setCreditError(null);
+    }
   }, [open, invoice, form]);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
 
-  const createMutation = useCreateInvoice({
-    mutation: {
-      onSuccess: () => { toast.success("Invoice created"); invalidate(); onOpenChange(false); },
-      onError: (e: any) => toast.error(e?.message ?? "Failed to create invoice"),
+  // Create invoice with credit limit enforcement + admin override support
+  const createMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (adminOverride) headers["X-Admin-Override"] = "true";
+      const res = await fetch("/api/invoices", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const err: any = new Error(data.message ?? data.error ?? "Failed to create invoice");
+        err.data = data;
+        throw err;
+      }
+      return data;
+    },
+    onSuccess: () => { toast.success("Invoice created"); invalidate(); onOpenChange(false); },
+    onError: (e: any) => {
+      if (e.data?.error === "CREDIT_LIMIT_EXCEEDED") {
+        setCreditError(e.data);
+        return;
+      }
+      toast.error(e.message ?? "Failed to create invoice");
     },
   });
 
@@ -163,7 +200,8 @@ export function InvoiceFormDialog({
     if (isEditing && invoice) {
       updateMutation.mutate({ id: invoice.id, data: payload as any });
     } else {
-      createMutation.mutate({ data: payload as any });
+      setCreditError(null);
+      createMutation.mutate(payload as any);
     }
   }
 
@@ -177,6 +215,7 @@ export function InvoiceFormDialog({
   }
 
   const isPending = createMutation.isPending || updateMutation.isPending;
+  const userIsAdmin = isAdmin();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -190,7 +229,7 @@ export function InvoiceFormDialog({
             <div className="grid grid-cols-2 gap-4">
               <FormField control={form.control} name="customerId" render={({ field }) => (
                 <FormItem><FormLabel>Customer</FormLabel>
-                  <Select onValueChange={(v) => field.onChange(Number(v))} value={field.value ? String(field.value) : ""}>
+                  <Select onValueChange={(v) => { field.onChange(Number(v)); setCreditError(null); }} value={field.value ? String(field.value) : ""}>
                     <FormControl><SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger></FormControl>
                     <SelectContent>{customers?.data?.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
                   </Select><FormMessage />
@@ -307,13 +346,43 @@ export function InvoiceFormDialog({
               <span className="text-lg font-bold">₹{grandTotal.toFixed(2)}</span>
             </div>
 
+            {/* Credit status preview (only for new invoices with a customer selected) */}
+            {!isEditing && creditStatus && creditStatus.creditStatus !== "no_limit" && (
+              <div className="rounded-md border border-border/60 bg-muted/20 p-3">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Customer Credit</p>
+                <CreditLimitStatus data={creditStatus} compact projectedAmount={grandTotal} />
+              </div>
+            )}
+
+            {/* Credit limit error + admin override (only for new invoices) */}
+            {!isEditing && creditError && (
+              <CreditLimitWarning
+                data={creditError}
+                isAdmin={userIsAdmin}
+                adminOverride={adminOverride}
+                onToggleOverride={setAdminOverride}
+              />
+            )}
+
             <FormField control={form.control} name="notes" render={({ field }) => (
               <FormItem><FormLabel>Notes</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
             )} />
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" disabled={isPending}>{isPending ? "Saving..." : isEditing ? "Save Changes" : "Create Invoice"}</Button>
+              <Button
+                type="submit"
+                disabled={isPending || (!isEditing && !!creditError && !adminOverride)}
+                variant={!isEditing && creditError && adminOverride ? "destructive" : "default"}
+              >
+                {isPending
+                  ? "Saving..."
+                  : !isEditing && creditError && adminOverride
+                  ? "Override & Create Invoice"
+                  : isEditing
+                  ? "Save Changes"
+                  : "Create Invoice"}
+              </Button>
             </DialogFooter>
           </form>
         </Form>

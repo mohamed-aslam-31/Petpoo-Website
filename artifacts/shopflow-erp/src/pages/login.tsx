@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { motion } from "framer-motion";
 import { Store, TrendingUp, PackageSearch } from "lucide-react";
+import { setAuthData } from "@/lib/auth";
 
 export function Login() {
   const [, setLocation] = useLocation();
@@ -14,7 +15,7 @@ export function Login() {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    localStorage.setItem("shopflow_auth", "true");
+    setAuthData(email);
     setLocation("/dashboard");
   };
 
