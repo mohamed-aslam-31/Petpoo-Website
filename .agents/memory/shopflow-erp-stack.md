@@ -52,3 +52,14 @@ description: Key stack decisions, port, workflow, and API patterns for this proj
 - Deleting an Invoice (directly, or cascaded from Order/Quotation deletion) must cascade-delete its Credit Notes first, reversing their stock/outstanding effects (`artifacts/api-server/src/lib/credit-notes.ts:cascadeDeleteCreditNotesForInvoice`) — run inside the same transaction as the invoice delete.
 - Credit-note creation runs inside a transaction with `SELECT ... FOR UPDATE` on the invoice row, so concurrent creates against the same invoice can't jointly exceed its amount/quantity caps.
 - Customer `outstanding` is always recomputed on read from invoices − payments − credit notes (see `computeOutstanding` in `customers.ts`), scoped to non-returned invoices; the `customersTable.outstanding` column itself is effectively unused/stale — don't trust it directly.
+
+## Accounting ledger + Cancel Invoice
+- `accounting_entries` table logs sales/receivable/refund effects: invoice creation posts sales+receivable "increase"; credit note creation posts the "decrease" reversal (+ refund "increase" for return/cancellation types). Entries are deleted (not reversed) when their source invoice/credit-note is deleted, so the ledger only ever reflects live documents — same pattern as stock movements.
+- "Cancel Invoice" (`POST /invoices/:id/cancel`) auto-creates a full-reversal Credit Note (type `cancellation`) for whatever balance/items haven't already been credited, restores stock, marks the invoice `cancelled`, and keeps the invoice row for audit — never deletes it.
+- **Why:** the ERP treats Delete as "never happened" (full cascade removal) vs. Cancel/Return as "happened then reversed" (row kept, reversal recorded) — mixing these up breaks the audit trail.
+- **How to apply:** any new invoice/credit-note creation or deletion path must call the matching `recordInvoiceEntries`/`recordCreditNoteEntries`/`deleteAccountingEntriesFor` helper in `artifacts/api-server/src/lib/accounting.ts` to keep the ledger consistent.
+
+## Orval codegen naming collision
+- If a new OpenAPI operation's auto-derived request/response type name (`<operationId>Body`/`<operationId>Response`) exactly matches the name of a `components.schemas.*` entry it references via `$ref`, orval's zod target generates two same-named exports (one in `generated/api.ts`, one in `generated/types/*.ts`) and `tsc` fails with "already exported a member" in `lib/api-zod/src/index.ts`.
+- **Why:** zod config's `schemas: { type: "typescript" }` emits a standalone type file per named component schema, independent of the request/response name orval derives from the operationId.
+- **How to apply:** name request/response component schemas differently from `<operationId>Body`/`<operationId>Response` (e.g. suffix `Request`/`Result` instead) to avoid the collision.

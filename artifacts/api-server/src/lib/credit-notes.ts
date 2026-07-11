@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db, creditNotesTable, customersTable, productsTable, stockMovementsTable } from "@workspace/db";
 import { logAudit } from "./audit";
+import { deleteAccountingEntriesFor } from "./accounting";
 
 function parseNum(v: any) { return parseFloat(String(v ?? "0")); }
 
@@ -50,6 +51,7 @@ export async function cascadeDeleteCreditNotesForInvoice(invoiceId: number, reas
       await reverseCreditNoteStock(items, `Credit Note ${cn.creditNoteNumber} - ${reason}`, tx);
     }
 
+    await deleteAccountingEntriesFor("credit_note", cn.id, tx);
     await tx.delete(creditNotesTable).where(eq(creditNotesTable.id, cn.id));
     await logAudit({
       entityType: "credit_note",

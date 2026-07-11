@@ -13,6 +13,7 @@ import {
 } from "@workspace/api-zod";
 import { logAudit } from "../lib/audit";
 import { cascadeDeleteCreditNotesForInvoice } from "../lib/credit-notes";
+import { recordInvoiceEntries, deleteAccountingEntriesFor } from "../lib/accounting";
 
 const router: IRouter = Router();
 
@@ -309,6 +310,7 @@ router.delete("/orders/:id", async (req, res): Promise<void> => {
     if (invoice) {
       // A credit note can only exist while its invoice does — unwind any first.
       await cascadeDeleteCreditNotesForInvoice(invoice.id, `Order ${existing.orderNumber} was deleted`, tx);
+      await deleteAccountingEntriesFor("invoice", invoice.id, tx);
       await tx.delete(invoicesTable).where(eq(invoicesTable.id, invoice.id));
       await logAudit({ entityType: "invoice", entityId: invoice.id, entityNumber: invoice.invoiceNumber, action: "cascaded_delete", oldStatus: invoice.status, notes: `Deleted because parent order ${existing.orderNumber} was deleted` }, tx);
     }
@@ -406,6 +408,9 @@ router.post("/orders/:id/complete", async (req, res): Promise<void> => {
   }
 
   await db.update(ordersTable).set({ status: "completed" }).where(eq(ordersTable.id, order.id));
+
+  // Post accounting effects: increase sales + increase customer receivable
+  await recordInvoiceEntries({ id: invoice.id, invoiceNumber: invoice.invoiceNumber, customerId: invoice.customerId, total });
 
   await logAudit({ entityType: "order", entityId: order.id, entityNumber: order.orderNumber, action: "status_changed", oldStatus: "pending", newStatus: "completed" });
   await logAudit({ entityType: "invoice", entityId: invoice.id, entityNumber: invoice.invoiceNumber, action: "created", newStatus: invoice.status, notes: `Generated from order ${order.orderNumber}` });

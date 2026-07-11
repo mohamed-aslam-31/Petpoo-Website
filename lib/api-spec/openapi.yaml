@@ -1025,6 +1025,31 @@ paths:
         "204":
           description: Deleted
 
+  /invoices/{id}/cancel:
+    post:
+      operationId: cancelInvoice
+      summary: Cancel a finalized invoice (auto-creates a reversal credit note, restores stock, posts the accounting reversal)
+      tags: [invoices]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelInvoiceRequest"
+      responses:
+        "200":
+          description: Invoice cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelInvoiceResult"
+
   # Payments
   /payments:
     get:
@@ -1884,6 +1909,25 @@ components:
         dueDate:       { type: string }
         notes:         { type: string }
         items:         { type: array, items: { $ref: "#/components/schemas/InvoiceItemInput" } }
+
+    CancelInvoiceRequest:
+      type: object
+      properties:
+        reason: { type: string }
+        notes:  { type: string }
+
+    CancelInvoiceResult:
+      type: object
+      properties:
+        invoice:
+          $ref: "#/components/schemas/Invoice"
+        creditNote:
+          type: object
+          nullable: true
+          properties:
+            id:               { type: integer }
+            creditNoteNumber: { type: string }
+            amount:           { type: number }
 
     AuditLogEntry:
       type: object

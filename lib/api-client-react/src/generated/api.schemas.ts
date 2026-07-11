@@ -558,6 +558,22 @@ export interface InvoiceUpdate {
   items?: InvoiceItemInput[];
 }
 
+export interface CancelInvoiceRequest {
+  reason?: string;
+  notes?: string;
+}
+
+export type CancelInvoiceResultCreditNote = {
+  id?: number;
+  creditNoteNumber?: string;
+  amount?: number;
+} | null;
+
+export interface CancelInvoiceResult {
+  invoice?: Invoice;
+  creditNote?: CancelInvoiceResultCreditNote;
+}
+
 export type AuditLogEntryEntityType = typeof AuditLogEntryEntityType[keyof typeof AuditLogEntryEntityType];
 
 

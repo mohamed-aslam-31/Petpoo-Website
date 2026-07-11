@@ -3,6 +3,7 @@ import { eq, sql, ilike } from "drizzle-orm";
 import { z } from "zod";
 import { db, creditNotesTable, customersTable, invoicesTable, productsTable, stockMovementsTable } from "@workspace/db";
 import { logAudit } from "../lib/audit";
+import { recordCreditNoteEntries, deleteAccountingEntriesFor } from "../lib/accounting";
 
 const router: IRouter = Router();
 
@@ -20,7 +21,7 @@ const CreateCreditNoteSchema = z.object({
   // Credit notes are reversal documents — they must always reference an existing invoice.
   invoiceId: z.number().int().positive({ message: "A credit note must be linked to an invoice" }),
   customerId: z.number().int().positive(),
-  type: z.enum(["return", "damaged", "wrong_amount"]),
+  type: z.enum(["return", "damaged", "wrong_amount", "cancellation"]),
   amount: z.number().min(0),
   reason: z.string().optional(),
   items: z.array(ReturnItemSchema).optional().default([]),
@@ -84,15 +85,15 @@ async function increaseStock(productId: number, quantity: number, reason: string
   } as any);
 }
 
-async function decreaseStock(productId: number, quantity: number, reason: string) {
+async function decreaseStock(productId: number, quantity: number, reason: string, tx: Pick<typeof db, "select" | "update" | "insert"> = db) {
   const intQty = Math.round(quantity);
   if (intQty <= 0) return;
-  const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
+  const [product] = await tx.select().from(productsTable).where(eq(productsTable.id, productId));
   if (!product) return;
   const beforeStock = product.currentStock;
   const afterStock = Math.max(0, beforeStock - intQty);
-  await db.update(productsTable).set({ currentStock: afterStock }).where(eq(productsTable.id, productId));
-  await db.insert(stockMovementsTable).values({
+  await tx.update(productsTable).set({ currentStock: afterStock }).where(eq(productsTable.id, productId));
+  await tx.insert(stockMovementsTable).values({
     productId,
     type: "adjustment",
     quantity: -(afterStock - beforeStock), // negative delta recorded as-is
@@ -224,6 +225,16 @@ router.post("/credit-notes", async (req, res): Promise<void> => {
         }
       }
 
+      // Post the accounting reversal: reduced sales + reduced receivable, plus a
+      // refund/credit entry for return and cancellation types.
+      await recordCreditNoteEntries({
+        id: savedNote.id,
+        creditNoteNumber: savedNote.creditNoteNumber,
+        customerId: savedNote.customerId,
+        amount: parseNum(savedNote.amount),
+        type: savedNote.type,
+      }, tx);
+
       await logAudit({ entityType: "credit_note", entityId: savedNote.id, entityNumber: savedNote.creditNoteNumber, action: "created", newStatus: savedNote.status, notes: `Against invoice ${invoiceNumber}` }, tx);
 
       return { ...savedNote, customerName: customer.name };
@@ -279,27 +290,34 @@ router.delete("/credit-notes/:id", async (req, res): Promise<void> => {
   const [cn] = await db.select().from(creditNotesTable).where(eq(creditNotesTable.id, id));
   if (!cn) { res.status(404).json({ error: "Credit note not found" }); return; }
 
-  // Reverse outstanding reduction
-  const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, cn.customerId));
-  if (customer) {
-    const restoredOutstanding = parseNum(customer.outstanding) + parseNum(cn.amount);
-    await db.update(customersTable)
-      .set({ outstanding: String(restoredOutstanding) })
-      .where(eq(customersTable.id, cn.customerId));
-  }
+  await db.transaction(async (tx) => {
+    // Reverse outstanding reduction
+    const [customer] = await tx.select().from(customersTable).where(eq(customersTable.id, cn.customerId));
+    if (customer) {
+      const restoredOutstanding = parseNum(customer.outstanding) + parseNum(cn.amount);
+      await tx.update(customersTable)
+        .set({ outstanding: String(restoredOutstanding) })
+        .where(eq(customersTable.id, cn.customerId));
+    }
 
-  // Reverse stock increase for return-type credit notes
-  if (cn.type === "return") {
-    const items = Array.isArray(cn.items) ? cn.items as any[] : [];
-    for (const item of items) {
-      if (item.productId && item.quantity > 0) {
-        await decreaseStock(item.productId, item.quantity, `Void Credit Note ${cn.creditNoteNumber}`);
+    // Reverse stock increase for return-type credit notes
+    if (cn.type === "return") {
+      const items = Array.isArray(cn.items) ? cn.items as any[] : [];
+      for (const item of items) {
+        if (item.productId && item.quantity > 0) {
+          await decreaseStock(item.productId, item.quantity, `Void Credit Note ${cn.creditNoteNumber}`, tx);
+        }
       }
     }
-  }
 
-  await db.delete(creditNotesTable).where(eq(creditNotesTable.id, id));
-  await logAudit({ entityType: "credit_note", entityId: cn.id, entityNumber: cn.creditNoteNumber, action: "deleted", oldStatus: cn.status });
+    // Remove this credit note's own accounting reversal (per spec: deleting a credit
+    // note only unwinds the credit note itself — invoice/order/quotation stay untouched).
+    await deleteAccountingEntriesFor("credit_note", cn.id, tx);
+
+    await tx.delete(creditNotesTable).where(eq(creditNotesTable.id, id));
+    await logAudit({ entityType: "credit_note", entityId: cn.id, entityNumber: cn.creditNoteNumber, action: "deleted", oldStatus: cn.status }, tx);
+  });
+
   res.sendStatus(204);
 });
 

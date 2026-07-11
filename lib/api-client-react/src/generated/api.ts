@@ -24,6 +24,8 @@ import type {
   Brand,
   BrandInput,
   BrandUpdate,
+  CancelInvoiceRequest,
+  CancelInvoiceResult,
   Category,
   CategoryInput,
   CategoryUpdate,
@@ -3619,6 +3621,77 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
         TContext
       > => {
       return useMutation(getDeleteInvoiceMutationOptions(options));
+    }
+
+export const getCancelInvoiceUrl = (id: number,) => {
+
+
+
+
+  return `/api/invoices/${id}/cancel`
+}
+
+/**
+ * @summary Cancel a finalized invoice (auto-creates a reversal credit note, restores stock, posts the accounting reversal)
+ */
+export const cancelInvoice = async (id: number,
+    cancelInvoiceRequest?: CancelInvoiceRequest, options?: RequestInit): Promise<CancelInvoiceResult> => {
+
+  return customFetch<CancelInvoiceResult>(getCancelInvoiceUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(cancelInvoiceRequest)
+  }
+);}
+
+
+
+
+export const getCancelInvoiceMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelInvoice>>, TError,{id: number;data?: BodyType<CancelInvoiceRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelInvoice>>, TError,{id: number;data?: BodyType<CancelInvoiceRequest>}, TContext> => {
+
+const mutationKey = ['cancelInvoice'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelInvoice>>, {id: number;data?: BodyType<CancelInvoiceRequest>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  cancelInvoice(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelInvoiceMutationResult = NonNullable<Awaited<ReturnType<typeof cancelInvoice>>>
+    export type CancelInvoiceMutationBody = BodyType<CancelInvoiceRequest> | undefined
+    export type CancelInvoiceMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Cancel a finalized invoice (auto-creates a reversal credit note, restores stock, posts the accounting reversal)
+ */
+export const useCancelInvoice = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelInvoice>>, TError,{id: number;data?: BodyType<CancelInvoiceRequest>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelInvoice>>,
+        TError,
+        {id: number;data?: BodyType<CancelInvoiceRequest>},
+        TContext
+      > => {
+      return useMutation(getCancelInvoiceMutationOptions(options));
     }
 
 export const getListPaymentsUrl = (params?: ListPaymentsParams,) => {

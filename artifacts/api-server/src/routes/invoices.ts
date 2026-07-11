@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, and, sql, gte, lte, or } from "drizzle-orm";
-import { db, invoicesTable, ordersTable, customersTable, productsTable, stockMovementsTable, quotationsTable } from "@workspace/db";
+import { db, invoicesTable, ordersTable, customersTable, productsTable, stockMovementsTable, quotationsTable, creditNotesTable } from "@workspace/db";
 import {
   CreateInvoiceBody,
   GetInvoiceParams,
@@ -9,8 +9,18 @@ import {
 } from "@workspace/api-zod";
 import { logAudit } from "../lib/audit";
 import { cascadeDeleteCreditNotesForInvoice } from "../lib/credit-notes";
+import { recordInvoiceEntries, recordCreditNoteEntries, deleteAccountingEntriesFor } from "../lib/accounting";
 
 const router: IRouter = Router();
+
+class HttpError extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
+
+function generateCreditNoteNumber(id: number) {
+  const year = new Date().getFullYear();
+  return `CN${year}${String(id).padStart(5, "0")}`;
+}
 
 function parseItems(raw: any): any[] {
   return Array.isArray(raw) ? raw : (typeof raw === "string" ? JSON.parse(raw) : []);
@@ -257,6 +267,9 @@ router.post("/invoices", async (req, res): Promise<void> => {
   // Standalone invoices (not generated from an order) deduct stock directly
   await deductInvoiceStock(parsedItems, invoiceNumber);
 
+  // Post accounting effects: increase sales + increase customer receivable
+  await recordInvoiceEntries({ id: invoice.id, invoiceNumber: invoice.invoiceNumber, customerId: invoice.customerId, total });
+
   await logAudit({ entityType: "invoice", entityId: invoice.id, entityNumber: invoice.invoiceNumber, action: "created", newStatus: invoice.status });
 
   res.status(201).json(parseInvoice(invoice, customer.name));
@@ -400,6 +413,9 @@ router.delete("/invoices/:id", async (req, res): Promise<void> => {
     // A credit note can only exist while its invoice does — unwind any first.
     await cascadeDeleteCreditNotesForInvoice(existing.id, `Invoice ${existing.invoiceNumber} was deleted`, tx);
 
+    // Remove this invoice's own accounting entries (sales/receivable increase).
+    await deleteAccountingEntriesFor("invoice", existing.id, tx);
+
     await tx.delete(invoicesTable).where(eq(invoicesTable.id, params.data.id));
     await logAudit({ entityType: "invoice", entityId: existing.id, entityNumber: existing.invoiceNumber, action: "deleted", oldStatus: existing.status }, tx);
 
@@ -424,6 +440,110 @@ router.delete("/invoices/:id", async (req, res): Promise<void> => {
   });
 
   res.sendStatus(204);
+});
+
+/**
+ * Cancel a finalized invoice: auto-create a full reversal credit note against
+ * whatever balance/items haven't already been credited, restore stock for those
+ * items, post the accounting reversal, and mark the invoice "cancelled" — the
+ * invoice row itself is kept (never deleted) so it remains in the audit trail.
+ */
+router.post("/invoices/:id/cancel", async (req, res): Promise<void> => {
+  const params = GetInvoiceParams.safeParse(req.params);
+  if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  const { reason, notes } = (req.body ?? {}) as { reason?: string; notes?: string };
+
+  try {
+    const result = await db.transaction(async (tx) => {
+      const [invoice] = await tx.select().from(invoicesTable).where(eq(invoicesTable.id, params.data.id)).for("update");
+      if (!invoice) throw new HttpError(404, "Invoice not found");
+      if (["cancelled", "returned"].includes(invoice.status)) {
+        throw new HttpError(400, `Invoice is already ${invoice.status}`);
+      }
+
+      const [customer] = await tx.select().from(customersTable).where(eq(customersTable.id, invoice.customerId));
+      if (!customer) throw new HttpError(404, "Customer not found");
+
+      const invoiceTotal = parseFloat(String(invoice.total));
+      const existingNotes = await tx.select().from(creditNotesTable).where(eq(creditNotesTable.invoiceId, invoice.id));
+      const alreadyCredited = existingNotes.reduce((sum, n) => sum + parseFloat(String(n.amount)), 0);
+      const remainingAmount = Math.max(0, invoiceTotal - alreadyCredited);
+
+      // Only restock items that haven't already been returned by an earlier credit note
+      const invoiceItems = parseItems(invoice.items);
+      const alreadyReturnedByProduct = new Map<number, number>();
+      for (const n of existingNotes) {
+        if (n.type !== "return" && n.type !== "cancellation") continue;
+        const items = Array.isArray(n.items) ? (n.items as any[]) : [];
+        for (const it of items) alreadyReturnedByProduct.set(it.productId, (alreadyReturnedByProduct.get(it.productId) ?? 0) + (it.quantity ?? 0));
+      }
+      const remainingItems = invoiceItems
+        .filter((it: any) => it.productId)
+        .map((it: any) => {
+          const already = alreadyReturnedByProduct.get(it.productId) ?? 0;
+          const remainingQty = Math.max(0, Math.round((it.quantity ?? 0) - already));
+          return { productId: it.productId, productName: it.productName, quantity: remainingQty, unitPrice: it.unitPrice, amount: remainingQty * (it.unitPrice ?? 0) };
+        })
+        .filter((it: any) => it.quantity > 0);
+
+      let creditNote: any = null;
+      if (remainingAmount > 0.01) {
+        const [temp] = await tx.insert(creditNotesTable).values({
+          creditNoteNumber: "TEMP",
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          customerId: invoice.customerId,
+          type: "cancellation",
+          amount: String(remainingAmount),
+          reason: reason ?? "Invoice cancelled",
+          items: remainingItems as any,
+          status: "applied",
+          notes: notes ?? null,
+        } as any).returning();
+
+        const creditNoteNumber = generateCreditNoteNumber(temp.id);
+        [creditNote] = await tx.update(creditNotesTable).set({ creditNoteNumber }).where(eq(creditNotesTable.id, temp.id)).returning();
+
+        for (const item of remainingItems) {
+          if (item.productId && item.quantity > 0) {
+            await adjustStock(item.productId, "return", item.quantity, `Credit Note ${creditNoteNumber} - invoice cancelled`, undefined, tx);
+          }
+        }
+
+        await recordCreditNoteEntries({
+          id: creditNote.id,
+          creditNoteNumber: creditNote.creditNoteNumber,
+          customerId: creditNote.customerId,
+          amount: remainingAmount,
+          type: "cancellation",
+        }, tx);
+
+        await logAudit({ entityType: "credit_note", entityId: creditNote.id, entityNumber: creditNote.creditNoteNumber, action: "created", newStatus: creditNote.status, notes: `Auto-created cancelling invoice ${invoice.invoiceNumber}` }, tx);
+      }
+
+      const [updatedInvoice] = await tx.update(invoicesTable).set({ status: "cancelled" }).where(eq(invoicesTable.id, invoice.id)).returning();
+
+      await logAudit({ entityType: "invoice", entityId: invoice.id, entityNumber: invoice.invoiceNumber, action: "status_changed", oldStatus: invoice.status, newStatus: "cancelled", notes: reason ?? "Invoice cancelled" }, tx);
+
+      return { invoice: updatedInvoice, creditNote, customerName: customer.name };
+    });
+
+    // Keep the order/quotation chain consistent with every other terminal invoice transition.
+    if (result.invoice.orderId) {
+      await cascadeToOrderAndQuotation(result.invoice, "pending", `Invoice ${result.invoice.invoiceNumber} was cancelled`);
+    }
+
+    res.json({
+      invoice: parseInvoice(result.invoice, result.customerName),
+      creditNote: result.creditNote
+        ? { id: result.creditNote.id, creditNoteNumber: result.creditNote.creditNoteNumber, amount: parseFloat(String(result.creditNote.amount)) }
+        : null,
+    });
+  } catch (err) {
+    if (err instanceof HttpError) { res.status(err.status).json({ error: err.message }); return; }
+    throw err;
+  }
 });
 
 export default router;

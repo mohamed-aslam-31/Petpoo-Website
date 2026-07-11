@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db, quotationsTable, customersTable, ordersTable, invoicesTable, productsTable, stockMovementsTable } from "@workspace/db";
 import { logAudit } from "../lib/audit";
 import { cascadeDeleteCreditNotesForInvoice } from "../lib/credit-notes";
+import { deleteAccountingEntriesFor } from "../lib/accounting";
 
 const router: IRouter = Router();
 
@@ -295,6 +296,7 @@ async function cascadeDeleteConvertedOrder(quotation: any, reason: string) {
       }
       // A credit note can only exist while its invoice does — unwind any first.
       await cascadeDeleteCreditNotesForInvoice(invoice.id, reason, tx);
+      await deleteAccountingEntriesFor("invoice", invoice.id, tx);
       await tx.delete(invoicesTable).where(eq(invoicesTable.id, invoice.id));
       await logAudit({ entityType: "invoice", entityId: invoice.id, entityNumber: invoice.invoiceNumber, action: "cascaded_delete", oldStatus: invoice.status, notes: reason }, tx);
     } else if (order.status === "pending") {

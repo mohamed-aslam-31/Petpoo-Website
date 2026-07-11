@@ -5,6 +5,7 @@ import {
   useListInvoices,
   useDeleteInvoice,
   useUpdateInvoice,
+  useCancelInvoice,
   getListInvoicesQueryKey,
 } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, Plus, MoreHorizontal, Trash2, Edit, Filter, X, CheckSquare } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Trash2, Edit, Filter, X, CheckSquare, Ban } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "@/components/ui/alert-dialog";
@@ -31,6 +32,7 @@ export function Invoices() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingInvoice, setEditingInvoice] = useState<any | null>(null);
   const [deletingInvoice, setDeletingInvoice] = useState<any | null>(null);
+  const [cancellingInvoice, setCancellingInvoice] = useState<any | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
   // Filters
@@ -108,6 +110,21 @@ export function Invoices() {
   });
 
   const updateMutation = useUpdateInvoice({ mutation: {} });
+
+  const cancelMutation = useCancelInvoice({
+    mutation: {
+      onSuccess: (result: any) => {
+        toast.success(
+          result?.creditNote
+            ? `Invoice cancelled — Credit Note ${result.creditNote.creditNoteNumber} created for ₹${Number(result.creditNote.amount).toLocaleString("en-IN")}`
+            : "Invoice cancelled"
+        );
+        invalidate();
+        setCancellingInvoice(null);
+      },
+      onError: (e: any) => toast.error(e?.message ?? "Failed to cancel invoice"),
+    },
+  });
 
   async function handleBulkStatusChange(status: string) {
     if (selectedIds.size === 0) return;
@@ -313,6 +330,9 @@ export function Invoices() {
                         <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem className="cursor-pointer" onClick={() => { setEditingInvoice(invoice); setFormOpen(true); }}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
+                          {!["cancelled", "returned"].includes(invoice.status) && (
+                            <DropdownMenuItem className="cursor-pointer" onClick={() => setCancellingInvoice(invoice)}><Ban className="mr-2 h-4 w-4" /> Cancel Invoice</DropdownMenuItem>
+                          )}
                           <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={() => setDeletingInvoice(invoice)}><Trash2 className="mr-2 h-4 w-4" /> Delete</DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -345,6 +365,29 @@ export function Invoices() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => deletingInvoice && deleteMutation.mutate({ id: deletingInvoice.id })}>
               {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cancel invoice confirm */}
+      <AlertDialog open={!!cancellingInvoice} onOpenChange={(open) => !open && setCancellingInvoice(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Invoice "{cancellingInvoice?.invoiceNumber}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will automatically issue a full reversal credit note, restore stock for its items, and post the
+              accounting reversal. The invoice itself is kept (marked "Cancelled") for your audit history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelMutation.isPending}>Back</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={cancelMutation.isPending}
+              onClick={() => cancellingInvoice && cancelMutation.mutate({ id: cancellingInvoice.id, data: { reason: "Cancelled from Invoices page" } })}
+            >
+              {cancelMutation.isPending ? "Cancelling..." : "Cancel Invoice"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

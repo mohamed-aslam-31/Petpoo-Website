@@ -1335,6 +1335,66 @@ export const DeleteInvoiceResponse = zod.void()
 
 
 /**
+ * @summary Cancel a finalized invoice (auto-creates a reversal credit note, restores stock, posts the accounting reversal)
+ */
+export const CancelInvoiceParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CancelInvoiceBody = zod.object({
+  "reason": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const CancelInvoiceResponse = zod.object({
+  "invoice": zod.object({
+  "id": zod.number(),
+  "invoiceNumber": zod.string(),
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "orderId": zod.number().nullish(),
+  "orderNumber": zod.string().nullish(),
+  "quotationId": zod.number().nullish(),
+  "quotationNumber": zod.string().nullish(),
+  "createdFrom": zod.enum(['quotation', 'order', 'direct']).optional(),
+  "type": zod.string(),
+  "status": zod.string(),
+  "subtotal": zod.number(),
+  "discount": zod.number().optional(),
+  "cgst": zod.number().optional(),
+  "sgst": zod.number().optional(),
+  "igst": zod.number().optional(),
+  "gstAmount": zod.number(),
+  "transport": zod.number().optional(),
+  "packageCharge": zod.number().optional(),
+  "otherCharge": zod.number().optional(),
+  "total": zod.number(),
+  "paidAmount": zod.number().optional(),
+  "paymentStatus": zod.string(),
+  "paymentMethod": zod.string().nullish(),
+  "dueDate": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "sku": zod.string().optional(),
+  "quantity": zod.number(),
+  "unitPrice": zod.number(),
+  "discount": zod.number().optional(),
+  "gstPercent": zod.number().optional(),
+  "total": zod.number()
+})).optional(),
+  "createdAt": zod.string()
+}).optional(),
+  "creditNote": zod.object({
+  "id": zod.number().optional(),
+  "creditNoteNumber": zod.string().optional(),
+  "amount": zod.number().optional()
+}).nullish()
+})
+
+
+/**
  * @summary List payments
  */
 export const ListPaymentsQueryParams = zod.object({

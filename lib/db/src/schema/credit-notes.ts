@@ -10,7 +10,7 @@ export const creditNotesTable = pgTable("credit_notes", {
   invoiceNumber: text("invoice_number").notNull(),
   customerId: integer("customer_id").notNull().references(() => customersTable.id),
   // Type of credit note
-  type: text("type").notNull(), // return | damaged | wrong_amount
+  type: text("type").notNull(), // return | damaged | wrong_amount | cancellation
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull().default("0"),
   reason: text("reason"),
   // For "return" type: [{productId, productName, quantity, unitPrice, amount}]
