@@ -19,7 +19,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Search, Plus, MoreHorizontal, Trash2, Edit, Eye, FileText, ArrowRight, Filter, X, ChevronDown } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Trash2, Edit, Eye, FileText, ArrowRight, Filter, X, ChevronDown, AlertTriangle } from "lucide-react";
 import { CreditLimitWarning, type CreditLimitErrorData } from "@/components/credit-limit-warning";
 import { isAdmin } from "@/lib/auth";
 
@@ -103,11 +103,7 @@ function useBulkStatus() {
         override ? { "X-Admin-Override": "true" } : undefined),
     onSuccess: (data: any) => { qc.invalidateQueries({ queryKey: QK }); toast.success(`Updated ${data?.updated ?? 0} quotation(s)`); },
     onError: (e: any) => {
-      if ((e as any)?.data?.error === "CREDIT_LIMIT_EXCEEDED") {
-        const errors: string[] = (e as any).data?.conversionErrors ?? [];
-        toast.error(`Credit limit exceeded for ${errors.length} quotation(s). An admin can override.`);
-        return;
-      }
+      if ((e as any)?.data?.error === "CREDIT_LIMIT_EXCEEDED") return; // handled by component
       toast.error(e.message ?? "Bulk status update failed");
     },
   });
@@ -649,6 +645,7 @@ export function Quotations() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
+  const [bulkCreditError, setBulkCreditError] = useState<{ status: string; ids: number[]; errors: string[] } | null>(null);
 
   const { data, isLoading } = useQuotations({ page, search: search || undefined, status: statusFilter || undefined });
   const deleteMutation = useDeleteQuotation();
@@ -684,13 +681,21 @@ export function Quotations() {
     });
   }
 
-  function handleBulkStatus(status: string) {
-    bulkStatusMutation.mutate({ ids: Array.from(selectedIds), status }, {
+  function handleBulkStatus(status: string, ids?: number[], override?: boolean) {
+    const targetIds = ids ?? Array.from(selectedIds);
+    bulkStatusMutation.mutate({ ids: targetIds, status, override }, {
       onSuccess: (data: any) => {
         setSelectedIds(new Set());
         setBulkStatusOpen(false);
+        setBulkCreditError(null);
         if (status === "accepted" && data?.ordersCreated > 0) {
           toast.success(`${data.ordersCreated} order${data.ordersCreated !== 1 ? "s" : ""} created automatically`, { description: "Find them in the Orders page." });
+        }
+      },
+      onError: (e: any) => {
+        if (e?.data?.error === "CREDIT_LIMIT_EXCEEDED") {
+          setBulkStatusOpen(false);
+          setBulkCreditError({ status, ids: targetIds, errors: e.data.conversionErrors ?? [] });
         }
       },
     });
@@ -911,6 +916,41 @@ export function Quotations() {
             >
               {bulkDeleteMutation.isPending ? "Deleting..." : `Delete ${selectedCount}`}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk credit-limit-exceeded confirm / override */}
+      <AlertDialog open={!!bulkCreditError} onOpenChange={(open) => !open && setBulkCreditError(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-red-700">
+              <AlertTriangle className="h-5 w-5" /> Credit limit exceeded
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-foreground">
+                <p>{bulkCreditError?.errors.length} quotation(s) would exceed the customer's credit limit:</p>
+                <ul className="list-disc pl-5 space-y-0.5 text-muted-foreground">
+                  {bulkCreditError?.errors.map((err, i) => <li key={i}>{err}</li>)}
+                </ul>
+                {isAdmin() ? (
+                  <p className="text-red-700 pt-1">As an admin, you can override this and accept anyway.</p>
+                ) : (
+                  <p className="pt-1">Contact an admin to override the credit limit.</p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setBulkCreditError(null)}>Cancel</AlertDialogCancel>
+            {isAdmin() && (
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => bulkCreditError && handleBulkStatus(bulkCreditError.status, bulkCreditError.ids, true)}
+              >
+                {bulkStatusMutation.isPending ? "Overriding..." : "Override & Accept"}
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
