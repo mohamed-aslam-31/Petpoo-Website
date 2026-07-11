@@ -462,30 +462,18 @@ router.patch("/quotations/bulk-status", async (req, res): Promise<void> => {
 
   let ordersCreated = 0;
   const conversionErrors: string[] = [];
+  // Informational only: quotations over the customer's credit limit are still
+  // accepted, but the caller gets a summary of who's over limit to warn the user.
+  const creditWarnings: string[] = [];
 
   if (status === "accepted") {
-    const isAdminOverride = req.headers["x-admin-override"] === "true";
-
-    if (!isAdminOverride) {
-      // Pre-check credit limits for all quotations before committing any status changes
-      const quotationRows = await db.select().from(quotationsTable).where(inArray(quotationsTable.id, ids));
-      for (const q of quotationRows) {
-        if (!q.isNewCustomer && q.customerId) {
-          const creditCheck = await checkCreditLimit(q.customerId, parseNum((q as any).total ?? 0));
-          if (!creditCheck.allowed) {
-            conversionErrors.push(`${q.quotationNumber}: Credit limit exceeded (excess ₹${creditCheck.excessAmount.toFixed(2)})`);
-          }
+    const quotationRows = await db.select().from(quotationsTable).where(inArray(quotationsTable.id, ids));
+    for (const q of quotationRows) {
+      if (!q.isNewCustomer && q.customerId) {
+        const creditCheck = await checkCreditLimit(q.customerId, parseNum((q as any).total ?? 0));
+        if (!creditCheck.allowed) {
+          creditWarnings.push(`${q.quotationNumber}: Credit limit exceeded (excess ₹${creditCheck.excessAmount.toFixed(2)})`);
         }
-      }
-      if (conversionErrors.length > 0) {
-        res.status(422).json({
-          error: "CREDIT_LIMIT_EXCEEDED",
-          message: `${conversionErrors.length} quotation(s) would exceed customer credit limits.`,
-          updated: 0,
-          ordersCreated: 0,
-          conversionErrors,
-        });
-        return;
       }
     }
 
@@ -504,7 +492,7 @@ router.patch("/quotations/bulk-status", async (req, res): Promise<void> => {
       }
     }
 
-    res.json({ updated: updated.length, ordersCreated, conversionErrors });
+    res.json({ updated: updated.length, ordersCreated, conversionErrors, creditWarnings });
   } else {
     // Cascade-delete any linked orders BEFORE changing status so that a cascade
     // failure leaves the quotation in a consistent "accepted" state (no status drift).
@@ -623,16 +611,12 @@ router.patch("/quotations/:id", async (req, res): Promise<void> => {
     delete (updates as any).convertedOrderNumber;
   }
 
-  // Credit limit check: block quotation acceptance if it would exceed the customer's limit.
-  // Check BEFORE the DB update so no state changes occur on a rejected request.
+  // Credit limit check: informational only — surfaced as a warning, never blocks acceptance.
+  let creditWarning: ReturnType<typeof creditLimitErrorBody> | null = null;
   if (data.status === "accepted" && existingBefore.status !== "accepted" && !existingBefore.isNewCustomer && existingBefore.customerId) {
-    const isAdminOverride = req.headers["x-admin-override"] === "true";
     const quotationTotal = parseNum((existingBefore as any).total ?? 0);
     const creditCheck = await checkCreditLimit(existingBefore.customerId, quotationTotal);
-    if (!creditCheck.allowed && !isAdminOverride) {
-      res.status(422).json(creditLimitErrorBody(creditCheck));
-      return;
-    }
+    if (!creditCheck.allowed) creditWarning = creditLimitErrorBody(creditCheck);
   }
 
   const [quotation] = await db.update(quotationsTable).set(updates).where(eq(quotationsTable.id, id)).returning();
@@ -664,7 +648,7 @@ router.patch("/quotations/:id", async (req, res): Promise<void> => {
     .from(quotationsTable)
     .leftJoin(customersTable, eq(customersTable.id, quotationsTable.customerId as any))
     .where(eq(quotationsTable.id, id));
-  res.json(parseQuotation(refreshed?.q ?? quotation, refreshed?.customerDbName ?? customerDbName));
+  res.json({ ...parseQuotation(refreshed?.q ?? quotation, refreshed?.customerDbName ?? customerDbName), creditWarning });
 });
 
 // DELETE /quotations/:id

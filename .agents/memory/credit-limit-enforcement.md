@@ -1,36 +1,20 @@
 ---
 name: Credit Limit Enforcement
-description: How credit limit enforcement is implemented — backend checks, frontend override UX, and key design decisions.
+description: How credit-limit checks behave across quotations/orders/invoices — informational, not blocking.
 ---
 
-## Architecture
+Credit-limit checks in quotations (single + bulk accept), order completion, and invoice
+creation are **informational only** — they never block the action. `checkCreditLimit` still
+runs and, when exceeded, the success response carries a `creditWarning` (single actions) or
+`creditWarnings` (bulk quotation status) field built from `creditLimitErrorBody`. The frontend
+shows this as a toast after the action completes, plus a live pre-submit `CreditLimitStatus`
+preview panel in the relevant dialogs.
 
-### Backend (5 files changed)
-- `artifacts/api-server/src/lib/credit-limit.ts` — shared lib: `computeOutstanding()`, `checkCreditLimit()`, `creditLimitErrorBody()`.
-- `customers.ts` — removed local `computeOutstanding()`, imports from lib; adds `GET /customers/:id/credit-status` endpoint.
-- `orders.ts` — `POST /orders/:id/complete` checks credit BEFORE inserting invoice rows.
-- `invoices.ts` — `POST /invoices` checks credit BEFORE inserting.
-- `quotations.ts` — `PATCH /quotations/:id` checks on status→accepted; `PATCH /quotations/bulk-status` pre-checks all before any commit.
+**Why:** product decision — customers should be able to exceed their credit limit (e.g. ₹10,000
+limit, ₹20,000 order) with just a warning, not a hard stop. The old design required an
+admin-override header/checkbox to bypass a 422; that flow (and the `CreditLimitWarning` component)
+was removed entirely since nothing blocks anymore.
 
-### Frontend (9 files changed)
-- `src/lib/auth.ts` — `getAuthData()`, `isAdmin()`, `setAuthData(email)`. Email with "admin" → admin role.
-- `src/hooks/use-credit-status.ts` — TanStack Query hook for `/api/customers/:id/credit-status`.
-- `src/components/credit-limit-status.tsx` — compact 4-metric display (Limit / Outstanding / Available / Status badge).
-- `src/components/credit-limit-warning.tsx` — blocking red alert with all 5 figures + admin override checkbox.
-- `login.tsx` — calls `setAuthData(email)` to persist role-aware auth.
-- `customers/detail.tsx` — shows `CreditLimitStatus` panel below the 4-stat grid.
-- `order-complete-dialog.tsx` — direct `useMutation + fetch` replacing generated hook; shows credit status + warning.
-- `invoice-form-dialog.tsx` — same pattern for POST /invoices; shows credit status when customer selected.
-- `billing/quotations.tsx` — `apiFetch` enhanced with extra headers + `.data` on errors; `useUpdateQuotation`/`useBulkStatus` support `override?: boolean`.
-
-## Key Rules
-- **creditLimit === 0 → unlimited.** Never enforce when limit is zero.
-- **Hard block via HTTP 422** with body `{ error: "CREDIT_LIMIT_EXCEEDED", creditLimit, outstanding, availableCredit, newAmount, projectedOutstanding, excessAmount }`.
-- **Admin override:** send `X-Admin-Override: true` header. Frontend passes it only when `isAdmin()` and user explicitly ticks the checkbox.
-- **No real auth.** Role is derived from localStorage JSON `{ role, email }`. Admin = email contains "admin".
-- **computeOutstanding filter:** `i.status !== "returned"` only — cancelled invoices remain in debits (their credit notes offset them). Do NOT add "cancelled" to the exclusion list.
-
-**Why:**
-- Hard-blocking at 422 prevents silent overcommitment of credit.
-- Admin override at request-header level keeps the frontend in control without any server-side role check (demo mode).
-- Shared `credit-limit.ts` lib ensures customers/orders/invoices/quotations all use identical outstanding calculation.
+**How to apply:** if a new money-moving flow needs credit-limit awareness, follow this pattern —
+compute the check, attach a warning field to the success response, never return 422/throw for it.
+`creditLimit === 0` still means unlimited (no check needed).

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -21,8 +21,6 @@ import { Trash2, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useCreditStatus } from "@/hooks/use-credit-status";
 import { CreditLimitStatus } from "@/components/credit-limit-status";
-import { CreditLimitWarning, type CreditLimitErrorData } from "@/components/credit-limit-warning";
-import { isAdmin } from "@/lib/auth";
 
 const itemSchema = z.object({
   productId: z.coerce.number().min(1, "Product required"),
@@ -79,8 +77,6 @@ export function InvoiceFormDialog({
 }: { open: boolean; onOpenChange: (v: boolean) => void; invoice?: InvoiceToEdit | null }) {
   const isEditing = !!invoice;
   const queryClient = useQueryClient();
-  const [adminOverride, setAdminOverride] = useState(false);
-  const [creditError, setCreditError] = useState<CreditLimitErrorData | null>(null);
 
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: empty });
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "items" });
@@ -129,22 +125,16 @@ export function InvoiceFormDialog({
         form.reset({ ...empty, dueDate: new Date().toISOString().split("T")[0] });
       }
     }
-    if (!open) {
-      setAdminOverride(false);
-      setCreditError(null);
-    }
   }, [open, invoice, form]);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListInvoicesQueryKey() });
 
-  // Create invoice with credit limit enforcement + admin override support
+  // Create invoice — credit limit is informational only (see CreditLimitStatus preview below), never blocks.
   const createMutation = useMutation({
     mutationFn: async (payload: any) => {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (adminOverride) headers["X-Admin-Override"] = "true";
       const res = await fetch("/api/invoices", {
         method: "POST",
-        headers,
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
@@ -155,14 +145,15 @@ export function InvoiceFormDialog({
       }
       return data;
     },
-    onSuccess: () => { toast.success("Invoice created"); invalidate(); onOpenChange(false); },
-    onError: (e: any) => {
-      if (e.data?.error === "CREDIT_LIMIT_EXCEEDED") {
-        setCreditError(e.data);
-        return;
+    onSuccess: (data: any) => {
+      toast.success("Invoice created");
+      if (data?.creditWarning) {
+        toast.warning("Credit limit exceeded", { description: data.creditWarning.message });
       }
-      toast.error(e.message ?? "Failed to create invoice");
+      invalidate();
+      onOpenChange(false);
     },
+    onError: (e: any) => toast.error(e.message ?? "Failed to create invoice"),
   });
 
   const updateMutation = useUpdateInvoice({
@@ -215,7 +206,6 @@ export function InvoiceFormDialog({
   }
 
   const isPending = createMutation.isPending || updateMutation.isPending;
-  const userIsAdmin = isAdmin();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -354,34 +344,14 @@ export function InvoiceFormDialog({
               </div>
             )}
 
-            {/* Credit limit error + admin override (only for new invoices) */}
-            {!isEditing && creditError && (
-              <CreditLimitWarning
-                data={creditError}
-                isAdmin={userIsAdmin}
-                adminOverride={adminOverride}
-                onToggleOverride={setAdminOverride}
-              />
-            )}
-
             <FormField control={form.control} name="notes" render={({ field }) => (
               <FormItem><FormLabel>Notes</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
             )} />
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button
-                type="submit"
-                disabled={isPending || (!isEditing && !!creditError && !adminOverride)}
-                variant={!isEditing && creditError && adminOverride ? "destructive" : "default"}
-              >
-                {isPending
-                  ? "Saving..."
-                  : !isEditing && creditError && adminOverride
-                  ? "Override & Create Invoice"
-                  : isEditing
-                  ? "Save Changes"
-                  : "Create Invoice"}
+              <Button type="submit" disabled={isPending}>
+                {isPending ? "Saving..." : isEditing ? "Save Changes" : "Create Invoice"}
               </Button>
             </DialogFooter>
           </form>

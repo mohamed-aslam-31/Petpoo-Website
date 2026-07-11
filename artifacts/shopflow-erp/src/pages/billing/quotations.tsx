@@ -19,9 +19,9 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Search, Plus, MoreHorizontal, Trash2, Edit, Eye, FileText, ArrowRight, Filter, X, ChevronDown, AlertTriangle } from "lucide-react";
-import { CreditLimitWarning, type CreditLimitErrorData } from "@/components/credit-limit-warning";
-import { isAdmin } from "@/lib/auth";
+import { Search, Plus, MoreHorizontal, Trash2, Edit, Eye, FileText, ArrowRight, Filter, X, ChevronDown } from "lucide-react";
+import { useCreditStatus } from "@/hooks/use-credit-status";
+import { CreditLimitStatus } from "@/components/credit-limit-status";
 
 const PAGE_SIZE = 20;
 const QK = ["quotations"] as const;
@@ -66,14 +66,16 @@ function useCreateQuotation() {
 function useUpdateQuotation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data, override }: { id: number; data: any; override?: boolean }) =>
-      apiFetch(`/quotations/${id}`, { method: "PATCH", body: JSON.stringify(data) },
-        override ? { "X-Admin-Override": "true" } : undefined),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: QK }); toast.success("Quotation updated"); },
-    onError: (e: any) => {
-      if ((e as any)?.data?.error === "CREDIT_LIMIT_EXCEEDED") return; // handled by component
-      toast.error(e.message ?? "Failed to update");
+    mutationFn: ({ id, data }: { id: number; data: any }) =>
+      apiFetch(`/quotations/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    onSuccess: (data: any) => {
+      qc.invalidateQueries({ queryKey: QK });
+      toast.success("Quotation updated");
+      if (data?.creditWarning) {
+        toast.warning("Credit limit exceeded", { description: data.creditWarning.message });
+      }
     },
+    onError: (e: any) => toast.error(e.message ?? "Failed to update"),
   });
 }
 
@@ -98,14 +100,18 @@ function useBulkDelete() {
 function useBulkStatus() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ ids, status, override }: { ids: number[]; status: string; override?: boolean }) =>
-      apiFetch("/quotations/bulk-status", { method: "PATCH", body: JSON.stringify({ ids, status }) },
-        override ? { "X-Admin-Override": "true" } : undefined),
-    onSuccess: (data: any) => { qc.invalidateQueries({ queryKey: QK }); toast.success(`Updated ${data?.updated ?? 0} quotation(s)`); },
-    onError: (e: any) => {
-      if ((e as any)?.data?.error === "CREDIT_LIMIT_EXCEEDED") return; // handled by component
-      toast.error(e.message ?? "Bulk status update failed");
+    mutationFn: ({ ids, status }: { ids: number[]; status: string }) =>
+      apiFetch("/quotations/bulk-status", { method: "PATCH", body: JSON.stringify({ ids, status }) }),
+    onSuccess: (data: any) => {
+      qc.invalidateQueries({ queryKey: QK });
+      toast.success(`Updated ${data?.updated ?? 0} quotation(s)`);
+      if (data?.creditWarnings?.length > 0) {
+        toast.warning(`${data.creditWarnings.length} quotation(s) exceeded the customer's credit limit`, {
+          description: data.creditWarnings.join("; "),
+        });
+      }
     },
+    onError: (e: any) => toast.error(e.message ?? "Bulk status update failed"),
   });
 }
 
@@ -283,19 +289,17 @@ function QuotationFormDialog({ open, onOpenChange, quotation }: { open: boolean;
   const { data: products } = useListProducts({ limit: 500 });
   const createMutation = useCreateQuotation();
   const updateMutation = useUpdateQuotation();
-  const [creditError, setCreditError] = useState<CreditLimitErrorData | null>(null);
-  const [pendingPayload, setPendingPayload] = useState<{ id: number; data: any } | null>(null);
-  const [adminOverride, setAdminOverride] = useState(false);
 
   const customerMode = form.watch("customerMode" as any);
   const qType = form.watch("type");
   const watchedItems = form.watch("items");
+  const watchedCustomerId = form.watch("customerId" as any);
+  const { data: creditStatus } = useCreditStatus(
+    customerMode === "existing" && watchedCustomerId > 0 ? watchedCustomerId : null,
+  );
 
   useEffect(() => {
     if (!open) return;
-    setCreditError(null);
-    setAdminOverride(false);
-    setPendingPayload(null);
     if (quotation) {
       form.reset({
         customerMode: quotation.isNewCustomer ? "new" : "existing",
@@ -368,16 +372,9 @@ function QuotationFormDialog({ open, onOpenChange, quotation }: { open: boolean;
       });
     }
     if (isEditing && quotation) {
-      setPendingPayload({ id: quotation.id, data: payload });
-      setCreditError(null);
       updateMutation.mutate(
-        { id: quotation.id, data: payload, override: adminOverride },
-        {
-          onSuccess: () => { setCreditError(null); setAdminOverride(false); onOpenChange(false); },
-          onError: (e: any) => {
-            if (e?.data?.error === "CREDIT_LIMIT_EXCEEDED") setCreditError(e.data);
-          },
-        },
+        { id: quotation.id, data: payload },
+        { onSuccess: () => onOpenChange(false) },
       );
     } else {
       createMutation.mutate(payload, { onSuccess: () => onOpenChange(false) });
@@ -505,24 +502,18 @@ function QuotationFormDialog({ open, onOpenChange, quotation }: { open: boolean;
 
             <FormField control={form.control} name={"notes" as any} render={({ field }) => (<FormItem><FormLabel>Notes</FormLabel><FormControl><Input placeholder="Optional notes..." {...field} /></FormControl></FormItem>)} />
 
-            {/* Credit limit error + admin override */}
-            {creditError && (
-              <CreditLimitWarning
-                data={creditError}
-                isAdmin={isAdmin()}
-                adminOverride={adminOverride}
-                onToggleOverride={setAdminOverride}
-              />
+            {/* Credit status preview — informational only, never blocks submission */}
+            {creditStatus && creditStatus.creditStatus !== "no_limit" && (
+              <div className="rounded-md border border-border/60 bg-muted/20 p-3">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Customer Credit</p>
+                <CreditLimitStatus data={creditStatus} compact projectedAmount={grandTotal} />
+              </div>
             )}
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button
-                type="submit"
-                disabled={isPending || (!!creditError && !adminOverride)}
-                variant={creditError && adminOverride ? "destructive" : "default"}
-              >
-                {isPending ? "Saving..." : creditError && adminOverride ? "Override & Save" : isEditing ? "Save Changes" : "Create Quotation"}
+              <Button type="submit" disabled={isPending}>
+                {isPending ? "Saving..." : isEditing ? "Save Changes" : "Create Quotation"}
               </Button>
             </DialogFooter>
           </form>
@@ -645,7 +636,6 @@ export function Quotations() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkStatusOpen, setBulkStatusOpen] = useState(false);
-  const [bulkCreditError, setBulkCreditError] = useState<{ status: string; ids: number[]; errors: string[] } | null>(null);
 
   const { data, isLoading } = useQuotations({ page, search: search || undefined, status: statusFilter || undefined });
   const deleteMutation = useDeleteQuotation();
@@ -681,21 +671,14 @@ export function Quotations() {
     });
   }
 
-  function handleBulkStatus(status: string, ids?: number[], override?: boolean) {
-    const targetIds = ids ?? Array.from(selectedIds);
-    bulkStatusMutation.mutate({ ids: targetIds, status, override }, {
+  function handleBulkStatus(status: string) {
+    const targetIds = Array.from(selectedIds);
+    bulkStatusMutation.mutate({ ids: targetIds, status }, {
       onSuccess: (data: any) => {
         setSelectedIds(new Set());
         setBulkStatusOpen(false);
-        setBulkCreditError(null);
         if (status === "accepted" && data?.ordersCreated > 0) {
           toast.success(`${data.ordersCreated} order${data.ordersCreated !== 1 ? "s" : ""} created automatically`, { description: "Find them in the Orders page." });
-        }
-      },
-      onError: (e: any) => {
-        if (e?.data?.error === "CREDIT_LIMIT_EXCEEDED") {
-          setBulkStatusOpen(false);
-          setBulkCreditError({ status, ids: targetIds, errors: e.data.conversionErrors ?? [] });
         }
       },
     });
@@ -916,41 +899,6 @@ export function Quotations() {
             >
               {bulkDeleteMutation.isPending ? "Deleting..." : `Delete ${selectedCount}`}
             </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Bulk credit-limit-exceeded confirm / override */}
-      <AlertDialog open={!!bulkCreditError} onOpenChange={(open) => !open && setBulkCreditError(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-red-700">
-              <AlertTriangle className="h-5 w-5" /> Credit limit exceeded
-            </AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2 text-sm text-foreground">
-                <p>{bulkCreditError?.errors.length} quotation(s) would exceed the customer's credit limit:</p>
-                <ul className="list-disc pl-5 space-y-0.5 text-muted-foreground">
-                  {bulkCreditError?.errors.map((err, i) => <li key={i}>{err}</li>)}
-                </ul>
-                {isAdmin() ? (
-                  <p className="text-red-700 pt-1">As an admin, you can override this and accept anyway.</p>
-                ) : (
-                  <p className="pt-1">Contact an admin to override the credit limit.</p>
-                )}
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setBulkCreditError(null)}>Cancel</AlertDialogCancel>
-            {isAdmin() && (
-              <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                onClick={() => bulkCreditError && handleBulkStatus(bulkCreditError.status, bulkCreditError.ids, true)}
-              >
-                {bulkStatusMutation.isPending ? "Overriding..." : "Override & Accept"}
-              </AlertDialogAction>
-            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -238,13 +238,11 @@ router.post("/invoices", async (req, res): Promise<void> => {
   const { subtotal, cgst, sgst, igst, gstAmount, total, parsedItems } = calcInvoiceTotals(items as any[], discountAmt, transportAmt, packageAmt, otherAmt);
   const paymentStatus = (paidAmount ?? 0) >= total ? "paid" : (paidAmount ?? 0) > 0 ? "partial" : "unpaid";
 
-  // ── Credit limit enforcement ──────────────────────────────────────────────
-  const isAdminOverride = req.headers["x-admin-override"] === "true";
+  // ── Credit limit check ────────────────────────────────────────────────────
+  // Informational only: the customer's credit standing is surfaced to the user
+  // as a warning (see /customers/:id/credit-status) but never blocks the invoice.
   const creditCheck = await checkCreditLimit(customerId, total);
-  if (!creditCheck.allowed && !isAdminOverride) {
-    res.status(422).json(creditLimitErrorBody(creditCheck));
-    return;
-  }
+  const creditWarning = !creditCheck.allowed ? creditLimitErrorBody(creditCheck) : null;
 
   const [temp] = await db.insert(invoicesTable).values({
     invoiceNumber: "TEMP",
@@ -281,7 +279,7 @@ router.post("/invoices", async (req, res): Promise<void> => {
 
   await logAudit({ entityType: "invoice", entityId: invoice.id, entityNumber: invoice.invoiceNumber, action: "created", newStatus: invoice.status });
 
-  res.status(201).json(parseInvoice(invoice, customer.name));
+  res.status(201).json({ ...parseInvoice(invoice, customer.name), creditWarning });
 });
 
 router.get("/invoices/:id", async (req, res): Promise<void> => {

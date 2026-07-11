@@ -1,3 +1,3 @@
 - [FormLabel outside FormField](formlabel-outside-formfield.md) — use plain `<label>` HTML in dynamic field arrays (useFieldArray) since FormLabel requires a FormField context.
 - [ShopFlow ERP stack](shopflow-erp-stack.md) — key stack decisions, port, workflow, and API patterns for this project.
-- [Credit Limit Enforcement](credit-limit-enforcement.md) — 422 hard-block on orders/invoices/quotations; admin override via X-Admin-Override header; creditLimit=0 means unlimited.
+- [Credit Limit Enforcement](credit-limit-enforcement.md) — informational only across quotations/orders/invoices; never blocks, surfaces `creditWarning(s)` on success; creditLimit=0 means unlimited.

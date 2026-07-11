@@ -362,15 +362,10 @@ router.post("/orders/:id/complete", async (req, res): Promise<void> => {
   const { subtotal, cgst, sgst, igst, gstAmount, total, parsedItems } = calcInvoiceTotals(items as any[], discountAmt, transportAmt, packageAmt, otherAmt);
   const paymentStatus = (paidAmount ?? 0) >= total ? "paid" : (paidAmount ?? 0) > 0 ? "partial" : "unpaid";
 
-  // ── Credit limit enforcement ──────────────────────────────────────────────
-  // Check before inserting the invoice row so a rejection leaves no orphan records.
-  // Pass X-Admin-Override: true header to bypass (admin role required on client).
-  const isAdminOverride = req.headers["x-admin-override"] === "true";
+  // ── Credit limit check ────────────────────────────────────────────────────
+  // Informational only: surfaced to the user as a warning but never blocks completion.
   const creditCheck = await checkCreditLimit(order.customerId, total);
-  if (!creditCheck.allowed && !isAdminOverride) {
-    res.status(422).json(creditLimitErrorBody(creditCheck));
-    return;
-  }
+  const creditWarning = !creditCheck.allowed ? creditLimitErrorBody(creditCheck) : null;
 
   const names = await enrichItemNames(parsedItems as any[]);
   const enrichedItems = parsedItems.map((item: any, i: number) => ({ ...item, productName: names[i].productName, sku: names[i].sku }));
@@ -456,6 +451,7 @@ router.post("/orders/:id/complete", async (req, res): Promise<void> => {
     notes: invoice.notes ?? null,
     items: enrichedItems,
     createdAt: invoice.createdAt instanceof Date ? invoice.createdAt.toISOString() : invoice.createdAt,
+    creditWarning,
   });
 });
 
