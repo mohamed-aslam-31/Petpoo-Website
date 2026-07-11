@@ -3,9 +3,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useLocation } from "wouter";
+import { getAuthData } from "@/lib/auth";
 
 export function TopNav() {
   const [, setLocation] = useLocation();
+  const auth = getAuthData();
+  const email = auth?.email || "Guest";
+  const isAdminUser = auth?.role === "admin";
+  const initials = email
+    .split(/[@.]/)[0]
+    .slice(0, 2)
+    .toUpperCase() || "?";
 
   const handleLogout = () => {
     localStorage.removeItem("shopflow_auth");
@@ -31,13 +39,13 @@ export function TopNav() {
         <Button variant="ghost" size="icon" className="text-muted-foreground">
           <Bell className="h-5 w-5" />
         </Button>
-        <div className="flex items-center gap-2 cursor-pointer" onClick={handleLogout}>
+        <div className="flex items-center gap-2 cursor-pointer" onClick={handleLogout} title="Click to log out">
           <Avatar className="h-8 w-8 border">
-            <AvatarFallback className="bg-primary/10 text-primary font-medium">AD</AvatarFallback>
+            <AvatarFallback className="bg-primary/10 text-primary font-medium">{initials}</AvatarFallback>
           </Avatar>
           <div className="hidden flex-col md:flex">
-            <span className="text-sm font-medium leading-none">Admin User</span>
-            <span className="text-xs text-muted-foreground leading-none mt-1">Owner</span>
+            <span className="text-sm font-medium leading-none">{email}</span>
+            <span className="text-xs text-muted-foreground leading-none mt-1">{isAdminUser ? "Admin" : "Staff"}</span>
           </div>
         </div>
       </div>
