@@ -91,6 +91,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 - After schema changes: `pnpm --filter @workspace/db run push` then restart API workflow
 - After OpenAPI spec changes: `pnpm --filter @workspace/api-spec run codegen` then restart API workflow
 - Numeric DB fields (prices, amounts) come back as strings from Drizzle — always wrap in `parseFloat()`
+- The API server workflow is configured **without** `waitForPort` (the build + startup takes long enough that Replit's port detection races with it). The server still listens on port 8080; the workflow just doesn't gate on it.
 
 ## Pointers
 
