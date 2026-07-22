@@ -32,6 +32,7 @@ export function Brands() {
   const [deletingBrand, setDeletingBrand] = useState<any | null>(null);
   const [deleteError, setDeleteError] = useState<{ message: string; categories: { id: number; name: string }[] } | null>(null);
   const [deletingSelected, setDeletingSelected] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkDeleteErrors, setBulkDeleteErrors] = useState<{ brandName: string; categories: { id: number; name: string }[] }[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [activeSorts, setActiveSorts] = useState<Set<SortKey>>(new Set());
@@ -45,18 +46,9 @@ export function Brands() {
 
   const deleteMutation = useDeleteBrand({
     mutation: {
+      // onSuccess/onError handled per-call so single and bulk delete don't bleed into each other
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListBrandsQueryKey() });
-        setDeletingBrand(null);
-        setDeleteError(null);
-      },
-      onError: (e: any) => {
-        const linked = e?.data?.linkedCategories as { id: number; name: string }[] | undefined;
-        if (e?.status === 409 && linked?.length) {
-          setDeleteError({ message: e.data.error, categories: linked });
-        } else {
-          toast.error(e?.data?.error ?? e?.message ?? "Failed to delete");
-        }
       },
     },
   });
@@ -163,6 +155,7 @@ export function Brands() {
 
   // ── Bulk delete ────────────────────────────────────────────────────────────
   async function deleteSelectedBrands() {
+    setBulkDeleting(true);
     const ids = [...selectedIds];
     let deleted = 0;
     const linkedErrors: { brandName: string; categories: { id: number; name: string }[] }[] = [];
@@ -178,16 +171,17 @@ export function Brands() {
         const linked = e?.data?.linkedCategories as { id: number; name: string }[] | undefined;
         if (e?.status === 409 && linked?.length) {
           linkedErrors.push({ brandName: brand?.name ?? `Brand #${id}`, categories: linked });
+        } else {
+          toast.error(`Failed to delete "${brand?.name ?? `Brand #${id}`}"`);
         }
       }
     }
 
-    queryClient.invalidateQueries({ queryKey: getListBrandsQueryKey() });
+    setBulkDeleting(false);
 
     if (linkedErrors.length > 0) {
       setBulkDeleteErrors(linkedErrors);
       if (deleted > 0) toast.success(`${deleted} brand(s) deleted`);
-      // keep dialog open to show errors
     } else {
       setSelectedIds(new Set());
       setDeletingSelected(false);
@@ -496,7 +490,27 @@ export function Brands() {
               <Button
                 variant="destructive"
                 disabled={deleteMutation.isPending}
-                onClick={() => deletingBrand && deleteMutation.mutate({ id: deletingBrand.id }, { onSuccess: () => toast.success("Brand deleted") })}
+                onClick={() => {
+                  if (!deletingBrand) return;
+                  deleteMutation.mutate(
+                    { id: deletingBrand.id },
+                    {
+                      onSuccess: () => {
+                        setDeletingBrand(null);
+                        setDeleteError(null);
+                        toast.success("Brand deleted");
+                      },
+                      onError: (e: any) => {
+                        const linked = e?.data?.linkedCategories as { id: number; name: string }[] | undefined;
+                        if (e?.status === 409 && linked?.length) {
+                          setDeleteError({ message: e.data.error, categories: linked });
+                        } else {
+                          toast.error(e?.data?.error ?? e?.message ?? "Failed to delete");
+                        }
+                      },
+                    }
+                  );
+                }}
               >
                 {deleteMutation.isPending ? "Deleting..." : "Delete"}
               </Button>
@@ -541,14 +555,15 @@ export function Brands() {
             )}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{bulkDeleteErrors.length > 0 ? "Close" : "Cancel"}</AlertDialogCancel>
+            <AlertDialogCancel disabled={bulkDeleting}>{bulkDeleteErrors.length > 0 ? "Close" : "Cancel"}</AlertDialogCancel>
             {bulkDeleteErrors.length === 0 && (
-              <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              <Button
+                variant="destructive"
+                disabled={bulkDeleting}
                 onClick={deleteSelectedBrands}
               >
-                Delete All
-              </AlertDialogAction>
+                {bulkDeleting ? "Deleting..." : "Delete All"}
+              </Button>
             )}
           </AlertDialogFooter>
         </AlertDialogContent>
