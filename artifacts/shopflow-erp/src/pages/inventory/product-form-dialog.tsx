@@ -16,11 +16,11 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Form,
   FormField,
@@ -48,30 +48,56 @@ import {
   CommandEmpty,
   CommandGroup,
   CommandItem,
+  CommandSeparator,
 } from "@/components/ui/command";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// ── Constants ────────────────────────────────────────────────────────────────
 const NO_BRAND = "__no_brand__";
+const UNITS_STORAGE_KEY = "shopflow-units";
+const DEFAULT_UNITS = [
+  "pc", "pcs", "kg", "g", "mg", "l", "ml",
+  "box", "dozen", "pair", "set", "roll", "sheet", "bag", "bottle",
+];
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function getStoredUnits(): string[] {
+  try {
+    const stored = localStorage.getItem(UNITS_STORAGE_KEY);
+    const parsed = stored ? JSON.parse(stored) : null;
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  } catch {}
+  return DEFAULT_UNITS;
+}
+
+function generateSku(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const rand = Array.from({ length: 6 }, () =>
+    chars[Math.floor(Math.random() * chars.length)]
+  ).join("");
+  return `SKU-${rand}`;
+}
+
+// Red asterisk for required fields
+const Req = () => <span className="text-destructive ml-0.5">*</span>;
+
+// ── Schema ───────────────────────────────────────────────────────────────────
 const productSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  sku: z.string().min(1, "SKU is required"),
-  barcode: z.string().optional(),
-  hsnCode: z.string().optional(),
-  categoryId: z.string().optional(),
-  brandId: z.string().optional(),
+  name:          z.string().min(1, "Product name is required"),
+  sku:           z.string().min(1, "SKU is required"),
+  barcode:       z.string().optional(),
+  hsnCode:       z.string().optional(),
+  brandId:       z.string().min(1, "Brand is required"),
+  categoryId:    z.string().min(1, "Category is required"),
+  gstPercent:    z.coerce.number().min(0).max(100),
   purchasePrice: z.coerce.number().min(0),
-  sellingPrice: z.coerce.number().min(0),
-  wholesalePrice: z.coerce.number().min(0),
-  retailPrice: z.coerce.number().min(0),
-  gstPercent: z.coerce.number().min(0).max(100),
-  unit: z.string().min(1, "Unit is required"),
-  currentStock: z.coerce.number().min(0),
-  minStock: z.coerce.number().min(0),
-  location: z.string().optional(),
-  description: z.string().optional(),
-  status: z.string().optional(),
+  wholesalePrice:z.coerce.number().min(0),
+  retailPrice:   z.coerce.number().min(0),
+  currentStock:  z.coerce.number().min(0),
+  minStock:      z.coerce.number().min(0),
+  location:      z.string().optional(),
+  status:        z.enum(["active", "inactive"]),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -93,7 +119,6 @@ interface EditableProduct {
   currentStock: number;
   minStock: number;
   location?: string | null;
-  description?: string | null;
   status?: string;
 }
 
@@ -102,22 +127,130 @@ const emptyValues: ProductFormValues = {
   sku: "",
   barcode: "",
   hsnCode: "",
-  categoryId: undefined,
-  brandId: undefined,
+  brandId: "",
+  categoryId: "",
+  gstPercent: 0,
   purchasePrice: 0,
-  sellingPrice: 0,
   wholesalePrice: 0,
   retailPrice: 0,
-  gstPercent: 0,
-  unit: "pcs",
   currentStock: 0,
   minStock: 0,
   location: "",
-  description: "",
   status: "active",
 };
 
-// Searchable combobox component
+// ── Unit multi-select component ───────────────────────────────────────────────
+function UnitMultiSelect({
+  value,
+  onChange,
+  error,
+}: {
+  value: string[];
+  onChange: (units: string[]) => void;
+  error?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [availableUnits, setAvailableUnits] = useState<string[]>(getStoredUnits);
+
+  const filtered = availableUnits.filter(u =>
+    u.toLowerCase().includes(search.toLowerCase())
+  );
+  const trimmed = search.trim();
+  const canAdd =
+    trimmed.length > 0 &&
+    !availableUnits.some(u => u.toLowerCase() === trimmed.toLowerCase());
+
+  function toggle(unit: string) {
+    onChange(value.includes(unit) ? value.filter(u => u !== unit) : [...value, unit]);
+  }
+
+  function addUnit() {
+    if (!trimmed) return;
+    const updated = [...availableUnits, trimmed];
+    setAvailableUnits(updated);
+    try { localStorage.setItem(UNITS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+    onChange([...value, trimmed]);
+    setSearch("");
+  }
+
+  return (
+    <div>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            className={cn(
+              "w-full justify-between font-normal text-left min-h-9 h-auto",
+              error && "border-destructive"
+            )}
+          >
+            {value.length === 0 ? (
+              <span className="text-muted-foreground">Search or select units…</span>
+            ) : (
+              <div className="flex flex-wrap gap-1 py-0.5">
+                {value.map(u => (
+                  <Badge key={u} variant="secondary" className="text-xs">{u}</Badge>
+                ))}
+              </div>
+            )}
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          className="p-0 w-[--radix-popover-trigger-width]"
+          align="start"
+          sideOffset={4}
+        >
+          <Command>
+            <CommandInput
+              placeholder="Search or add new unit…"
+              value={search}
+              onValueChange={setSearch}
+            />
+            <CommandList>
+              {canAdd && (
+                <>
+                  <CommandGroup>
+                    <CommandItem onSelect={addUnit} className="text-primary font-medium">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add "{trimmed}"
+                    </CommandItem>
+                  </CommandGroup>
+                  <CommandSeparator />
+                </>
+              )}
+              {filtered.length > 0 ? (
+                <CommandGroup heading="Available Units">
+                  {filtered.map(unit => (
+                    <CommandItem key={unit} value={unit} onSelect={() => toggle(unit)}>
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          value.includes(unit) ? "opacity-100" : "opacity-0"
+                        )}
+                      />
+                      {unit}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ) : !canAdd ? (
+                <CommandEmpty>No units found.</CommandEmpty>
+              ) : null}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      {error && (
+        <p className="text-[0.8rem] font-medium text-destructive mt-1">{error}</p>
+      )}
+    </div>
+  );
+}
+
+// ── Searchable single-select combobox ─────────────────────────────────────────
 function SearchableCombobox({
   value,
   onValueChange,
@@ -136,19 +269,20 @@ function SearchableCombobox({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const selected = options.find((o) => o.value === value);
+  const selected = options.find(o => o.value === value);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          type="button"
           variant="outline"
           role="combobox"
           aria-expanded={open}
           disabled={disabled}
-          className="w-full justify-between font-normal text-left"
+          className="w-full justify-between font-normal text-left overflow-hidden"
         >
-          <span className={cn("truncate", !selected && "text-muted-foreground")}>
+          <span className={cn("truncate min-w-0 flex-1", !selected && "text-muted-foreground")}>
             {selected ? selected.label : placeholder}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -164,7 +298,7 @@ function SearchableCombobox({
           <CommandList>
             <CommandEmpty>{emptyText}</CommandEmpty>
             <CommandGroup>
-              {options.map((opt) => (
+              {options.map(opt => (
                 <CommandItem
                   key={opt.value}
                   value={opt.label}
@@ -190,6 +324,7 @@ function SearchableCombobox({
   );
 }
 
+// ── Main dialog ───────────────────────────────────────────────────────────────
 export function ProductFormDialog({
   open,
   onOpenChange,
@@ -204,8 +339,9 @@ export function ProductFormDialog({
   const { data: categories } = useListCategories();
   const { data: brands } = useListBrands();
 
-  // Tracks the raw combobox selection for brand (may be NO_BRAND sentinel)
   const [brandComboValue, setBrandComboValue] = useState<string | undefined>(undefined);
+  const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
+  const [unitError, setUnitError] = useState<string | undefined>();
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -213,61 +349,60 @@ export function ProductFormDialog({
   });
 
   useEffect(() => {
-    if (open) {
-      const initialBrandId = product?.brandId ? String(product.brandId) : undefined;
-      setBrandComboValue(initialBrandId);
-      form.reset(
-        product
-          ? {
-              ...product,
-              categoryId: product.categoryId ? String(product.categoryId) : undefined,
-              brandId: initialBrandId,
-              barcode: product.barcode ?? "",
-              hsnCode: product.hsnCode ?? "",
-              location: product.location ?? "",
-              description: product.description ?? "",
-              status: product.status ?? "active",
-            }
-          : emptyValues
-      );
+    if (!open) return;
+    setUnitError(undefined);
+    if (product) {
+      const initBrand = product.brandId ? String(product.brandId) : undefined;
+      setBrandComboValue(initBrand);
+      const units = product.unit
+        ? product.unit.split(",").map(u => u.trim()).filter(Boolean)
+        : [];
+      setSelectedUnits(units);
+      form.reset({
+        name:          product.name,
+        sku:           product.sku,
+        barcode:       product.barcode ?? "",
+        hsnCode:       product.hsnCode ?? "",
+        brandId:       initBrand ?? "",
+        categoryId:    product.categoryId ? String(product.categoryId) : "",
+        gstPercent:    product.gstPercent,
+        purchasePrice: product.purchasePrice,
+        wholesalePrice:product.wholesalePrice,
+        retailPrice:   product.retailPrice,
+        currentStock:  product.currentStock,
+        minStock:      product.minStock,
+        location:      product.location ?? "",
+        status:        product.status === "inactive" ? "inactive" : "active",
+      });
+    } else {
+      setBrandComboValue(undefined);
+      setSelectedUnits([]);
+      form.reset({ ...emptyValues, sku: generateSku() });
     }
   }, [open, product, form]);
 
-  // Brand options: real brands + "No Brand" sentinel
-  const brandOptions = [
-    { value: NO_BRAND, label: "No Brand" },
-    ...(brands ?? []).map((b) => ({ value: String(b.id), label: b.name })),
-  ];
+  // ── Options ────────────────────────────────────────────────────────────────
+  const brandOptions = (brands ?? []).map(b => ({ value: String(b.id), label: b.name }));
 
-  // Category options filtered by selected brand
   const categoryOptions = (() => {
     if (!brandComboValue) {
-      // No brand chosen yet — show all categories
-      return (categories ?? []).map((c) => ({ value: String(c.id), label: c.name }));
+      return (categories ?? []).map(c => ({ value: String(c.id), label: c.name }));
     }
-    if (brandComboValue === NO_BRAND) {
-      // Show only categories with no brand
-      return (categories ?? [])
-        .filter((c) => c.brandId == null)
-        .map((c) => ({ value: String(c.id), label: c.name }));
-    }
-    // Show only categories belonging to the selected brand
-    const numericBrandId = Number(brandComboValue);
+    const numericId = Number(brandComboValue);
     return (categories ?? [])
-      .filter((c) => c.brandId === numericBrandId)
-      .map((c) => ({ value: String(c.id), label: c.name }));
+      .filter(c => c.brandId === numericId)
+      .map(c => ({ value: String(c.id), label: c.name }));
   })();
 
+  // ── Handlers ───────────────────────────────────────────────────────────────
   function handleBrandChange(val: string | undefined) {
     setBrandComboValue(val);
-    // Actual form value: sentinel maps to undefined, real ID stays as string
-    form.setValue("brandId", val === NO_BRAND ? undefined : val);
-    // Reset category when brand changes
-    form.setValue("categoryId", undefined);
+    form.setValue("brandId", val ?? "", { shouldValidate: true });
+    form.setValue("categoryId", "", { shouldValidate: false });
   }
 
   function handleCategoryChange(val: string | undefined) {
-    form.setValue("categoryId", val);
+    form.setValue("categoryId", val ?? "", { shouldValidate: true });
   }
 
   const invalidateProducts = () =>
@@ -298,12 +433,18 @@ export function ProductFormDialog({
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   function onSubmit(values: ProductFormValues) {
+    if (selectedUnits.length === 0) {
+      setUnitError("At least one unit is required");
+      return;
+    }
+    setUnitError(undefined);
     const payload = {
       ...values,
-      categoryId: values.categoryId ? Number(values.categoryId) : undefined,
-      brandId: values.brandId ? Number(values.brandId) : undefined,
+      unit:        selectedUnits.join(","),
+      sellingPrice: values.retailPrice, // derive from retail price
+      categoryId:  values.categoryId ? Number(values.categoryId) : undefined,
+      brandId:     values.brandId ? Number(values.brandId) : undefined,
     };
-
     if (isEditing && product) {
       updateMutation.mutate({ id: product.id, data: payload });
     } else {
@@ -315,7 +456,7 @@ export function ProductFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button:last-child]:hidden">
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Product" : "Add Product"}</DialogTitle>
           <DialogDescription>
@@ -326,273 +467,242 @@ export function ProductFormDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 min-w-0">
             <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem className="col-span-2">
-                    <FormLabel>Product Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. Basmati Rice 25kg" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
 
-              <FormField
-                control={form.control}
-                name="sku"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>SKU</FormLabel>
-                    <FormControl>
-                      <Input placeholder="SKU-001" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* 1. Product Name */}
+              <FormField control={form.control} name="name" render={({ field }) => (
+                <FormItem className="col-span-2">
+                  <FormLabel>Product Name <Req /></FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Basmati Rice 25kg" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
 
-              <FormField
-                control={form.control}
-                name="barcode"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Barcode</FormLabel>
+              {/* 2. SKU (auto-generate + editable) */}
+              <FormField control={form.control} name="sku" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>SKU <Req /></FormLabel>
+                  <div className="flex gap-2">
                     <FormControl>
-                      <Input placeholder="Optional" {...field} />
+                      <Input placeholder="SKU-XXXXXX" {...field} />
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="shrink-0"
+                      title="Re-generate SKU"
+                      onClick={() =>
+                        form.setValue("sku", generateSku(), { shouldValidate: true })
+                      }
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )} />
 
-              <FormField
-                control={form.control}
-                name="hsnCode"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>HSN Code</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Optional" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* 3. Barcode */}
+              <FormField control={form.control} name="barcode" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Barcode{" "}
+                    <span className="text-muted-foreground text-xs font-normal">(Optional)</span>
+                  </FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. 8901234567890" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
 
-              <FormField
-                control={form.control}
-                name="unit"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Unit</FormLabel>
-                    <FormControl>
-                      <Input placeholder="pcs, kg, box..." {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* 4. HSN Code */}
+              <FormField control={form.control} name="hsnCode" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    HSN Code{" "}
+                    <span className="text-muted-foreground text-xs font-normal">(Optional)</span>
+                  </FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. 1006" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
 
-              {/* Brand — searchable combobox */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Brand</label>
-                <SearchableCombobox
-                  value={brandComboValue}
-                  onValueChange={handleBrandChange}
-                  options={brandOptions}
-                  placeholder="Select brand"
-                  searchPlaceholder="Search brands..."
-                  emptyText="No brands found."
+              {/* spacer */}
+              <div />
+
+              {/* 5. Brand */}
+              <FormField control={form.control} name="brandId" render={() => (
+                <FormItem>
+                  <FormLabel>Brand <Req /></FormLabel>
+                  <SearchableCombobox
+                    value={brandComboValue}
+                    onValueChange={handleBrandChange}
+                    options={brandOptions}
+                    placeholder="Select brand"
+                    searchPlaceholder="Search brands…"
+                    emptyText="No brands found."
+                  />
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              {/* 6. Category (enabled only after Brand chosen) */}
+              <FormField control={form.control} name="categoryId" render={() => (
+                <FormItem>
+                  <FormLabel>Category <Req /></FormLabel>
+                  <SearchableCombobox
+                    value={categoryValue || undefined}
+                    onValueChange={handleCategoryChange}
+                    options={categoryOptions}
+                    placeholder={
+                      !brandComboValue
+                        ? "Select brand first"
+                        : categoryOptions.length === 0
+                        ? "No categories for this brand"
+                        : "Select category"
+                    }
+                    searchPlaceholder="Search categories…"
+                    emptyText="No categories found."
+                    disabled={!brandComboValue || categoryOptions.length === 0}
+                  />
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              {/* 7. Unit (multi-select with search + add new, persisted) */}
+              <div className="col-span-2 space-y-2">
+                <p className="text-sm font-medium leading-none">
+                  Unit <Req />
+                </p>
+                <UnitMultiSelect
+                  value={selectedUnits}
+                  onChange={units => {
+                    setSelectedUnits(units);
+                    if (units.length > 0) setUnitError(undefined);
+                  }}
+                  error={unitError}
                 />
               </div>
 
-              {/* Category — searchable combobox, filtered by brand */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Category</label>
-                <SearchableCombobox
-                  value={categoryValue}
-                  onValueChange={handleCategoryChange}
-                  options={categoryOptions}
-                  placeholder={
-                    !brandComboValue
-                      ? "Select brand first"
-                      : categoryOptions.length === 0
-                      ? "No categories for this brand"
-                      : "Select category"
-                  }
-                  searchPlaceholder="Search categories..."
-                  emptyText="No categories found."
-                  disabled={!brandComboValue || categoryOptions.length === 0}
-                />
-              </div>
+              {/* 8. GST % */}
+              <FormField control={form.control} name="gstPercent" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>GST %</FormLabel>
+                  <FormControl>
+                    <Input type="number" step="0.01" min="0" max="100" placeholder="0" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
 
-              <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select status" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="inactive">Inactive</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* 9. Purchase Price */}
+              <FormField control={form.control} name="purchasePrice" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Purchase Price</FormLabel>
+                  <FormControl>
+                    <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
 
-              <FormField
-                control={form.control}
-                name="purchasePrice"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Purchase Price</FormLabel>
+              {/* 10. Wholesale Price */}
+              <FormField control={form.control} name="wholesalePrice" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Wholesale Price</FormLabel>
+                  <FormControl>
+                    <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              {/* 11. Retail Price */}
+              <FormField control={form.control} name="retailPrice" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Retail Price</FormLabel>
+                  <FormControl>
+                    <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              {/* 12. Current Stock */}
+              <FormField control={form.control} name="currentStock" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Current Stock</FormLabel>
+                  <FormControl>
+                    <Input type="number" min="0" placeholder="0" {...field} disabled={isEditing} />
+                  </FormControl>
+                  {isEditing && (
+                    <p className="text-xs text-muted-foreground">
+                      Use Stock Adjustment to change stock.
+                    </p>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              {/* 13. Minimum Stock */}
+              <FormField control={form.control} name="minStock" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Minimum Stock</FormLabel>
+                  <FormControl>
+                    <Input type="number" min="0" placeholder="0" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              {/* 14. Rack / Location */}
+              <FormField control={form.control} name="location" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Rack / Location{" "}
+                    <span className="text-muted-foreground text-xs font-normal">(Optional)</span>
+                  </FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. A1, Shelf 3" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              {/* 15. Status */}
+              <FormField control={form.control} name="status" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <Input type="number" step="0.01" {...field} />
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
 
-              <FormField
-                control={form.control}
-                name="sellingPrice"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Selling Price</FormLabel>
-                    <FormControl>
-                      <Input type="number" step="0.01" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="wholesalePrice"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Wholesale Price</FormLabel>
-                    <FormControl>
-                      <Input type="number" step="0.01" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="retailPrice"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Retail Price</FormLabel>
-                    <FormControl>
-                      <Input type="number" step="0.01" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="gstPercent"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>GST %</FormLabel>
-                    <FormControl>
-                      <Input type="number" step="0.01" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="currentStock"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Current Stock</FormLabel>
-                    <FormControl>
-                      <Input type="number" {...field} disabled={isEditing} />
-                    </FormControl>
-                    {isEditing && (
-                      <p className="text-xs text-muted-foreground">
-                        Use Stock Adjustment to change stock.
-                      </p>
-                    )}
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="minStock"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Minimum Stock</FormLabel>
-                    <FormControl>
-                      <Input type="number" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="location"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Rack / Location</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Optional" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem className="col-span-2">
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Optional" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
             </div>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
+            {/* Footer — save only, no cancel */}
+            <div className="flex justify-end pt-2">
               <Button type="submit" disabled={isSaving}>
-                {isSaving ? "Saving..." : isEditing ? "Save Changes" : "Add Product"}
+                {isSaving ? "Saving…" : isEditing ? "Save Changes" : "Add Product"}
               </Button>
-            </DialogFooter>
+            </div>
           </form>
         </Form>
       </DialogContent>
