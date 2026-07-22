@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Plus, MoreHorizontal, Edit, Trash2, Filter } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, Filter, ChevronsUpDown, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -192,25 +192,45 @@ export function Brands() {
             />
           </div>
 
-          {/* Sort pills */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs font-medium text-muted-foreground">Sort:</span>
-            {SORT_OPTIONS.map(({ key, label }) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => toggleSort(key)}
-                className={cn(
-                  "inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border transition-colors",
-                  activeSorts.has(key)
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background text-muted-foreground border-border hover:bg-muted"
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {/* Sort multi-select field */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 min-w-[160px] justify-between gap-2 font-normal">
+                <span className="truncate text-xs text-left">
+                  {activeSorts.size === 0
+                    ? <span className="text-muted-foreground">Sort by...</span>
+                    : SORT_OPTIONS.filter(o => activeSorts.has(o.key)).map(o => o.label).join(", ")
+                  }
+                </span>
+                <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-48 p-1" align="start">
+              {SORT_OPTIONS.map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleSort(key)}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted transition-colors"
+                >
+                  <Check className={cn("h-3.5 w-3.5 shrink-0", activeSorts.has(key) ? "opacity-100 text-primary" : "opacity-0")} />
+                  {label}
+                </button>
+              ))}
+              {activeSorts.size > 0 && (
+                <>
+                  <div className="my-1 border-t" />
+                  <button
+                    type="button"
+                    onClick={() => setActiveSorts(new Set())}
+                    className="flex w-full items-center px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted rounded transition-colors"
+                  >
+                    Clear sort
+                  </button>
+                </>
+              )}
+            </PopoverContent>
+          </Popover>
 
           {/* Categories count range filter */}
           <Popover>
@@ -382,8 +402,16 @@ export function Brands() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {selectedIds.size} brand{selectedIds.size > 1 ? "s" : ""}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently remove the selected brand{selectedIds.size > 1 ? "s" : ""}. This cannot be undone.
+              The following brand{selectedIds.size > 1 ? "s" : ""} will be permanently removed:
             </AlertDialogDescription>
+            <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border bg-muted/40 divide-y text-sm">
+              {selectedBrands.map(b => (
+                <li key={b.id} className="flex items-center gap-2 px-3 py-2">
+                  <Trash2 className="h-3.5 w-3.5 shrink-0 text-destructive/70" />
+                  <span className="font-medium">{b.name}</span>
+                </li>
+              ))}
+            </ul>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
