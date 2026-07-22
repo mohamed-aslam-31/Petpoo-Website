@@ -8,7 +8,9 @@ import {
   useCreateCategory,
   useUpdateCategory,
   useListBrands,
+  useCreateBrand,
   getListCategoriesQueryKey,
+  getListBrandsQueryKey,
 } from "@workspace/api-client-react";
 import {
   Dialog,
@@ -40,13 +42,13 @@ const schema = z
   .object({
     name: z.string().min(1, "Name is required"),
     brandSelection: z.string().default("no-brand"),
-    customBrandName: z.string().optional(),
+    newBrandName: z.string().optional(),
   })
   .refine(
     (data) =>
-      data.brandSelection !== "other" ||
-      (data.customBrandName?.trim().length ?? 0) > 0,
-    { message: "Enter a brand name", path: ["customBrandName"] }
+      data.brandSelection !== "add-new" ||
+      (data.newBrandName?.trim().length ?? 0) > 0,
+    { message: "Enter a brand name", path: ["newBrandName"] }
   );
 
 type FormValues = z.infer<typeof schema>;
@@ -58,7 +60,7 @@ interface EditableCategory {
   brandName?: string | null;
 }
 
-const empty: FormValues = { name: "", brandSelection: "no-brand", customBrandName: "" };
+const empty: FormValues = { name: "", brandSelection: "no-brand", newBrandName: "" };
 
 export function CategoryFormDialog({
   open,
@@ -79,56 +81,58 @@ export function CategoryFormDialog({
   useEffect(() => {
     if (open) {
       if (category) {
-        // Reconstruct form state from category's brandId / brandName
-        const selection = category.brandId
-          ? String(category.brandId)
-          : category.brandName
-          ? "other"
-          : "no-brand";
-        form.reset({
-          name: category.name,
-          brandSelection: selection,
-          customBrandName: category.brandName ?? "",
-        });
+        // If brandId set → existing brand. Otherwise fall back to no-brand
+        // (legacy brandName-only entries are treated as no-brand since "add-new" now creates real records)
+        const selection = category.brandId ? String(category.brandId) : "no-brand";
+        form.reset({ name: category.name, brandSelection: selection, newBrandName: "" });
       } else {
         form.reset(empty);
       }
     }
   }, [open, category, form]);
 
-  const invalidate = () =>
+  const invalidateCategories = () =>
     queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
+
+  const createBrandMutation = useCreateBrand();
 
   const createMutation = useCreateCategory({
     mutation: {
-      onSuccess: () => { toast.success("Category created"); invalidate(); onOpenChange(false); },
+      onSuccess: () => { toast.success("Category created"); invalidateCategories(); onOpenChange(false); },
       onError: (e: any) => toast.error(e?.message ?? "Failed"),
     },
   });
   const updateMutation = useUpdateCategory({
     mutation: {
-      onSuccess: () => { toast.success("Category updated"); invalidate(); onOpenChange(false); },
+      onSuccess: () => { toast.success("Category updated"); invalidateCategories(); onOpenChange(false); },
       onError: (e: any) => toast.error(e?.message ?? "Failed"),
     },
   });
 
-  const isSaving = createMutation.isPending || updateMutation.isPending;
+  const isSaving =
+    createMutation.isPending || updateMutation.isPending || createBrandMutation.isPending;
 
-  function onSubmit(values: FormValues) {
+  async function onSubmit(values: FormValues) {
     let brandId: number | null = null;
-    let brandName: string | null = null;
 
-    if (
-      values.brandSelection &&
-      values.brandSelection !== "no-brand" &&
-      values.brandSelection !== "other"
-    ) {
+    if (values.brandSelection === "add-new") {
+      // Create a real Brand record first, then use its ID
+      try {
+        const newBrand = await createBrandMutation.mutateAsync({
+          data: { name: values.newBrandName!.trim() },
+        });
+        brandId = newBrand.id;
+        // Refresh brands list so the new brand appears in future dropdowns
+        queryClient.invalidateQueries({ queryKey: getListBrandsQueryKey() });
+      } catch (e: any) {
+        toast.error(e?.message ?? "Failed to create brand");
+        return;
+      }
+    } else if (values.brandSelection !== "no-brand") {
       brandId = Number(values.brandSelection);
-    } else if (values.brandSelection === "other") {
-      brandName = values.customBrandName?.trim() || null;
     }
 
-    const payload = { name: values.name, brandId, brandName };
+    const payload = { name: values.name, brandId, brandName: null };
     if (isEditing && category)
       updateMutation.mutate({ id: category.id, data: payload as any });
     else createMutation.mutate({ data: payload as any });
@@ -178,7 +182,7 @@ export function CategoryFormDialog({
                           {b.name}
                         </SelectItem>
                       ))}
-                      <SelectItem value="other">Other (custom name)</SelectItem>
+                      <SelectItem value="add-new">+ Add New Brand</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -186,15 +190,15 @@ export function CategoryFormDialog({
               )}
             />
 
-            {brandSelection === "other" && (
+            {brandSelection === "add-new" && (
               <FormField
                 control={form.control}
-                name="customBrandName"
+                name="newBrandName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Custom Brand Name</FormLabel>
+                    <FormLabel>New Brand Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter brand name" {...field} />
+                      <Input placeholder="e.g. Tata, Amul..." {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
