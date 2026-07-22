@@ -576,11 +576,11 @@ export function Categories() {
             <AlertDialogDescription>
               The following {selectedIds.size > 1 ? "categories" : "category"} will be permanently removed. Products will be unassigned.
             </AlertDialogDescription>
-            <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border bg-muted/40 divide-y text-sm">
+            <ul className="mt-2 max-h-48 overflow-y-auto overflow-x-hidden rounded-md border bg-muted/40 divide-y text-sm w-full">
               {selectedCategories.map(c => (
-                <li key={c.id} className="flex items-center gap-2 px-3 py-2 min-w-0">
+                <li key={c.id} className="flex items-center gap-2 px-3 py-2 overflow-hidden">
                   <Trash2 className="h-3.5 w-3.5 shrink-0 text-destructive/70" />
-                  <span className="font-medium truncate flex-1 min-w-0">{c.name}</span>
+                  <span className="font-medium truncate">{c.name}</span>
                 </li>
               ))}
             </ul>
