@@ -501,7 +501,15 @@ export function ProductFormDialog({
                       </span>
                     </div>
                     <FormControl>
-                      <Input placeholder="e.g. Basmati Rice 25kg" maxLength={80} {...field} />
+                      <Input
+                        placeholder="e.g. Basmati Rice 25kg"
+                        maxLength={80}
+                        {...field}
+                        onChange={e => {
+                          field.onChange(e);
+                          form.trigger("name");
+                        }}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
