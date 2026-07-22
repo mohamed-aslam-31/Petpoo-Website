@@ -36,6 +36,7 @@ function parseProductRow(row: any) {
     status: row.status,
     description: row.description ?? null,
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+    updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
   };
 }
 
@@ -153,6 +154,7 @@ router.get("/products", async (req, res): Promise<void> => {
       status: productsTable.status,
       description: productsTable.description,
       createdAt: productsTable.createdAt,
+      updatedAt: productsTable.updatedAt,
     })
     .from(productsTable)
     .leftJoin(categoriesTable, eq(categoriesTable.id, productsTable.categoryId))
@@ -221,6 +223,7 @@ router.get("/products/:id", async (req, res): Promise<void> => {
       status: productsTable.status,
       description: productsTable.description,
       createdAt: productsTable.createdAt,
+      updatedAt: productsTable.updatedAt,
     })
     .from(productsTable)
     .leftJoin(categoriesTable, eq(categoriesTable.id, productsTable.categoryId))

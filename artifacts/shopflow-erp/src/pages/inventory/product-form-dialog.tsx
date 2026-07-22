@@ -53,6 +53,14 @@ import {
 import { Check, ChevronsUpDown, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+function formatDateTime(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleString("en-IN", {
+    day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit", hour12: true,
+  });
+}
+
 // ── Constants ────────────────────────────────────────────────────────────────
 const NO_BRAND = "__no_brand__";
 const UNITS_STORAGE_KEY = "shopflow-units";
@@ -138,6 +146,8 @@ interface EditableProduct {
   minStock: number;
   location?: string | null;
   status?: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 const emptyValues: ProductFormValues = {
@@ -642,6 +652,21 @@ export function ProductFormDialog({
             </Button>
           </DialogClose>
         </div>
+
+        {isEditing && product?.createdAt && (
+          <div className="mx-6 mt-4 flex flex-wrap gap-x-6 gap-y-1 border rounded-md bg-muted/40 px-3 py-2">
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              <span className="font-medium text-foreground/70">Created</span>
+              <span className="ml-1">{formatDateTime(product.createdAt)}</span>
+            </p>
+            {product.updatedAt && product.updatedAt !== product.createdAt && (
+              <p className="text-[11px] text-muted-foreground leading-tight">
+                <span className="font-medium text-foreground/70">Last edited</span>
+                <span className="ml-1">{formatDateTime(product.updatedAt)}</span>
+              </p>
+            )}
+          </div>
+        )}
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">

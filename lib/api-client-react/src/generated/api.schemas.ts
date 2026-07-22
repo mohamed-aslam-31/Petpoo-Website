@@ -120,6 +120,7 @@ export interface Product {
   /** @nullable */
   description?: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface ProductsPage {

@@ -1530,7 +1530,7 @@ components:
 
     Product:
       type: object
-      required: [id, name, sku, purchasePrice, sellingPrice, wholesalePrice, retailPrice, currentStock, minStock, gstPercent, unit, status, createdAt]
+      required: [id, name, sku, purchasePrice, sellingPrice, wholesalePrice, retailPrice, currentStock, minStock, gstPercent, unit, status, createdAt, updatedAt]
       properties:
         id:              { type: integer }
         name:            { type: string }
@@ -1553,6 +1553,7 @@ components:
         status:          { type: string }
         description:     { type: ["string", "null"] }
         createdAt:       { type: string }
+        updatedAt:       { type: string }
 
     ProductsPage:
       type: object

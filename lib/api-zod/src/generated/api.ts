@@ -248,7 +248,8 @@ export const ListProductsResponse = zod.object({
   "location": zod.string().nullish(),
   "status": zod.string(),
   "description": zod.string().nullish(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
 })),
   "total": zod.number(),
   "page": zod.number(),
@@ -303,7 +304,8 @@ export const CreateProductResponse = zod.object({
   "location": zod.string().nullish(),
   "status": zod.string(),
   "description": zod.string().nullish(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
 })
 
 
@@ -332,7 +334,8 @@ export const GetProductResponse = zod.object({
   "location": zod.string().nullish(),
   "status": zod.string(),
   "description": zod.string().nullish(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
 })
 
 
@@ -380,7 +383,8 @@ export const UpdateProductResponse = zod.object({
   "location": zod.string().nullish(),
   "status": zod.string(),
   "description": zod.string().nullish(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
 })
 
 
@@ -423,7 +427,8 @@ export const AdjustStockResponse = zod.object({
   "location": zod.string().nullish(),
   "status": zod.string(),
   "description": zod.string().nullish(),
-  "createdAt": zod.string()
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
 })
 
 
