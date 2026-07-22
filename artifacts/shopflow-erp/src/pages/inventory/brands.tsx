@@ -472,11 +472,11 @@ export function Brands() {
             <AlertDialogDescription>
               The following brand{selectedIds.size > 1 ? "s" : ""} will be permanently removed:
             </AlertDialogDescription>
-            <ul className="mt-2 max-h-48 overflow-y-auto overflow-x-hidden rounded-md border bg-muted/40 divide-y text-sm w-full">
+            <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border bg-muted/40 divide-y text-sm">
               {selectedBrands.map(b => (
-                <li key={b.id} className="flex items-center gap-2 px-3 py-2 overflow-hidden">
-                  <Trash2 className="h-3.5 w-3.5 shrink-0 text-destructive/70" />
-                  <span className="font-medium truncate">{b.name}</span>
+                <li key={b.id} className="flex items-start gap-2 px-3 py-2">
+                  <Trash2 className="h-3.5 w-3.5 shrink-0 text-destructive/70 mt-0.5" />
+                  <span className="font-medium break-all">{b.name}</span>
                 </li>
               ))}
             </ul>
