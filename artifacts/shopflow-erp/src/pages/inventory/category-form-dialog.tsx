@@ -179,7 +179,7 @@ export function CategoryFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md" onInteractOutside={(e) => e.preventDefault()}>
+      <DialogContent className="max-w-md w-full overflow-hidden" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Category" : "Add Category"}</DialogTitle>
           <DialogDescription>
@@ -286,7 +286,7 @@ export function CategoryFormDialog({
                             variant="outline"
                             role="combobox"
                             aria-expanded={brandOpen}
-                            className="w-full justify-between font-normal text-left"
+                            className="w-full justify-between font-normal text-left overflow-hidden"
                           >
                             <span className={cn("truncate", (brandSelection === NO_BRAND || brandSelection === "") && "text-muted-foreground")}>
                               {brandLabel ?? "Select a brand..."}
