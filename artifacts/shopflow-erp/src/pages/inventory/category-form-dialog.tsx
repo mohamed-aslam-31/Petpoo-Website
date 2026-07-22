@@ -203,7 +203,7 @@ export function CategoryFormDialog({
         )}
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 min-w-0">
             {/* Category name */}
             <FormField
               control={form.control}
