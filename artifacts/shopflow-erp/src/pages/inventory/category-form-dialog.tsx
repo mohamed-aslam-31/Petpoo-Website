@@ -211,9 +211,14 @@ export function CategoryFormDialog({
                 <FormItem>
                   <FormLabel>Name <span className="text-destructive">*</span></FormLabel>
                   <FormControl>
-                    <Input placeholder="Enter Category Name..." {...field} />
+                    <Input placeholder="Enter Category Name..." maxLength={70} {...field} />
                   </FormControl>
-                  <FormMessage />
+                  <div className="flex items-center justify-between gap-2 min-h-[1.25rem]">
+                    <FormMessage />
+                    <span className={cn("text-xs shrink-0 ml-auto", field.value.length >= 70 ? "text-destructive font-medium" : "text-muted-foreground")}>
+                      {field.value.length}/70
+                    </span>
+                  </div>
                 </FormItem>
               )}
             />
@@ -243,25 +248,33 @@ export function CategoryFormDialog({
 
                   {showNewBrand ? (
                     /* ── New brand mode: input + X close button, combobox hidden ── */
-                    <div className="flex gap-2">
-                      <Input
-                        autoFocus
-                        placeholder="New brand name..."
-                        value={newBrandName}
-                        onChange={(e) => setNewBrandName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Escape") cancelNewBrand();
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="shrink-0"
-                        onClick={cancelNewBrand}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
+                    <div className="space-y-1">
+                      <div className="flex gap-2">
+                        <Input
+                          autoFocus
+                          placeholder="New brand name..."
+                          maxLength={70}
+                          value={newBrandName}
+                          onChange={(e) => setNewBrandName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") cancelNewBrand();
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="shrink-0"
+                          onClick={cancelNewBrand}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="flex justify-end">
+                        <span className={cn("text-xs", newBrandName.length >= 70 ? "text-destructive font-medium" : "text-muted-foreground")}>
+                          {newBrandName.length}/70
+                        </span>
+                      </div>
                     </div>
                   ) : (
                     /* ── Normal mode: searchable combobox ── */

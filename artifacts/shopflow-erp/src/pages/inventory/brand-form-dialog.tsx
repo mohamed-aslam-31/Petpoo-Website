@@ -27,6 +27,7 @@ import {
   FormControl,
   FormMessage,
 } from "@/components/ui/form";
+import { cn } from "@/lib/utils";
 
 function formatDateTime(iso: string) {
   const d = new Date(iso);
@@ -101,9 +102,14 @@ export function BrandFormDialog({
               <FormItem>
                 <FormLabel>Name <span className="text-destructive">*</span></FormLabel>
                 <FormControl>
-                  <Input placeholder="Enter Brand Name..." {...field} />
+                  <Input placeholder="Enter Brand Name..." maxLength={70} {...field} />
                 </FormControl>
-                <FormMessage />
+                <div className="flex items-center justify-between gap-2 min-h-[1.25rem]">
+                  <FormMessage />
+                  <span className={cn("text-xs shrink-0 ml-auto", field.value.length >= 70 ? "text-destructive font-medium" : "text-muted-foreground")}>
+                    {field.value.length}/70
+                  </span>
+                </div>
               </FormItem>
             )} />
             <DialogFooter>
