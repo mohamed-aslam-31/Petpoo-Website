@@ -44,7 +44,7 @@ import {
   CommandItem,
   CommandSeparator,
 } from "@/components/ui/command";
-import { Check, ChevronsUpDown, Plus } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NO_BRAND = "no-brand";
@@ -80,10 +80,9 @@ export function CategoryFormDialog({
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: empty });
   const [brandOpen, setBrandOpen] = useState(false);
 
-  // "Add new brand" inline state — separate from the dropdown
+  // New brand mode: when true, combobox is hidden, input is shown
   const [showNewBrand, setShowNewBrand] = useState(false);
   const [newBrandName, setNewBrandName] = useState("");
-  const [newBrandSaving, setNewBrandSaving] = useState(false);
 
   const brandSelection = form.watch("brandSelection") ?? NO_BRAND;
 
@@ -91,6 +90,7 @@ export function CategoryFormDialog({
     if (open) {
       setShowNewBrand(false);
       setNewBrandName("");
+      setBrandOpen(false);
       if (category) {
         const selection = category.brandId ? String(category.brandId) : NO_BRAND;
         form.reset({ name: category.name, brandSelection: selection });
@@ -104,53 +104,60 @@ export function CategoryFormDialog({
     queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
 
   const createBrandMutation = useCreateBrand();
-
   const createMutation = useCreateCategory({
     mutation: {
       onSuccess: () => { toast.success("Category created"); invalidateCategories(); onOpenChange(false); },
-      onError: (e: any) => toast.error(e?.message ?? "Failed"),
+      onError: (e: any) => toast.error(e?.message ?? "Failed to create category"),
     },
   });
   const updateMutation = useUpdateCategory({
     mutation: {
       onSuccess: () => { toast.success("Category updated"); invalidateCategories(); onOpenChange(false); },
-      onError: (e: any) => toast.error(e?.message ?? "Failed"),
+      onError: (e: any) => toast.error(e?.message ?? "Failed to update category"),
     },
   });
 
-  const isSaving = createMutation.isPending || updateMutation.isPending;
+  const isSaving =
+    createMutation.isPending || updateMutation.isPending || createBrandMutation.isPending;
 
-  // Save the new brand and auto-select it
-  async function handleSaveNewBrand() {
-    const trimmed = newBrandName.trim();
-    if (!trimmed) { toast.error("Enter a brand name"); return; }
-    setNewBrandSaving(true);
-    try {
-      const created = await createBrandMutation.mutateAsync({ data: { name: trimmed } });
-      queryClient.invalidateQueries({ queryKey: getListBrandsQueryKey() });
-      form.setValue("brandSelection", String(created.id));
-      setShowNewBrand(false);
-      setNewBrandName("");
-      toast.success(`Brand "${created.name}" created`);
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to create brand");
-    } finally {
-      setNewBrandSaving(false);
-    }
+  function cancelNewBrand() {
+    setShowNewBrand(false);
+    setNewBrandName("");
   }
 
-  // Label shown in trigger
+  // Label shown in the combobox trigger
   const brandLabel = (() => {
     if (brandSelection === NO_BRAND) return "No Brand";
     return brands?.find((b) => String(b.id) === brandSelection)?.name ?? "Select brand";
   })();
 
   async function onSubmit(values: FormValues) {
-    const brandId = values.brandSelection !== NO_BRAND ? Number(values.brandSelection) : null;
+    let brandId: number | null = null;
+
+    // If new brand mode is active and a name was typed, create the brand first
+    if (showNewBrand) {
+      const trimmed = newBrandName.trim();
+      if (!trimmed) {
+        toast.error("Enter a brand name or close the new brand field");
+        return;
+      }
+      try {
+        const created = await createBrandMutation.mutateAsync({ data: { name: trimmed } });
+        queryClient.invalidateQueries({ queryKey: getListBrandsQueryKey() });
+        brandId = created.id;
+      } catch (e: any) {
+        toast.error(e?.message ?? "Failed to create brand");
+        return;
+      }
+    } else if (values.brandSelection !== NO_BRAND) {
+      brandId = Number(values.brandSelection);
+    }
+
     const payload = { name: values.name, brandId, brandName: null };
     if (isEditing && category)
       updateMutation.mutate({ id: category.id, data: payload as any });
-    else createMutation.mutate({ data: payload as any });
+    else
+      createMutation.mutate({ data: payload as any });
   }
 
   return (
@@ -162,8 +169,10 @@ export function CategoryFormDialog({
             {isEditing ? "Update category details." : "Create a new product category."}
           </DialogDescription>
         </DialogHeader>
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {/* Category name */}
             <FormField
               control={form.control}
               name="name"
@@ -178,28 +187,31 @@ export function CategoryFormDialog({
               )}
             />
 
-            {/* Brand field with "Add New Brand" button in the label row */}
+            {/* Brand field */}
             <FormField
               control={form.control}
               name="brandSelection"
               render={({ field }) => (
                 <FormItem>
+                  {/* Label row — "Add New Brand" button always visible unless already in new-brand mode */}
                   <div className="flex items-center justify-between">
                     <FormLabel>Brand</FormLabel>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-xs text-primary gap-1"
-                      onClick={() => { setShowNewBrand((v) => !v); setNewBrandName(""); }}
-                    >
-                      <Plus className="h-3 w-3" />
-                      Add New Brand
-                    </Button>
+                    {!showNewBrand && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs text-primary gap-1"
+                        onClick={() => setShowNewBrand(true)}
+                      >
+                        <Plus className="h-3 w-3" />
+                        Add New Brand
+                      </Button>
+                    )}
                   </div>
 
-                  {/* Inline new-brand input — shown when toggle is active */}
-                  {showNewBrand && (
+                  {showNewBrand ? (
+                    /* ── New brand mode: input + X close button, combobox hidden ── */
                     <div className="flex gap-2">
                       <Input
                         autoFocus
@@ -207,83 +219,84 @@ export function CategoryFormDialog({
                         value={newBrandName}
                         onChange={(e) => setNewBrandName(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") { e.preventDefault(); handleSaveNewBrand(); }
-                          if (e.key === "Escape") { setShowNewBrand(false); setNewBrandName(""); }
+                          if (e.key === "Escape") cancelNewBrand();
                         }}
                       />
                       <Button
                         type="button"
-                        size="sm"
-                        disabled={newBrandSaving || !newBrandName.trim()}
-                        onClick={handleSaveNewBrand}
+                        variant="outline"
+                        size="icon"
+                        className="shrink-0"
+                        onClick={cancelNewBrand}
                       >
-                        {newBrandSaving ? "Saving..." : "Save"}
+                        <X className="h-4 w-4" />
                       </Button>
                     </div>
+                  ) : (
+                    /* ── Normal mode: searchable combobox ── */
+                    <Popover open={brandOpen} onOpenChange={setBrandOpen}>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={brandOpen}
+                            className="w-full justify-between font-normal text-left"
+                          >
+                            <span className={cn("truncate", brandSelection === NO_BRAND && "text-muted-foreground")}>
+                              {brandLabel}
+                            </span>
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="p-0 w-[--radix-popover-trigger-width]"
+                        align="start"
+                        sideOffset={4}
+                      >
+                        <Command>
+                          <CommandInput placeholder="Search brands..." />
+                          <CommandList className="max-h-56 overflow-y-auto">
+                            <CommandEmpty>No brands found.</CommandEmpty>
+                            <CommandGroup>
+                              <CommandItem
+                                value="No Brand"
+                                onSelect={() => { field.onChange(NO_BRAND); setBrandOpen(false); }}
+                              >
+                                <Check className={cn("mr-2 h-4 w-4", field.value === NO_BRAND ? "opacity-100" : "opacity-0")} />
+                                No Brand
+                              </CommandItem>
+                            </CommandGroup>
+
+                            {(brands?.length ?? 0) > 0 && (
+                              <>
+                                <CommandSeparator />
+                                <CommandGroup heading="Brands">
+                                  {brands?.map((b) => (
+                                    <CommandItem
+                                      key={b.id}
+                                      value={b.name}
+                                      onSelect={() => { field.onChange(String(b.id)); setBrandOpen(false); }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          field.value === String(b.id) ? "opacity-100" : "opacity-0"
+                                        )}
+                                      />
+                                      {b.name}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </>
+                            )}
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                   )}
 
-                  {/* Searchable brand combobox */}
-                  <Popover open={brandOpen} onOpenChange={setBrandOpen}>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={brandOpen}
-                          className="w-full justify-between font-normal text-left"
-                        >
-                          <span className={cn("truncate", brandSelection === NO_BRAND && "text-muted-foreground")}>
-                            {brandLabel}
-                          </span>
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent
-                      className="p-0 w-[--radix-popover-trigger-width]"
-                      align="start"
-                      sideOffset={4}
-                    >
-                      <Command>
-                        <CommandInput placeholder="Search brands..." />
-                        <CommandList className="max-h-56 overflow-y-auto">
-                          <CommandEmpty>No brands found.</CommandEmpty>
-                          <CommandGroup>
-                            <CommandItem
-                              value="No Brand"
-                              onSelect={() => { field.onChange(NO_BRAND); setBrandOpen(false); }}
-                            >
-                              <Check className={cn("mr-2 h-4 w-4", field.value === NO_BRAND ? "opacity-100" : "opacity-0")} />
-                              No Brand
-                            </CommandItem>
-                          </CommandGroup>
-
-                          {(brands?.length ?? 0) > 0 && (
-                            <>
-                              <CommandSeparator />
-                              <CommandGroup heading="Brands">
-                                {brands?.map((b) => (
-                                  <CommandItem
-                                    key={b.id}
-                                    value={b.name}
-                                    onSelect={() => { field.onChange(String(b.id)); setBrandOpen(false); }}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        field.value === String(b.id) ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                                    {b.name}
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                            </>
-                          )}
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
                   <FormMessage />
                 </FormItem>
               )}
@@ -294,7 +307,11 @@ export function CategoryFormDialog({
                 Cancel
               </Button>
               <Button type="submit" disabled={isSaving}>
-                {isSaving ? "Saving..." : isEditing ? "Save Changes" : "Add Category"}
+                {isSaving
+                  ? "Saving..."
+                  : isEditing
+                  ? "Save Changes"
+                  : "Add Category"}
               </Button>
             </DialogFooter>
           </form>
