@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Plus, MoreHorizontal, Edit, Trash2, Filter, ChevronsUpDown, Check, X } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, Filter, ChevronsUpDown, Check, X, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -36,7 +36,10 @@ export function Categories() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<any | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<any | null>(null);
+  const [deleteError, setDeleteError] = useState<{ message: string; products: { id: number; name: string }[] } | null>(null);
   const [deletingSelected, setDeletingSelected] = useState(false);
+  const [bulkDeleteErrors, setBulkDeleteErrors] = useState<{ categoryName: string; products: { id: number; name: string }[] }[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [activeSorts, setActiveSorts] = useState<Set<SortKey>>(new Set());
   const [selectedBrandIds, setSelectedBrandIds] = useState<Set<number>>(new Set());
@@ -54,9 +57,7 @@ export function Categories() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
-        setDeletingCategory(null);
       },
-      onError: (e: any) => toast.error(e?.message ?? "Failed to delete"),
     },
   });
 
@@ -189,22 +190,40 @@ export function Categories() {
 
   // ── Bulk delete ────────────────────────────────────────────────────────────
   async function deleteSelectedCategories() {
+    setBulkDeleting(true);
     const ids = [...selectedIds];
-    let failed = 0;
+    let deleted = 0;
+    const linkedErrors: { categoryName: string; products: { id: number; name: string }[] }[] = [];
+
     for (const id of ids) {
+      const category = selectedCategories.find(c => c.id === id);
       try {
         await new Promise<void>((resolve, reject) =>
-          deleteMutation.mutate({ id }, { onSuccess: () => resolve(), onError: () => reject() })
+          deleteMutation.mutate({ id }, { onSuccess: () => resolve(), onError: (e: any) => reject(e) })
         );
-      } catch {
-        failed++;
+        deleted++;
+      } catch (e: any) {
+        const linked = e?.data?.linkedProducts as { id: number; name: string }[] | undefined;
+        if (e?.status === 409 && linked?.length) {
+          linkedErrors.push({ categoryName: category?.name ?? `Category #${id}`, products: linked });
+        } else {
+          toast.error(`Failed to delete "${category?.name ?? `Category #${id}`}"`);
+        }
       }
     }
-    setSelectedIds(new Set());
-    setDeletingSelected(false);
+
+    setBulkDeleting(false);
+
+    if (linkedErrors.length > 0) {
+      setBulkDeleteErrors(linkedErrors);
+      if (deleted > 0) toast.success(`${deleted} category(ies) deleted`);
+    } else {
+      setSelectedIds(new Set());
+      setDeletingSelected(false);
+      setBulkDeleteErrors([]);
+      if (deleted > 0) toast.success(`${deleted} category(ies) deleted`);
+    }
     queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
-    if (failed > 0) toast.error(`${failed} category(ies) could not be deleted`);
-    else toast.success(`${ids.length} category(ies) deleted`);
   }
 
   const brandFilterActive = selectedBrandIds.size > 0;
@@ -564,54 +583,109 @@ export function Categories() {
       <CategoryFormDialog open={formOpen} onOpenChange={setFormOpen} category={editingCategory} />
 
       {/* Single delete */}
-      <AlertDialog open={!!deletingCategory} onOpenChange={open => !open && setDeletingCategory(null)}>
+      <AlertDialog open={!!deletingCategory} onOpenChange={open => { if (!open) { setDeletingCategory(null); setDeleteError(null); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete category?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div>
                 <p className="font-medium text-foreground/80 break-all mb-1">"{deletingCategory?.name}"</p>
-                <p>This will permanently remove this category. Products using it will be unassigned.</p>
+                {!deleteError && <p>This will permanently remove this category.</p>}
               </div>
             </AlertDialogDescription>
+            {deleteError && (
+              <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm space-y-2">
+                <div className="flex items-start gap-2 text-destructive font-medium">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>{deleteError.products.length} product{deleteError.products.length === 1 ? " is" : "s are"} linked to this category.</span>
+                </div>
+                <p className="ml-6 text-muted-foreground">Remove the category from those products first, then try deleting again.</p>
+              </div>
+            )}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deletingCategory && deleteMutation.mutate({ id: deletingCategory.id }, { onSuccess: () => toast.success("Category deleted") })}
-            >
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
+            <AlertDialogCancel>{deleteError ? "Close" : "Cancel"}</AlertDialogCancel>
+            {!deleteError && (
+              <Button
+                variant="destructive"
+                disabled={deleteMutation.isPending}
+                onClick={() => {
+                  if (!deletingCategory) return;
+                  deleteMutation.mutate(
+                    { id: deletingCategory.id },
+                    {
+                      onSuccess: () => {
+                        setDeletingCategory(null);
+                        setDeleteError(null);
+                        toast.success("Category deleted");
+                      },
+                      onError: (e: any) => {
+                        const linked = e?.data?.linkedProducts as { id: number; name: string }[] | undefined;
+                        if (e?.status === 409 && linked?.length) {
+                          setDeleteError({ message: e.data.error, products: linked });
+                        } else {
+                          toast.error(e?.data?.error ?? e?.message ?? "Failed to delete");
+                        }
+                      },
+                    }
+                  );
+                }}
+              >
+                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+              </Button>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       {/* Bulk delete */}
-      <AlertDialog open={deletingSelected} onOpenChange={open => !open && setDeletingSelected(false)}>
+      <AlertDialog open={deletingSelected} onOpenChange={open => { if (!open) { setDeletingSelected(false); setBulkDeleteErrors([]); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {selectedIds.size} categor{selectedIds.size > 1 ? "ies" : "y"}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The following {selectedIds.size > 1 ? "categories" : "category"} will be permanently removed. Products will be unassigned.
-            </AlertDialogDescription>
-            <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border bg-muted/40 divide-y text-sm">
-              {selectedCategories.map(c => (
-                <li key={c.id} className="flex items-start gap-2 px-3 py-2">
-                  <Trash2 className="h-3.5 w-3.5 shrink-0 text-destructive/70 mt-0.5" />
-                  <span className="font-medium break-all">{c.name}</span>
-                </li>
-              ))}
-            </ul>
+            {bulkDeleteErrors.length === 0 ? (
+              <>
+                <AlertDialogDescription>
+                  The following {selectedIds.size > 1 ? "categories" : "category"} will be permanently removed:
+                </AlertDialogDescription>
+                <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border bg-muted/40 divide-y text-sm">
+                  {selectedCategories.map(c => (
+                    <li key={c.id} className="flex items-start gap-2 px-3 py-2">
+                      <Trash2 className="h-3.5 w-3.5 shrink-0 text-destructive/70 mt-0.5" />
+                      <span className="font-medium break-all">{c.name}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <div className="mt-2 space-y-3">
+                <AlertDialogDescription>
+                  Some categories could not be deleted because they are linked to products. Remove the category from those products first, then try again.
+                </AlertDialogDescription>
+                <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                  {bulkDeleteErrors.map(err => (
+                    <div key={err.categoryName} className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+                      <div className="flex items-start gap-2 text-destructive font-medium min-w-0">
+                        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                        <span className="break-all">"{err.categoryName}" is linked to {err.products.length} product{err.products.length === 1 ? "" : "s"}.</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={deleteSelectedCategories}
-            >
-              Delete All
-            </AlertDialogAction>
+            <AlertDialogCancel disabled={bulkDeleting}>{bulkDeleteErrors.length > 0 ? "Close" : "Cancel"}</AlertDialogCancel>
+            {bulkDeleteErrors.length === 0 && (
+              <Button
+                variant="destructive"
+                disabled={bulkDeleting}
+                onClick={deleteSelectedCategories}
+              >
+                {bulkDeleting ? "Deleting..." : "Delete All"}
+              </Button>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

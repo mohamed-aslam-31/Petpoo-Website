@@ -164,6 +164,20 @@ router.patch("/categories/:id", async (req, res): Promise<void> => {
 router.delete("/categories/:id", async (req, res): Promise<void> => {
   const params = DeleteCategoryParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  // Check for linked products before deleting
+  const linkedProducts = await db
+    .select({ id: productsTable.id, name: productsTable.name })
+    .from(productsTable)
+    .where(eq(productsTable.categoryId, params.data.id));
+  if (linkedProducts.length > 0) {
+    res.status(409).json({
+      error: `This category is used by ${linkedProducts.length} product${linkedProducts.length === 1 ? "" : "s"}. Remove the category from those products first, then delete.`,
+      linkedProducts: linkedProducts.map(p => ({ id: p.id, name: p.name })),
+    });
+    return;
+  }
+
   const [cat] = await db.delete(categoriesTable).where(eq(categoriesTable.id, params.data.id)).returning();
   if (!cat) { res.status(404).json({ error: "Category not found" }); return; }
   res.sendStatus(204);
