@@ -77,6 +77,7 @@ export function Products() {
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [adjustingProduct, setAdjustingProduct] = useState<any | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectedProductMap, setSelectedProductMap] = useState<Map<number, any>>(new Map());
 
   const queryClient = useQueryClient();
   const { data: categories } = useListCategories({ query: { queryKey: getListCategoriesQueryKey() } });
@@ -128,7 +129,12 @@ export function Products() {
 
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const selectedProducts = (data?.data ?? []).filter(product => selectedIds.has(product.id));
+  const selectedProducts = useMemo(() => [...selectedProductMap.values()], [selectedProductMap]);
+  const unselectedProducts = useMemo(
+    () => (data?.data ?? []).filter(product => !selectedIds.has(product.id)),
+    [data, selectedIds],
+  );
+  const displayProducts = [...selectedProducts, ...unselectedProducts];
 
   const pageSizeOptions = useMemo(() => {
     const opts = PAGE_SIZE_PRESETS.filter(s => s <= total || s === 10);
@@ -162,7 +168,7 @@ export function Products() {
     let deleted = 0;
 
     for (const id of ids) {
-      const product = (data?.data ?? []).find(p => p.id === id);
+      const product = selectedProductMap.get(id);
       try {
         await new Promise<void>((resolve, reject) =>
           deleteMutation.mutate({ id }, { onSuccess: () => resolve(), onError: (error: any) => reject(error) })
@@ -178,6 +184,7 @@ export function Products() {
     setBulkDeleting(false);
     setDeletingSelected(false);
     setSelectedIds(new Set());
+    setSelectedProductMap(new Map());
     queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
     if (deleted > 0) toast.success(`${deleted} product${deleted === 1 ? "" : "s"} deleted`);
   }
@@ -541,8 +548,22 @@ export function Products() {
                   <Checkbox
                     checked={allChecked ? true : someChecked ? "indeterminate" : false}
                     onCheckedChange={checked => {
-                      if (checked) setSelectedIds(new Set(data?.data?.map(p => p.id) ?? []));
-                      else setSelectedIds(new Set());
+                      if (checked) {
+                        const currentProducts = data?.data ?? [];
+                        setSelectedIds(prev => {
+                          const next = new Set(prev);
+                          currentProducts.forEach(product => next.add(product.id));
+                          return next;
+                        });
+                        setSelectedProductMap(prev => {
+                          const next = new Map(prev);
+                          currentProducts.forEach(product => next.set(product.id, product));
+                          return next;
+                        });
+                      } else {
+                        setSelectedIds(new Set());
+                        setSelectedProductMap(new Map());
+                      }
                     }}
                     aria-label="Select all"
                   />
@@ -572,17 +593,23 @@ export function Products() {
                     <TableCell><Skeleton className="h-8 w-8 rounded ml-auto" /></TableCell>
                   </TableRow>
                 ))
-              ) : data?.data?.length === 0 ? (
+              ) : displayProducts.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
                     No products found.
                   </TableCell>
                 </TableRow>
               ) : (
-                data?.data?.map(product => (
+                displayProducts.map((product, index) => (
                   <TableRow
                     key={product.id}
-                    className={cn("hover:bg-muted/50 transition-colors", selectedIds.has(product.id) && "bg-primary/5")}
+                    className={cn(
+                      "hover:bg-muted/50 transition-colors",
+                      selectedIds.has(product.id) && "bg-primary/5",
+                      selectedIds.has(product.id) &&
+                        !selectedIds.has(displayProducts[index + 1]?.id ?? -1) &&
+                        "border-b-2 border-primary/20",
+                    )}
                     data-state={selectedIds.has(product.id) ? "selected" : undefined}
                   >
                     <TableCell>
@@ -592,6 +619,11 @@ export function Products() {
                           setSelectedIds(prev => {
                             const next = new Set(prev);
                             if (checked) next.add(product.id); else next.delete(product.id);
+                            return next;
+                          });
+                          setSelectedProductMap(prev => {
+                            const next = new Map(prev);
+                            if (checked) next.set(product.id, product); else next.delete(product.id);
                             return next;
                           });
                         }}
