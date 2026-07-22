@@ -49,7 +49,7 @@ import {
   CommandItem,
   CommandSeparator,
 } from "@/components/ui/command";
-import { Check, ChevronsUpDown, Plus } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -618,15 +618,31 @@ export function ProductFormDialog({
   const categoryValue = form.watch("categoryId");
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button:last-child]:hidden">
+    <Dialog open={open} onOpenChange={() => {}}>
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button:last-child]:hidden"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Product" : "Add Product"}</DialogTitle>
-          <DialogDescription>
-            {isEditing
-              ? "Update the product details below."
-              : "Fill in the details to add a new product to your inventory."}
-          </DialogDescription>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <DialogTitle>{isEditing ? "Edit Product" : "Add Product"}</DialogTitle>
+              <DialogDescription className="mt-1">
+                {isEditing
+                  ? "Update the product details below."
+                  : "Fill in the details to add a new product to your inventory."}
+              </DialogDescription>
+            </div>
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 mt-0.5"
+            >
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </button>
+          </div>
         </DialogHeader>
 
         <Form {...form}>
@@ -880,8 +896,11 @@ export function ProductFormDialog({
 
             </div>
 
-            {/* Footer — save only, no cancel */}
-            <div className="flex justify-end pt-2">
+            {/* Footer */}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
+                Cancel
+              </Button>
               <Button type="submit" disabled={isSaving}>
                 {isSaving ? "Saving…" : isEditing ? "Save Changes" : "Add Product"}
               </Button>
