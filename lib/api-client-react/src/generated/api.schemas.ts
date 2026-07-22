@@ -178,14 +178,12 @@ export const StockAdjustmentType = {
   decrease: 'decrease',
   damage: 'damage',
   lost: 'lost',
-  return: 'return',
 } as const;
 
 export interface StockAdjustment {
   type: StockAdjustmentType;
   quantity: number;
   reason: string;
-  notes?: string;
 }
 
 export interface Customer {

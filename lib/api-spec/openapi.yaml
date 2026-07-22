@@ -1610,10 +1610,9 @@ components:
       type: object
       required: [type, quantity, reason]
       properties:
-        type:     { type: string, enum: [increase, decrease, damage, lost, return] }
+        type:     { type: string, enum: [increase, decrease, damage, lost] }
         quantity: { type: integer }
         reason:   { type: string }
-        notes:    { type: string }
 
     Customer:
       type: object

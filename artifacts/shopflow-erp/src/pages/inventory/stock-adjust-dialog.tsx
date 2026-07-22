@@ -18,14 +18,13 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 const schema = z.object({
-  type: z.enum(["increase", "decrease", "damage", "lost", "return"]),
+  type: z.enum(["increase", "decrease", "damage", "lost"]),
   quantity: z.coerce.number().int().min(1, "Quantity must be at least 1"),
-  reason: z.string().min(1, "Reason is required"),
-  notes: z.string().optional(),
+  reason: z.string().trim().min(1, "Reason is required"),
 });
 type FormValues = z.infer<typeof schema>;
 
-const empty: FormValues = { type: "increase", quantity: 1, reason: "", notes: "" };
+const empty: FormValues = { type: "increase", quantity: 1, reason: "" };
 
 interface Props {
   open: boolean;
@@ -61,7 +60,7 @@ export function StockAdjustDialog({ open, onOpenChange, product }: Props) {
   const watchedType = form.watch("type");
   const watchedQty = form.watch("quantity") || 0;
   const previewStock = product
-    ? watchedType === "increase" || watchedType === "return"
+    ? watchedType === "increase"
       ? product.currentStock + watchedQty
       : Math.max(0, product.currentStock - watchedQty)
     : 0;
@@ -86,8 +85,7 @@ export function StockAdjustDialog({ open, onOpenChange, product }: Props) {
                   <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                   <SelectContent>
                     <SelectItem value="increase">Increase (Stock In / Purchase)</SelectItem>
-                    <SelectItem value="decrease">Decrease (Manual Reduction)</SelectItem>
-                    <SelectItem value="return">Return (Customer Return)</SelectItem>
+                    <SelectItem value="decrease">Decrease (Wrong count or miscount)</SelectItem>
                     <SelectItem value="damage">Damage</SelectItem>
                     <SelectItem value="lost">Lost / Missing</SelectItem>
                   </SelectContent>
@@ -115,16 +113,8 @@ export function StockAdjustDialog({ open, onOpenChange, product }: Props) {
 
             <FormField control={form.control} name="reason" render={({ field }) => (
               <FormItem>
-                <FormLabel>Reason</FormLabel>
+                <FormLabel>Reason <span className="text-destructive">*</span></FormLabel>
                 <FormControl><Input placeholder="e.g. Physical count correction, Supplier delivery..." {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-
-            <FormField control={form.control} name="notes" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Notes (optional)</FormLabel>
-                <FormControl><Input placeholder="Any additional notes" {...field} /></FormControl>
                 <FormMessage />
               </FormItem>
             )} />

@@ -400,10 +400,9 @@ export const AdjustStockParams = zod.object({
 })
 
 export const AdjustStockBody = zod.object({
-  "type": zod.enum(['increase', 'decrease', 'damage', 'lost', 'return']),
+  "type": zod.enum(['increase', 'decrease', 'damage', 'lost']),
   "quantity": zod.number(),
-  "reason": zod.string(),
-  "notes": zod.string().optional()
+  "reason": zod.string()
 })
 
 export const AdjustStockResponse = zod.object({

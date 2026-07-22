@@ -11,5 +11,4 @@ export interface StockAdjustment {
   type: StockAdjustmentType;
   quantity: number;
   reason: string;
-  notes?: string;
 }

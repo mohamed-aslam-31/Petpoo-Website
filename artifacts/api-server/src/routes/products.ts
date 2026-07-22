@@ -287,11 +287,11 @@ router.patch("/products/:id/stock", async (req, res): Promise<void> => {
   const [product] = await db.select().from(productsTable).where(eq(productsTable.id, params.data.id));
   if (!product) { res.status(404).json({ error: "Product not found" }); return; }
 
-  const { type, quantity, reason, notes } = parsed.data;
+  const { type, quantity, reason } = parsed.data;
   const beforeStock = product.currentStock;
   let afterStock = beforeStock;
 
-  if (type === "increase" || type === "return") {
+  if (type === "increase") {
     afterStock = beforeStock + quantity;
   } else {
     afterStock = Math.max(0, beforeStock - quantity);
@@ -310,7 +310,7 @@ router.patch("/products/:id/stock", async (req, res): Promise<void> => {
     beforeStock,
     afterStock,
     reason,
-    notes: notes ?? null,
+    notes: null,
   });
 
   res.json(parseProductRow(updated));
