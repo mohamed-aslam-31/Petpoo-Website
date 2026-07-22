@@ -506,7 +506,7 @@ export function Products() {
           )}
         </div>
 
-        <CardContent className="p-0">
+        <CardContent className="px-4 py-0">
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
