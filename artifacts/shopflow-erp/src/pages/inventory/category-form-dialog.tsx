@@ -138,6 +138,7 @@ export function CategoryFormDialog({
   function cancelNewBrand() {
     setShowNewBrand(false);
     setNewBrandName("");
+    form.setValue("brandSelection", "", { shouldValidate: false });
   }
 
   // Label shown in the combobox trigger
@@ -238,7 +239,7 @@ export function CategoryFormDialog({
                         variant="ghost"
                         size="sm"
                         className="h-6 px-2 text-xs text-primary gap-1"
-                        onClick={() => setShowNewBrand(true)}
+                        onClick={() => { setShowNewBrand(true); form.setValue("brandSelection", "__new__", { shouldValidate: true }); }}
                       >
                         <Plus className="h-3 w-3" />
                         Add New Brand
