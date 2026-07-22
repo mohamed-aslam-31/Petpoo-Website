@@ -399,8 +399,8 @@ export function ProductFormDialog({
               />
 
               {/* Brand — searchable combobox */}
-              <FormItem>
-                <FormLabel>Brand</FormLabel>
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Brand</label>
                 <SearchableCombobox
                   value={brandComboValue}
                   onValueChange={handleBrandChange}
@@ -409,29 +409,25 @@ export function ProductFormDialog({
                   searchPlaceholder="Search brands..."
                   emptyText="No brands found."
                 />
-                <FormMessage />
-              </FormItem>
+              </div>
 
               {/* Category — searchable combobox, filtered by brand */}
-              <FormItem>
-                <FormLabel>Category</FormLabel>
+              <div className="space-y-2">
+                <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Category</label>
                 <SearchableCombobox
                   value={categoryValue}
                   onValueChange={handleCategoryChange}
                   options={categoryOptions}
                   placeholder={
-                    brandComboValue
-                      ? categoryOptions.length === 0
-                        ? "No categories for this brand"
-                        : "Select category"
+                    brandComboValue && categoryOptions.length === 0
+                      ? "No categories for this brand"
                       : "Select category"
                   }
                   searchPlaceholder="Search categories..."
                   emptyText="No categories found."
                   disabled={!!brandComboValue && categoryOptions.length === 0}
                 />
-                <FormMessage />
-              </FormItem>
+              </div>
 
               <FormField
                 control={form.control}
