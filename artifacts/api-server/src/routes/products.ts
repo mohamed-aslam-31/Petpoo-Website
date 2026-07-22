@@ -39,6 +39,24 @@ function parseProductRow(row: any) {
   };
 }
 
+router.get("/products/next-sku", async (req, res): Promise<void> => {
+  const [row] = await db
+    .select({ sku: productsTable.sku })
+    .from(productsTable)
+    .where(sql`${productsTable.sku} ~ '^SKU-[0-9]+$'`)
+    .orderBy(sql`cast(substring(${productsTable.sku} from 5) as integer) desc`)
+    .limit(1);
+
+  let next = 1;
+  if (row) {
+    const num = parseInt(row.sku.slice(4), 10);
+    if (!isNaN(num)) next = num + 1;
+  }
+
+  const sku = `SKU-${String(next).padStart(3, "0")}`;
+  res.json({ sku });
+});
+
 router.get("/products", async (req, res): Promise<void> => {
   const page = parseInt(String(req.query.page ?? "1"), 10);
   const limit = parseInt(String(req.query.limit ?? "20"), 10);

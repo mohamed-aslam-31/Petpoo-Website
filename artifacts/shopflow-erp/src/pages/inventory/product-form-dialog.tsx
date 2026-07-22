@@ -50,7 +50,7 @@ import {
   CommandItem,
   CommandSeparator,
 } from "@/components/ui/command";
-import { Check, ChevronsUpDown, Plus, RefreshCw } from "lucide-react";
+import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -69,14 +69,6 @@ function getStoredUnits(): string[] {
     if (Array.isArray(parsed) && parsed.length > 0) return parsed;
   } catch {}
   return DEFAULT_UNITS;
-}
-
-function generateSku(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  const rand = Array.from({ length: 6 }, () =>
-    chars[Math.floor(Math.random() * chars.length)]
-  ).join("");
-  return `SKU-${rand}`;
 }
 
 // Red asterisk for required fields
@@ -342,6 +334,7 @@ export function ProductFormDialog({
   const [brandComboValue, setBrandComboValue] = useState<string | undefined>(undefined);
   const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
   const [unitError, setUnitError] = useState<string | undefined>();
+  const [skuLoading, setSkuLoading] = useState(false);
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -377,7 +370,13 @@ export function ProductFormDialog({
     } else {
       setBrandComboValue(undefined);
       setSelectedUnits([]);
-      form.reset({ ...emptyValues, sku: generateSku() });
+      form.reset({ ...emptyValues, sku: "" });
+      setSkuLoading(true);
+      fetch("/api/products/next-sku")
+        .then(r => r.json())
+        .then(({ sku }) => form.setValue("sku", sku, { shouldValidate: true }))
+        .catch(() => form.setValue("sku", "SKU-001", { shouldValidate: true }))
+        .finally(() => setSkuLoading(false));
     }
   }, [open, product, form]);
 
@@ -481,27 +480,18 @@ export function ProductFormDialog({
                 </FormItem>
               )} />
 
-              {/* 2. SKU (auto-generate + editable) */}
+              {/* 2. SKU (auto-generated, read-only for new products) */}
               <FormField control={form.control} name="sku" render={({ field }) => (
                 <FormItem>
                   <FormLabel>SKU <Req /></FormLabel>
-                  <div className="flex gap-2">
-                    <FormControl>
-                      <Input placeholder="SKU-XXXXXX" {...field} />
-                    </FormControl>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className="shrink-0"
-                      title="Re-generate SKU"
-                      onClick={() =>
-                        form.setValue("sku", generateSku(), { shouldValidate: true })
-                      }
-                    >
-                      <RefreshCw className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  <FormControl>
+                    <Input
+                      {...field}
+                      readOnly={!isEditing}
+                      placeholder={skuLoading ? "Generating…" : "SKU-001"}
+                      className={!isEditing ? "bg-muted text-muted-foreground cursor-default" : ""}
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
