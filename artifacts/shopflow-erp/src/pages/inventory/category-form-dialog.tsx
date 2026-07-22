@@ -204,9 +204,9 @@ export function CategoryFormDialog({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Name</FormLabel>
+                  <FormLabel>Name <span className="text-destructive">*</span></FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g. Grains & Pulses" {...field} />
+                    <Input placeholder="Enter Category Name..." {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -221,7 +221,7 @@ export function CategoryFormDialog({
                 <FormItem>
                   {/* Label row — "Add New Brand" button always visible unless already in new-brand mode */}
                   <div className="flex items-center justify-between">
-                    <FormLabel>Brand</FormLabel>
+                    <FormLabel>Brand <span className="text-destructive">*</span></FormLabel>
                     {!showNewBrand && (
                       <Button
                         type="button"
