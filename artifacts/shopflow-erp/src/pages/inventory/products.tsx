@@ -208,7 +208,7 @@ export function Products() {
                       />
                     </TableCell>
                     <TableCell>
-                      <div className="text-xs text-muted-foreground font-mono">{product.sku}</div>
+                      <div className="text-xs text-muted-foreground font-mono">{product.sku}{product.gstPercent != null ? ` · GST ${product.gstPercent}%` : ""}</div>
                       <div className="font-medium">{product.name}</div>
                       {product.hsnCode && (
                         <div className="text-xs text-muted-foreground mt-0.5">HSN: {product.hsnCode}</div>
