@@ -215,7 +215,7 @@ export function Products() {
                       <div className="font-medium">
                         {product.name}
                         {product.barcode && (
-                          <span className="text-[11px] text-green-600 font-mono font-normal ml-1">({product.barcode})</span>
+                          <span className="text-[11px] text-green-700 font-mono font-normal ml-1.5 bg-green-100 px-0.5 py-px rounded-sm">{product.barcode}</span>
                         )}
                       </div>
                       {product.hsnCode && (
