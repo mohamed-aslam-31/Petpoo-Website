@@ -444,8 +444,13 @@ export function Brands() {
       <AlertDialog open={!!deletingBrand} onOpenChange={open => !open && setDeletingBrand(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete "{deletingBrand?.name}"?</AlertDialogTitle>
-            <AlertDialogDescription>This will permanently remove this brand.</AlertDialogDescription>
+            <AlertDialogTitle>Delete brand?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                <p className="font-medium text-foreground/80 break-all mb-1">"{deletingBrand?.name}"</p>
+                <p>This will permanently remove this brand.</p>
+              </div>
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -469,9 +474,9 @@ export function Brands() {
             </AlertDialogDescription>
             <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border bg-muted/40 divide-y text-sm">
               {selectedBrands.map(b => (
-                <li key={b.id} className="flex items-center gap-2 px-3 py-2">
+                <li key={b.id} className="flex items-center gap-2 px-3 py-2 min-w-0">
                   <Trash2 className="h-3.5 w-3.5 shrink-0 text-destructive/70" />
-                  <span className="font-medium">{b.name}</span>
+                  <span className="font-medium truncate flex-1 min-w-0">{b.name}</span>
                 </li>
               ))}
             </ul>

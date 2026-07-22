@@ -548,9 +548,12 @@ export function Categories() {
       <AlertDialog open={!!deletingCategory} onOpenChange={open => !open && setDeletingCategory(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete "{deletingCategory?.name}"?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently remove this category. Products using it will be unassigned.
+            <AlertDialogTitle>Delete category?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                <p className="font-medium text-foreground/80 break-all mb-1">"{deletingCategory?.name}"</p>
+                <p>This will permanently remove this category. Products using it will be unassigned.</p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -575,9 +578,9 @@ export function Categories() {
             </AlertDialogDescription>
             <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border bg-muted/40 divide-y text-sm">
               {selectedCategories.map(c => (
-                <li key={c.id} className="flex items-center gap-2 px-3 py-2">
+                <li key={c.id} className="flex items-center gap-2 px-3 py-2 min-w-0">
                   <Trash2 className="h-3.5 w-3.5 shrink-0 text-destructive/70" />
-                  <span className="font-medium">{c.name}</span>
+                  <span className="font-medium truncate flex-1 min-w-0">{c.name}</span>
                 </li>
               ))}
             </ul>
