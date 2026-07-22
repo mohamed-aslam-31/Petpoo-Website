@@ -1448,47 +1448,47 @@ components:
       type: object
       required: [id, name, createdAt]
       properties:
-        id:          { type: integer }
-        name:        { type: string }
-        description: { type: ["string", "null"] }
+        id:           { type: integer }
+        name:         { type: string }
+        brandId:      { type: ["integer", "null"] }
+        brandName:    { type: ["string", "null"] }
         productsCount: { type: integer }
-        createdAt:   { type: string }
+        createdAt:    { type: string }
 
     CategoryInput:
       type: object
       required: [name]
       properties:
-        name:        { type: string, minLength: 1 }
-        description: { type: string }
+        name:      { type: string, minLength: 1 }
+        brandId:   { type: ["integer", "null"] }
+        brandName: { type: ["string", "null"] }
 
     CategoryUpdate:
       type: object
       properties:
-        name:        { type: string, minLength: 1 }
-        description: { type: string }
+        name:      { type: string, minLength: 1 }
+        brandId:   { type: ["integer", "null"] }
+        brandName: { type: ["string", "null"] }
 
     Brand:
       type: object
       required: [id, name, createdAt]
       properties:
-        id:          { type: integer }
-        name:        { type: string }
-        description: { type: ["string", "null"] }
+        id:           { type: integer }
+        name:         { type: string }
         productsCount: { type: integer }
-        createdAt:   { type: string }
+        createdAt:    { type: string }
 
     BrandInput:
       type: object
       required: [name]
       properties:
-        name:        { type: string, minLength: 1 }
-        description: { type: string }
+        name: { type: string, minLength: 1 }
 
     BrandUpdate:
       type: object
       properties:
-        name:        { type: string, minLength: 1 }
-        description: { type: string }
+        name: { type: string, minLength: 1 }
 
     Product:
       type: object

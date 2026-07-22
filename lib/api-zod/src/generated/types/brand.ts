@@ -9,8 +9,6 @@
 export interface Brand {
   id: number;
   name: string;
-  /** @nullable */
-  description?: string | null;
   productsCount?: number;
   createdAt: string;
 }

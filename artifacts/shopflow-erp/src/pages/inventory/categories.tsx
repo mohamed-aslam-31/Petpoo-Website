@@ -52,20 +52,22 @@ export function Categories() {
             <TableHeader className="bg-muted/50">
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead>Description</TableHead>
+                <TableHead>Brand</TableHead>
                 <TableHead className="text-right">Products</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? Array(3).fill(0).map((_, i) => (
-                <TableRow key={i}><TableCell><Skeleton className="h-4 w-32" /></TableCell><TableCell><Skeleton className="h-4 w-64" /></TableCell><TableCell className="text-right"><Skeleton className="h-4 w-8 ml-auto" /></TableCell><TableCell><Skeleton className="h-8 w-8 rounded ml-auto" /></TableCell></TableRow>
+                <TableRow key={i}><TableCell><Skeleton className="h-4 w-32" /></TableCell><TableCell><Skeleton className="h-4 w-32" /></TableCell><TableCell className="text-right"><Skeleton className="h-4 w-8 ml-auto" /></TableCell><TableCell><Skeleton className="h-8 w-8 rounded ml-auto" /></TableCell></TableRow>
               )) : filteredData?.length === 0 ? (
                 <TableRow><TableCell colSpan={4} className="h-32 text-center text-muted-foreground">No categories found.</TableCell></TableRow>
               ) : filteredData?.map((category) => (
                 <TableRow key={category.id} className="hover:bg-muted/50 transition-colors">
                   <TableCell className="font-medium">{category.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{category.description || "-"}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {(category as any).brandName ?? "No Brand"}
+                  </TableCell>
                   <TableCell className="text-right">{category.productsCount || 0}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>

@@ -9,5 +9,4 @@
 export interface BrandUpdate {
   /** @minLength 1 */
   name?: string;
-  description?: string;
 }

@@ -10,7 +10,9 @@ export interface Category {
   id: number;
   name: string;
   /** @nullable */
-  description?: string | null;
+  brandId?: number | null;
+  /** @nullable */
+  brandName?: string | null;
   productsCount?: number;
   createdAt: string;
 }

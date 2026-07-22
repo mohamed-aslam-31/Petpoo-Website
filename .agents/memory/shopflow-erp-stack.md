@@ -61,6 +61,14 @@ description: Key stack decisions, port, workflow, and API patterns for this proj
 - **Why:** the ERP treats Delete as "never happened" (full cascade removal) vs. Cancel/Return as "happened then reversed" (row kept, reversal recorded) — mixing these up breaks the audit trail.
 - **How to apply:** any new invoice/credit-note creation or deletion path must call the matching `recordInvoiceEntries`/`recordCreditNoteEntries`/`deleteAccountingEntriesFor` helper in `artifacts/api-server/src/lib/accounting.ts` to keep the ledger consistent.
 
+## Category-Brand association pattern
+- Categories carry two brand fields: `brand_id` (FK to brands, for existing brands) and `brand_name` (text, for "Other" custom names). Both are nullable; both null = "No Brand".
+- API response `brandName` is the effective display name: `joinedBrandName ?? storedBrandName ?? null`. `brandId` is the raw FK.
+- Frontend form uses a synthetic `brandSelection` field: `"no-brand"` | `"other"` | `"{brandId}"`. "Other" reveals a `customBrandName` text input.
+- On submit: if `brandSelection` is a numeric string → set `brandId`, clear `brandName`. If `"other"` → clear `brandId`, set `brandName`. If `"no-brand"` → both null.
+- The `description` column was removed from both `brands` and `categories` tables (ALTER TABLE … DROP COLUMN).
+- **Why:** categories needed a brand association that supports existing brands, no brand, and custom one-off names without polluting the brands master list.
+
 ## Orval codegen naming collision
 - If a new OpenAPI operation's auto-derived request/response type name (`<operationId>Body`/`<operationId>Response`) exactly matches the name of a `components.schemas.*` entry it references via `$ref`, orval's zod target generates two same-named exports (one in `generated/api.ts`, one in `generated/types/*.ts`) and `tsc` fails with "already exported a member" in `lib/api-zod/src/index.ts`.
 - **Why:** zod config's `schemas: { type: "typescript" }` emits a standalone type file per named component schema, independent of the request/response name orval derives from the operationId.

@@ -9,5 +9,8 @@
 export interface CategoryInput {
   /** @minLength 1 */
   name: string;
-  description?: string;
+  /** @nullable */
+  brandId?: number | null;
+  /** @nullable */
+  brandName?: string | null;
 }

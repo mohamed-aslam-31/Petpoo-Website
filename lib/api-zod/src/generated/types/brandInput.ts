@@ -9,5 +9,4 @@
 export interface BrandInput {
   /** @minLength 1 */
   name: string;
-  description?: string;
 }

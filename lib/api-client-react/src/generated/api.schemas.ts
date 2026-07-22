@@ -48,7 +48,9 @@ export interface Category {
   id: number;
   name: string;
   /** @nullable */
-  description?: string | null;
+  brandId?: number | null;
+  /** @nullable */
+  brandName?: string | null;
   productsCount?: number;
   createdAt: string;
 }
@@ -56,20 +58,24 @@ export interface Category {
 export interface CategoryInput {
   /** @minLength 1 */
   name: string;
-  description?: string;
+  /** @nullable */
+  brandId?: number | null;
+  /** @nullable */
+  brandName?: string | null;
 }
 
 export interface CategoryUpdate {
   /** @minLength 1 */
   name?: string;
-  description?: string;
+  /** @nullable */
+  brandId?: number | null;
+  /** @nullable */
+  brandName?: string | null;
 }
 
 export interface Brand {
   id: number;
   name: string;
-  /** @nullable */
-  description?: string | null;
   productsCount?: number;
   createdAt: string;
 }
@@ -77,13 +83,11 @@ export interface Brand {
 export interface BrandInput {
   /** @minLength 1 */
   name: string;
-  description?: string;
 }
 
 export interface BrandUpdate {
   /** @minLength 1 */
   name?: string;
-  description?: string;
 }
 
 export interface Product {

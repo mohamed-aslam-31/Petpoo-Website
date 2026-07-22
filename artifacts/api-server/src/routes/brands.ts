@@ -15,7 +15,6 @@ router.get("/brands", async (req, res): Promise<void> => {
     .select({
       id: brandsTable.id,
       name: brandsTable.name,
-      description: brandsTable.description,
       createdAt: brandsTable.createdAt,
       productsCount: sql<number>`cast(count(${productsTable.id}) as int)`,
     })

@@ -30,13 +30,12 @@ import {
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
-  description: z.string().optional(),
 });
 type FormValues = z.infer<typeof schema>;
 
-interface EditableBrand { id: number; name: string; description?: string | null }
+interface EditableBrand { id: number; name: string }
 
-const empty: FormValues = { name: "", description: "" };
+const empty: FormValues = { name: "" };
 
 export function BrandFormDialog({
   open, onOpenChange, brand,
@@ -46,7 +45,7 @@ export function BrandFormDialog({
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: empty });
 
   useEffect(() => {
-    if (open) form.reset(brand ? { name: brand.name, description: brand.description ?? "" } : empty);
+    if (open) form.reset(brand ? { name: brand.name } : empty);
   }, [open, brand, form]);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: getListBrandsQueryKey() });
@@ -72,9 +71,6 @@ export function BrandFormDialog({
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField control={form.control} name="name" render={({ field }) => (
               <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="e.g. Tata, Amul..." {...field} /></FormControl><FormMessage /></FormItem>
-            )} />
-            <FormField control={form.control} name="description" render={({ field }) => (
-              <FormItem><FormLabel>Description</FormLabel><FormControl><Input placeholder="Optional" {...field} /></FormControl><FormMessage /></FormItem>
             )} />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

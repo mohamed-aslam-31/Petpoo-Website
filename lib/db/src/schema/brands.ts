@@ -5,7 +5,6 @@ import { z } from "zod/v4";
 export const brandsTable = pgTable("brands", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  description: text("description"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

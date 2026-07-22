@@ -76,7 +76,8 @@ export const GetDashboardRecentOrdersResponse = zod.array(GetDashboardRecentOrde
 export const ListCategoriesResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "description": zod.string().nullish(),
+  "brandId": zod.number().nullish(),
+  "brandName": zod.string().nullish(),
   "productsCount": zod.number().optional(),
   "createdAt": zod.string()
 })
@@ -91,13 +92,15 @@ export const ListCategoriesResponse = zod.array(ListCategoriesResponseItem)
 
 export const CreateCategoryBody = zod.object({
   "name": zod.string().min(1),
-  "description": zod.string().optional()
+  "brandId": zod.number().nullish(),
+  "brandName": zod.string().nullish()
 })
 
 export const CreateCategoryResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "description": zod.string().nullish(),
+  "brandId": zod.number().nullish(),
+  "brandName": zod.string().nullish(),
   "productsCount": zod.number().optional(),
   "createdAt": zod.string()
 })
@@ -110,7 +113,8 @@ export const GetCategoryParams = zod.object({
 export const GetCategoryResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "description": zod.string().nullish(),
+  "brandId": zod.number().nullish(),
+  "brandName": zod.string().nullish(),
   "productsCount": zod.number().optional(),
   "createdAt": zod.string()
 })
@@ -125,13 +129,15 @@ export const UpdateCategoryParams = zod.object({
 
 export const UpdateCategoryBody = zod.object({
   "name": zod.string().min(1).optional(),
-  "description": zod.string().optional()
+  "brandId": zod.number().nullish(),
+  "brandName": zod.string().nullish()
 })
 
 export const UpdateCategoryResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "description": zod.string().nullish(),
+  "brandId": zod.number().nullish(),
+  "brandName": zod.string().nullish(),
   "productsCount": zod.number().optional(),
   "createdAt": zod.string()
 })
@@ -150,7 +156,6 @@ export const DeleteCategoryResponse = zod.void()
 export const ListBrandsResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "description": zod.string().nullish(),
   "productsCount": zod.number().optional(),
   "createdAt": zod.string()
 })
@@ -164,14 +169,12 @@ export const ListBrandsResponse = zod.array(ListBrandsResponseItem)
 
 
 export const CreateBrandBody = zod.object({
-  "name": zod.string().min(1),
-  "description": zod.string().optional()
+  "name": zod.string().min(1)
 })
 
 export const CreateBrandResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "description": zod.string().nullish(),
   "productsCount": zod.number().optional(),
   "createdAt": zod.string()
 })
@@ -185,14 +188,12 @@ export const UpdateBrandParams = zod.object({
 
 
 export const UpdateBrandBody = zod.object({
-  "name": zod.string().min(1).optional(),
-  "description": zod.string().optional()
+  "name": zod.string().min(1).optional()
 })
 
 export const UpdateBrandResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "description": zod.string().nullish(),
   "productsCount": zod.number().optional(),
   "createdAt": zod.string()
 })
