@@ -477,40 +477,6 @@ export function Products() {
             </PopoverContent>
           </Popover>
 
-          {/* Active category badges */}
-          {catFilterActive && (
-            <div className="flex flex-wrap gap-1">
-              {[...selectedCategoryIds].map(id => {
-                const cat = categories?.find(c => c.id === id);
-                return cat ? (
-                  <Badge key={id} variant="secondary" className="gap-1 text-xs pl-2 pr-1">
-                    {cat.name}
-                    <button type="button" onClick={() => toggleNum(setSelectedCategoryIds, id)} className="ml-0.5 rounded hover:bg-muted-foreground/20 p-0.5">
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </Badge>
-                ) : null;
-              })}
-            </div>
-          )}
-
-          {/* Active brand badges */}
-          {brandFilterActive && (
-            <div className="flex flex-wrap gap-1">
-              {[...selectedBrandIds].map(id => {
-                const brand = brands?.find(b => b.id === id);
-                return brand ? (
-                  <Badge key={id} variant="secondary" className="gap-1 text-xs pl-2 pr-1">
-                    {brand.name}
-                    <button type="button" onClick={() => toggleNum(setSelectedBrandIds, id)} className="ml-0.5 rounded hover:bg-muted-foreground/20 p-0.5">
-                      <X className="h-2.5 w-2.5" />
-                    </button>
-                  </Badge>
-                ) : null;
-              })}
-            </div>
-          )}
-
           {/* Active unit badges */}
           {unitFilterActive && (
             <div className="flex flex-wrap gap-1">
