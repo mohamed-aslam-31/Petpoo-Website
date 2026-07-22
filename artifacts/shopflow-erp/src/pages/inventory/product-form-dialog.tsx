@@ -850,7 +850,7 @@ export function ProductFormDialog({
               {/* 14. Rack / Location */}
               <div className="space-y-2">
                 <p className="text-sm font-medium leading-none">
-                  Rack / Location{" "}
+                  Rack / Location / Floor{" "}
                   <span className="text-muted-foreground text-xs font-normal">(Optional)</span>
                 </p>
                 <LocationSelect
