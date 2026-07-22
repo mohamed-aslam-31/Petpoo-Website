@@ -10,6 +10,7 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Search, Plus, Filter, MoreHorizontal, Edit, Trash2, Package } from "lucide-react";
@@ -46,6 +47,7 @@ export function Products() {
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<any | null>(null);
   const [adjustingProduct, setAdjustingProduct] = useState<any | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const queryClient = useQueryClient();
   const { data: categories } = useListCategories();
@@ -138,10 +140,26 @@ export function Products() {
           <Table>
             <TableHeader className="bg-muted/50">
               <TableRow>
-                <TableHead className="w-[300px]">Product</TableHead>
+                <TableHead className="w-10">
+                  <Checkbox
+                    checked={
+                      (data?.data?.length ?? 0) > 0 &&
+                      data?.data?.every((p) => selectedIds.has(p.id))
+                    }
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedIds(new Set(data?.data?.map((p) => p.id) ?? []));
+                      } else {
+                        setSelectedIds(new Set());
+                      }
+                    }}
+                    aria-label="Select all"
+                  />
+                </TableHead>
+                <TableHead className="w-[260px]">Product</TableHead>
                 <TableHead>SKU</TableHead>
+                <TableHead>Brand</TableHead>
                 <TableHead>Category</TableHead>
-                <TableHead className="text-right">Price (Retail)</TableHead>
                 <TableHead className="text-right">Stock</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -151,10 +169,11 @@ export function Products() {
               {isLoading ? (
                 Array(5).fill(0).map((_, i) => (
                   <TableRow key={i}>
+                    <TableCell><Skeleton className="h-4 w-4" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-[250px]" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                    <TableCell className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                     <TableCell className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
                     <TableCell><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
                     <TableCell><Skeleton className="h-8 w-8 rounded ml-auto" /></TableCell>
@@ -162,20 +181,35 @@ export function Products() {
                 ))
               ) : data?.data?.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
                     No products found.
                   </TableCell>
                 </TableRow>
               ) : (
                 data?.data?.map((product) => (
-                  <TableRow key={product.id} className="hover:bg-muted/50 transition-colors">
-                    <TableCell className="font-medium">
-                      {product.name}
-                      <div className="text-xs text-muted-foreground font-normal mt-0.5">{product.brandName}</div>
+                  <TableRow
+                    key={product.id}
+                    className="hover:bg-muted/50 transition-colors"
+                    data-state={selectedIds.has(product.id) ? "selected" : undefined}
+                  >
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(product.id)}
+                        onCheckedChange={(checked) => {
+                          setSelectedIds((prev) => {
+                            const next = new Set(prev);
+                            if (checked) next.add(product.id);
+                            else next.delete(product.id);
+                            return next;
+                          });
+                        }}
+                        aria-label={`Select ${product.name}`}
+                      />
                     </TableCell>
+                    <TableCell className="font-medium">{product.name}</TableCell>
                     <TableCell className="text-muted-foreground">{product.sku}</TableCell>
+                    <TableCell className="text-muted-foreground">{product.brandName || "-"}</TableCell>
                     <TableCell>{product.categoryName || "-"}</TableCell>
-                    <TableCell className="text-right">₹{product.retailPrice}</TableCell>
                     <TableCell className="text-right">
                       <span className={product.currentStock <= product.minStock ? "text-red-600 font-bold" : ""}>
                         {product.currentStock} {product.unit}
