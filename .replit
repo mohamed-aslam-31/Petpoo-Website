@@ -35,7 +35,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "pnpm install --frozen-lockfile && cd artifacts/api-server && node ./build.mjs && PORT=8080 NODE_ENV=development node --enable-source-maps ./dist/index.mjs"
+args = "pnpm install --frozen-lockfile && pnpm --filter @workspace/db run push && cd artifacts/api-server && node ./build.mjs && PORT=8080 NODE_ENV=development node --enable-source-maps ./dist/index.mjs"
 
 [[workflows.workflow]]
 name = "artifacts/shopflow-erp: web"
