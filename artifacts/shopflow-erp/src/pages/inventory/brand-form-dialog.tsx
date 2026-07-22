@@ -70,7 +70,7 @@ export function BrandFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Brand" : "Add Brand"}</DialogTitle>
           <DialogDescription>{isEditing ? "Update brand details." : "Create a new product brand."}</DialogDescription>
