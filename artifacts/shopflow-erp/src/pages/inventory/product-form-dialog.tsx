@@ -419,13 +419,15 @@ export function ProductFormDialog({
                   onValueChange={handleCategoryChange}
                   options={categoryOptions}
                   placeholder={
-                    brandComboValue && categoryOptions.length === 0
+                    !brandComboValue
+                      ? "Select brand first"
+                      : categoryOptions.length === 0
                       ? "No categories for this brand"
                       : "Select category"
                   }
                   searchPlaceholder="Search categories..."
                   emptyText="No categories found."
-                  disabled={!!brandComboValue && categoryOptions.length === 0}
+                  disabled={!brandComboValue || categoryOptions.length === 0}
                 />
               </div>
 
