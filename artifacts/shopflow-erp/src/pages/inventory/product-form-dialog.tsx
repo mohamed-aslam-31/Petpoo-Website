@@ -80,7 +80,7 @@ const productSchema = z.object({
   sku:           z.string().min(1, "SKU is required"),
   barcode:       z.string().optional(),
   hsnCode:       z.string().optional(),
-  brandId:       z.string().optional(),
+  brandId:       z.string().min(1, "Brand is required"),
   categoryId:    z.string().min(1, "Category is required"),
   gstPercent:    z.coerce.number().min(0).max(100),
   purchasePrice: z.coerce.number().min(0),
@@ -368,7 +368,7 @@ export function ProductFormDialog({
         status:        product.status === "inactive" ? "inactive" : "active",
       });
     } else {
-      setBrandComboValue(NO_BRAND);
+      setBrandComboValue(undefined);
       setSelectedUnits([]);
       form.reset({ ...emptyValues, sku: "" });
       setSkuLoading(true);
@@ -535,7 +535,7 @@ export function ProductFormDialog({
               {/* 5. Brand */}
               <FormField control={form.control} name="brandId" render={() => (
                 <FormItem>
-                  <FormLabel>Brand</FormLabel>
+                  <FormLabel>Brand <Req /></FormLabel>
                   <SearchableCombobox
                     value={brandComboValue}
                     onValueChange={handleBrandChange}
@@ -557,13 +557,15 @@ export function ProductFormDialog({
                     onValueChange={handleCategoryChange}
                     options={categoryOptions}
                     placeholder={
-                      categoryOptions.length === 0
-                        ? "No categories available"
+                      !brandComboValue
+                        ? "Select brand first"
+                        : categoryOptions.length === 0
+                        ? "No categories for this brand"
                         : "Select category"
                     }
                     searchPlaceholder="Search categories…"
                     emptyText="No categories found."
-                    disabled={categoryOptions.length === 0}
+                    disabled={!brandComboValue || categoryOptions.length === 0}
                   />
                   <FormMessage />
                 </FormItem>
