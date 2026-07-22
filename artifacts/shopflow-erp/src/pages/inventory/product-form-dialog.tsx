@@ -50,7 +50,7 @@ import {
   CommandItem,
   CommandSeparator,
 } from "@/components/ui/command";
-import { Check, ChevronsUpDown, Plus } from "lucide-react";
+import { Check, ChevronsUpDown, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -208,7 +208,7 @@ function UnitMultiSelect({
           align="start"
           sideOffset={4}
         >
-          <Command>
+          <Command shouldFilter={false}>
             <CommandInput
               placeholder="Search or add new unit…"
               value={search}
@@ -218,7 +218,7 @@ function UnitMultiSelect({
               {canAdd && (
                 <>
                   <CommandGroup>
-                    <CommandItem onSelect={addUnit} className="text-primary font-medium">
+                    <CommandItem value={`__add__${trimmed}`} onSelect={addUnit} className="text-primary font-medium">
                       <Plus className="mr-2 h-4 w-4" />
                       Add "{trimmed}"
                     </CommandItem>
@@ -241,7 +241,7 @@ function UnitMultiSelect({
                   ))}
                 </CommandGroup>
               ) : !canAdd ? (
-                <CommandEmpty>No units found.</CommandEmpty>
+                <div className="py-6 text-center text-sm text-muted-foreground">No units found.</div>
               ) : null}
             </CommandList>
           </Command>
@@ -490,15 +490,23 @@ export function ProductFormDialog({
             <div className="grid grid-cols-2 gap-4">
 
               {/* 1. Product Name */}
-              <FormField control={form.control} name="name" render={({ field }) => (
-                <FormItem className="col-span-2">
-                  <FormLabel>Product Name <Req /></FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. Basmati Rice 25kg" maxLength={80} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <FormField control={form.control} name="name" render={({ field }) => {
+                const count = field.value?.length ?? 0;
+                return (
+                  <FormItem className="col-span-2">
+                    <div className="flex items-center justify-between">
+                      <FormLabel>Product Name <Req /></FormLabel>
+                      <span className={cn("text-xs tabular-nums", count >= 80 ? "text-destructive font-semibold" : "text-muted-foreground")}>
+                        {count}/80
+                      </span>
+                    </div>
+                    <FormControl>
+                      <Input placeholder="e.g. Basmati Rice 25kg" maxLength={80} {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }} />
 
               {/* 2. SKU (auto-generated, read-only for new products) */}
               <FormField control={form.control} name="sku" render={({ field }) => (
@@ -528,7 +536,10 @@ export function ProductFormDialog({
                       placeholder="e.g. 8901234567890"
                       maxLength={20}
                       {...field}
-                      onChange={e => field.onChange(e.target.value.replace(/\s/g, ""))}
+                      onChange={e => {
+                        field.onChange(e.target.value.replace(/\s/g, ""));
+                        form.trigger("barcode");
+                      }}
                     />
                   </FormControl>
                   <FormMessage />
@@ -548,7 +559,10 @@ export function ProductFormDialog({
                       maxLength={8}
                       inputMode="numeric"
                       {...field}
-                      onChange={e => field.onChange(e.target.value.replace(/\D/g, ""))}
+                      onChange={e => {
+                        field.onChange(e.target.value.replace(/\D/g, ""));
+                        form.trigger("hsnCode");
+                      }}
                     />
                   </FormControl>
                   <FormMessage />
@@ -599,9 +613,19 @@ export function ProductFormDialog({
 
               {/* 7. Unit (multi-select with search + add new, persisted) */}
               <div className="col-span-2 space-y-2">
-                <p className="text-sm font-medium leading-none">
-                  Unit <Req />
-                </p>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium leading-none">Unit <Req /></p>
+                  {selectedUnits.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedUnits([]); setUnitError("At least one unit is required"); }}
+                      className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <X className="h-3 w-3" />
+                      Clear
+                    </button>
+                  )}
+                </div>
                 <UnitMultiSelect
                   value={selectedUnits}
                   onChange={units => {
