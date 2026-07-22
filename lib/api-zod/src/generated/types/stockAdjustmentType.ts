@@ -14,4 +14,5 @@ export const StockAdjustmentType = {
   decrease: 'decrease',
   damage: 'damage',
   lost: 'lost',
+  wastage: 'wastage',
 } as const;

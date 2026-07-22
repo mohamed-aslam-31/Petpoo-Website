@@ -18,7 +18,7 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 const schema = z.object({
-  type: z.enum(["increase", "decrease", "damage", "lost"]).optional()
+  type: z.enum(["increase", "decrease", "damage", "lost", "wastage"]).optional()
     .refine(value => value !== undefined, "Movement Type is required"),
   quantity: z.coerce.number().int().min(1, "Quantity must be at least 1"),
   reason: z.string().trim().min(1, "Reason is required"),
@@ -89,6 +89,7 @@ export function StockAdjustDialog({ open, onOpenChange, product }: Props) {
                     <SelectItem value="decrease">Decrease (Wrong count or miscount)</SelectItem>
                     <SelectItem value="damage">Damage</SelectItem>
                     <SelectItem value="lost">Lost / Missing</SelectItem>
+                    <SelectItem value="wastage">Wastage</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
