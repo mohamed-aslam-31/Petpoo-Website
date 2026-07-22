@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Plus, MoreHorizontal, Edit, Trash2, Filter, ChevronsUpDown, Check } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, Filter, ChevronsUpDown, Check, AlertCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -30,7 +30,9 @@ export function Brands() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingBrand, setEditingBrand] = useState<any | null>(null);
   const [deletingBrand, setDeletingBrand] = useState<any | null>(null);
+  const [deleteError, setDeleteError] = useState<{ message: string; categories: { id: number; name: string }[] } | null>(null);
   const [deletingSelected, setDeletingSelected] = useState(false);
+  const [bulkDeleteErrors, setBulkDeleteErrors] = useState<{ brandName: string; categories: { id: number; name: string }[] }[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [activeSorts, setActiveSorts] = useState<Set<SortKey>>(new Set());
   const [minCat, setMinCat] = useState("");
@@ -46,8 +48,16 @@ export function Brands() {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListBrandsQueryKey() });
         setDeletingBrand(null);
+        setDeleteError(null);
       },
-      onError: (e: any) => toast.error(e?.message ?? "Failed to delete"),
+      onError: (e: any) => {
+        const linked = e?.data?.linkedCategories as { id: number; name: string }[] | undefined;
+        if (e?.status === 409 && linked?.length) {
+          setDeleteError({ message: e.data.error, categories: linked });
+        } else {
+          toast.error(e?.data?.error ?? e?.message ?? "Failed to delete");
+        }
+      },
     },
   });
 
@@ -154,21 +164,36 @@ export function Brands() {
   // ── Bulk delete ────────────────────────────────────────────────────────────
   async function deleteSelectedBrands() {
     const ids = [...selectedIds];
-    let failed = 0;
+    let deleted = 0;
+    const linkedErrors: { brandName: string; categories: { id: number; name: string }[] }[] = [];
+
     for (const id of ids) {
+      const brand = selectedBrands.find(b => b.id === id);
       try {
         await new Promise<void>((resolve, reject) =>
-          deleteMutation.mutate({ id }, { onSuccess: () => resolve(), onError: () => reject() })
+          deleteMutation.mutate({ id }, { onSuccess: () => resolve(), onError: (e: any) => reject(e) })
         );
-      } catch {
-        failed++;
+        deleted++;
+      } catch (e: any) {
+        const linked = e?.data?.linkedCategories as { id: number; name: string }[] | undefined;
+        if (e?.status === 409 && linked?.length) {
+          linkedErrors.push({ brandName: brand?.name ?? `Brand #${id}`, categories: linked });
+        }
       }
     }
-    setSelectedIds(new Set());
-    setDeletingSelected(false);
+
     queryClient.invalidateQueries({ queryKey: getListBrandsQueryKey() });
-    if (failed > 0) toast.error(`${failed} brand(s) could not be deleted`);
-    else toast.success(`${ids.length} brand(s) deleted`);
+
+    if (linkedErrors.length > 0) {
+      setBulkDeleteErrors(linkedErrors);
+      if (deleted > 0) toast.success(`${deleted} brand(s) deleted`);
+      // keep dialog open to show errors
+    } else {
+      setSelectedIds(new Set());
+      setDeletingSelected(false);
+      setBulkDeleteErrors([]);
+      if (deleted > 0) toast.success(`${deleted} brand(s) deleted`);
+    }
   }
 
   const catFilterActive = minCat !== "" || maxCat !== "";
@@ -445,54 +470,95 @@ export function Brands() {
       <BrandFormDialog open={formOpen} onOpenChange={setFormOpen} brand={editingBrand} />
 
       {/* Single delete */}
-      <AlertDialog open={!!deletingBrand} onOpenChange={open => !open && setDeletingBrand(null)}>
+      <AlertDialog open={!!deletingBrand} onOpenChange={open => { if (!open) { setDeletingBrand(null); setDeleteError(null); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete brand?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div>
                 <p className="font-medium text-foreground/80 break-all mb-1">"{deletingBrand?.name}"</p>
-                <p>This will permanently remove this brand.</p>
+                {!deleteError && <p>This will permanently remove this brand.</p>}
               </div>
             </AlertDialogDescription>
+            {deleteError && (
+              <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm space-y-2">
+                <div className="flex items-start gap-2 text-destructive font-medium">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>Cannot delete — this brand is linked to {deleteError.categories.length} categor{deleteError.categories.length === 1 ? "y" : "ies"}:</span>
+                </div>
+                <ul className="ml-6 space-y-0.5 text-muted-foreground list-disc">
+                  {deleteError.categories.map(c => (
+                    <li key={c.id} className="break-all">{c.name}</li>
+                  ))}
+                </ul>
+                <p className="ml-6 text-muted-foreground">Go to the <strong>Categories</strong> page, clear the brand from those categories, then try deleting again.</p>
+              </div>
+            )}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deletingBrand && deleteMutation.mutate({ id: deletingBrand.id }, { onSuccess: () => toast.success("Brand deleted") })}
-            >
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
+            <AlertDialogCancel>{deleteError ? "Close" : "Cancel"}</AlertDialogCancel>
+            {!deleteError && (
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => deletingBrand && deleteMutation.mutate({ id: deletingBrand.id }, { onSuccess: () => toast.success("Brand deleted") })}
+              >
+                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       {/* Bulk delete */}
-      <AlertDialog open={deletingSelected} onOpenChange={open => !open && setDeletingSelected(false)}>
+      <AlertDialog open={deletingSelected} onOpenChange={open => { if (!open) { setDeletingSelected(false); setBulkDeleteErrors([]); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {selectedIds.size} brand{selectedIds.size > 1 ? "s" : ""}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The following brand{selectedIds.size > 1 ? "s" : ""} will be permanently removed:
-            </AlertDialogDescription>
-            <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border bg-muted/40 divide-y text-sm">
-              {selectedBrands.map(b => (
-                <li key={b.id} className="flex items-start gap-2 px-3 py-2">
-                  <Trash2 className="h-3.5 w-3.5 shrink-0 text-destructive/70 mt-0.5" />
-                  <span className="font-medium break-all">{b.name}</span>
-                </li>
-              ))}
-            </ul>
+            {bulkDeleteErrors.length === 0 ? (
+              <>
+                <AlertDialogDescription>
+                  The following brand{selectedIds.size > 1 ? "s" : ""} will be permanently removed:
+                </AlertDialogDescription>
+                <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border bg-muted/40 divide-y text-sm">
+                  {selectedBrands.map(b => (
+                    <li key={b.id} className="flex items-start gap-2 px-3 py-2">
+                      <Trash2 className="h-3.5 w-3.5 shrink-0 text-destructive/70 mt-0.5" />
+                      <span className="font-medium break-all">{b.name}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <div className="mt-2 space-y-3">
+                <AlertDialogDescription>
+                  Some brands could not be deleted because they are linked to categories. Go to the <strong>Categories</strong> page, clear the brand from those categories, then try again.
+                </AlertDialogDescription>
+                {bulkDeleteErrors.map(err => (
+                  <div key={err.brandName} className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm space-y-1">
+                    <div className="flex items-start gap-2 text-destructive font-medium">
+                      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>"{err.brandName}" is used by:</span>
+                    </div>
+                    <ul className="ml-6 space-y-0.5 text-muted-foreground list-disc">
+                      {err.categories.map(c => (
+                        <li key={c.id} className="break-all">{c.name}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={deleteSelectedBrands}
-            >
-              Delete All
-            </AlertDialogAction>
+            <AlertDialogCancel>{bulkDeleteErrors.length > 0 ? "Close" : "Cancel"}</AlertDialogCancel>
+            {bulkDeleteErrors.length === 0 && (
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={deleteSelectedBrands}
+              >
+                Delete All
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

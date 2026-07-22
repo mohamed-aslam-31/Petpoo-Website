@@ -73,6 +73,21 @@ router.patch("/brands/:id", async (req, res): Promise<void> => {
 router.delete("/brands/:id", async (req, res): Promise<void> => {
   const params = DeleteBrandParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  // Check for linked categories before deleting
+  const linkedCategories = await db
+    .select({ id: categoriesTable.id, name: categoriesTable.name })
+    .from(categoriesTable)
+    .where(eq(categoriesTable.brandId, params.data.id));
+  if (linkedCategories.length > 0) {
+    const names = linkedCategories.map(c => `"${c.name}"`).join(", ");
+    res.status(409).json({
+      error: `This brand is used by ${linkedCategories.length} categor${linkedCategories.length === 1 ? "y" : "ies"}: ${names}. Clear the categor${linkedCategories.length === 1 ? "y's" : "ies'"} brand first, then delete.`,
+      linkedCategories: linkedCategories.map(c => ({ id: c.id, name: c.name })),
+    });
+    return;
+  }
+
   const [brand] = await db.delete(brandsTable).where(eq(brandsTable.id, params.data.id)).returning();
   if (!brand) { res.status(404).json({ error: "Brand not found" }); return; }
   res.sendStatus(204);
