@@ -208,10 +208,13 @@ export function Products() {
                       />
                     </TableCell>
                     <TableCell>
-                      <div className="text-xs text-muted-foreground font-mono">{product.sku}{product.gstPercent != null ? ` · GST ${product.gstPercent}%` : ""}</div>
+                      <div className="text-xs font-mono">
+                        <span className="text-blue-600">{product.sku}</span>
+                        {product.gstPercent != null && <span className="text-red-500"> · GST {product.gstPercent}%</span>}
+                      </div>
                       <div className="font-medium">{product.name}</div>
                       {product.hsnCode && (
-                        <div className="text-xs text-muted-foreground mt-0.5">HSN: {product.hsnCode}</div>
+                        <div className="text-xs text-yellow-600 mt-0.5">HSN: {product.hsnCode}</div>
                       )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{product.brandName || "-"}</TableCell>
