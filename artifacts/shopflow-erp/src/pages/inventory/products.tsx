@@ -31,12 +31,14 @@ import { cn } from "@/lib/utils";
 
 const PAGE_SIZE_PRESETS = [10, 20, 50, 100];
 
-type SortKey = "az" | "za" | "new" | "old";
+type SortKey = "az" | "za" | "new" | "old" | "stockAsc" | "stockDesc";
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "az", label: "A → Z" },
   { key: "za", label: "Z → A" },
   { key: "new", label: "Newest first" },
   { key: "old", label: "Oldest first" },
+  { key: "stockAsc", label: "Stock: Min → Max" },
+  { key: "stockDesc", label: "Stock: Max → Min" },
 ];
 
 function sortKeyToParams(activeSorts: Set<SortKey>) {
@@ -44,6 +46,8 @@ function sortKeyToParams(activeSorts: Set<SortKey>) {
   if (activeSorts.has("za")) return { sortBy: "name", sortOrder: "desc" };
   if (activeSorts.has("new")) return { sortBy: "createdAt", sortOrder: "desc" };
   if (activeSorts.has("old")) return { sortBy: "createdAt", sortOrder: "asc" };
+  if (activeSorts.has("stockAsc")) return { sortBy: "currentStock", sortOrder: "asc" };
+  if (activeSorts.has("stockDesc")) return { sortBy: "currentStock", sortOrder: "desc" };
   return {};
 }
 
@@ -54,6 +58,8 @@ export function Products() {
   const [selectedUnits, setSelectedUnits] = useState<Set<string>>(new Set());
   const [selectedLocations, setSelectedLocations] = useState<Set<string>>(new Set());
   const [activeSorts, setActiveSorts] = useState<Set<SortKey>>(new Set());
+  const [minStock, setMinStock] = useState("");
+  const [maxStock, setMaxStock] = useState("");
 
   // Per-popover search states
   const [catSearch, setCatSearch] = useState("");
@@ -90,11 +96,13 @@ export function Products() {
     ...(selectedBrandIds.size > 0 && { brandIds: [...selectedBrandIds].join(",") }),
     ...(selectedUnits.size > 0 && { units: [...selectedUnits].join(",") }),
     ...(selectedLocations.size > 0 && { locations: [...selectedLocations].join(",") }),
+    ...(minStock !== "" && { minStock: Number(minStock) }),
+    ...(maxStock !== "" && { maxStock: Number(maxStock) }),
     ...sortParams,
   };
 
   // Reset to page 1 when filters change
-  const filterKey = `${search}|${[...selectedCategoryIds].sort()}|${[...selectedBrandIds].sort()}|${[...selectedUnits].sort()}|${[...selectedLocations].sort()}|${[...activeSorts].sort()}`;
+  const filterKey = `${search}|${minStock}|${maxStock}|${[...selectedCategoryIds].sort()}|${[...selectedBrandIds].sort()}|${[...selectedUnits].sort()}|${[...selectedLocations].sort()}|${[...activeSorts].sort()}`;
   const prevFilterKey = useRef("");
   if (filterKey !== prevFilterKey.current) {
     prevFilterKey.current = filterKey;
@@ -131,6 +139,7 @@ export function Products() {
       else {
         if (key === "az" || key === "za") { next.delete("az"); next.delete("za"); }
         if (key === "new" || key === "old") { next.delete("new"); next.delete("old"); }
+        if (key === "stockAsc" || key === "stockDesc") { next.delete("stockAsc"); next.delete("stockDesc"); }
         next.add(key);
       }
       return next;
@@ -171,6 +180,7 @@ export function Products() {
   const brandFilterActive = selectedBrandIds.size > 0;
   const unitFilterActive = selectedUnits.size > 0;
   const locFilterActive = selectedLocations.size > 0;
+  const stockFilterActive = minStock !== "" || maxStock !== "";
 
   // Table checkbox helpers
   const allChecked = (data?.data?.length ?? 0) > 0 && data?.data?.every(p => selectedIds.has(p.id));
@@ -233,6 +243,36 @@ export function Products() {
                     Clear sort
                   </button>
                 </>
+              )}
+            </PopoverContent>
+          </Popover>
+
+          {/* Stock range filter */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+                <Filter className="h-3 w-3" />
+                Stock
+                {stockFilterActive && <Badge variant="secondary" className="ml-0.5 px-1.5 h-4 text-[10px]">on</Badge>}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-52 p-3" align="start">
+              <p className="text-xs font-semibold mb-3">Stock Range</p>
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <label className="text-[10px] text-muted-foreground mb-1 block">Min</label>
+                  <Input type="number" min={0} placeholder="0" className="h-7 text-xs" value={minStock} onChange={e => setMinStock(e.target.value)} />
+                </div>
+                <span className="text-muted-foreground text-xs mt-4">–</span>
+                <div className="flex-1">
+                  <label className="text-[10px] text-muted-foreground mb-1 block">Max</label>
+                  <Input type="number" min={0} placeholder="∞" className="h-7 text-xs" value={maxStock} onChange={e => setMaxStock(e.target.value)} />
+                </div>
+              </div>
+              {stockFilterActive && (
+                <Button variant="ghost" size="sm" className="mt-2 h-7 text-xs w-full" onClick={() => { setMinStock(""); setMaxStock(""); }}>
+                  Clear filter
+                </Button>
               )}
             </PopoverContent>
           </Popover>

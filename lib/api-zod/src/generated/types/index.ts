@@ -58,6 +58,8 @@ export * from './listOrdersCreatedFrom';
 export * from './listOrdersParams';
 export * from './listPaymentsParams';
 export * from './listProductsParams';
+export * from './listProductsSortBy';
+export * from './listProductsSortOrder';
 export * from './listStockMovementsParams';
 export * from './listSuppliersParams';
 export * from './order';

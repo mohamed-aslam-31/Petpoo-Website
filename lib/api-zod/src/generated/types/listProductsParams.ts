@@ -5,12 +5,34 @@
  * ShopFlow ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { ListProductsSortBy } from './listProductsSortBy';
+import type { ListProductsSortOrder } from './listProductsSortOrder';
 
 export type ListProductsParams = {
 search?: string;
 categoryId?: number;
 brandId?: number;
 lowStock?: boolean;
+/**
+ * Comma-separated category IDs
+ */
+categoryIds?: string;
+/**
+ * Comma-separated brand IDs
+ */
+brandIds?: string;
+/**
+ * Comma-separated units
+ */
+units?: string;
+/**
+ * Comma-separated locations
+ */
+locations?: string;
+sortBy?: ListProductsSortBy;
+sortOrder?: ListProductsSortOrder;
+minStock?: number;
+maxStock?: number;
 page?: number;
 limit?: number;
 };

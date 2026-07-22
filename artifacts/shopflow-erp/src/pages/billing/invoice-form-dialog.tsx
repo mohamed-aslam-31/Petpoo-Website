@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -165,6 +165,7 @@ export function InvoiceFormDialog({
 
   const invoiceType = form.watch("type");
   const isGst = invoiceType === "gst";
+  const [creditError, setCreditError] = useState<string | null>(null);
 
   const watchedItems = form.watch("items");
   const itemsTotal = watchedItems.reduce((sum, item) => {

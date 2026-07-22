@@ -557,7 +557,7 @@ export function ProductFormDialog({
   // ── Handlers ───────────────────────────────────────────────────────────────
   function handleBrandChange(val: string | undefined) {
     setBrandComboValue(val);
-    form.setValue("brandId", val, { shouldValidate: true });
+    form.setValue("brandId", val ?? "", { shouldValidate: true });
     form.setValue("categoryId", "", { shouldValidate: false });
   }
 

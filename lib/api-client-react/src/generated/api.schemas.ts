@@ -807,9 +807,46 @@ search?: string;
 categoryId?: number;
 brandId?: number;
 lowStock?: boolean;
+/**
+ * Comma-separated category IDs
+ */
+categoryIds?: string;
+/**
+ * Comma-separated brand IDs
+ */
+brandIds?: string;
+/**
+ * Comma-separated units
+ */
+units?: string;
+/**
+ * Comma-separated locations
+ */
+locations?: string;
+sortBy?: ListProductsSortBy;
+sortOrder?: ListProductsSortOrder;
+minStock?: number;
+maxStock?: number;
 page?: number;
 limit?: number;
 };
+
+export type ListProductsSortBy = typeof ListProductsSortBy[keyof typeof ListProductsSortBy];
+
+
+export const ListProductsSortBy = {
+  name: 'name',
+  createdAt: 'createdAt',
+  currentStock: 'currentStock',
+} as const;
+
+export type ListProductsSortOrder = typeof ListProductsSortOrder[keyof typeof ListProductsSortOrder];
+
+
+export const ListProductsSortOrder = {
+  asc: 'asc',
+  desc: 'desc',
+} as const;
 
 export type ListCustomersParams = {
 search?: string;

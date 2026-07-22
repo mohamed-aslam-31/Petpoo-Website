@@ -214,6 +214,14 @@ export const ListProductsQueryParams = zod.object({
   "categoryId": zod.coerce.number().optional(),
   "brandId": zod.coerce.number().optional(),
   "lowStock": zod.coerce.boolean().optional(),
+  "categoryIds": zod.coerce.string().optional().describe('Comma-separated category IDs'),
+  "brandIds": zod.coerce.string().optional().describe('Comma-separated brand IDs'),
+  "units": zod.coerce.string().optional().describe('Comma-separated units'),
+  "locations": zod.coerce.string().optional().describe('Comma-separated locations'),
+  "sortBy": zod.enum(['name', 'createdAt', 'currentStock']).optional(),
+  "sortOrder": zod.enum(['asc', 'desc']).optional(),
+  "minStock": zod.coerce.number().optional(),
+  "maxStock": zod.coerce.number().optional(),
   "page": zod.coerce.number().optional(),
   "limit": zod.coerce.number().optional()
 })

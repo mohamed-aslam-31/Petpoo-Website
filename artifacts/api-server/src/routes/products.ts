@@ -95,6 +95,8 @@ router.get("/products", async (req, res): Promise<void> => {
   const locations = req.query.locations
     ? String(req.query.locations).split(",").filter(Boolean)
     : [];
+  const minStock = req.query.minStock !== undefined ? Number(req.query.minStock) : undefined;
+  const maxStock = req.query.maxStock !== undefined ? Number(req.query.maxStock) : undefined;
 
   // Sort
   const sortBy = req.query.sortBy as string | undefined;
@@ -102,6 +104,8 @@ router.get("/products", async (req, res): Promise<void> => {
   const orderByClause =
     sortBy === "createdAt"
       ? sortOrder === "asc" ? asc(productsTable.createdAt) : desc(productsTable.createdAt)
+      : sortBy === "currentStock"
+        ? sortOrder === "desc" ? desc(productsTable.currentStock) : asc(productsTable.currentStock)
       : sortOrder === "desc" ? desc(productsTable.name) : asc(productsTable.name);
 
   const conditions = [];
@@ -116,6 +120,8 @@ router.get("/products", async (req, res): Promise<void> => {
   if (units.length) conditions.push(inArray(productsTable.unit, units));
   if (locations.length) conditions.push(inArray(productsTable.location, locations));
   if (lowStock) conditions.push(lte(productsTable.currentStock, productsTable.minStock));
+  if (minStock !== undefined && Number.isFinite(minStock)) conditions.push(sql`${productsTable.currentStock} >= ${minStock}`);
+  if (maxStock !== undefined && Number.isFinite(maxStock)) conditions.push(sql`${productsTable.currentStock} <= ${maxStock}`);
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 

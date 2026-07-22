@@ -271,6 +271,44 @@ paths:
           in: query
           schema:
             type: boolean
+        - name: categoryIds
+          in: query
+          schema:
+            type: string
+          description: Comma-separated category IDs
+        - name: brandIds
+          in: query
+          schema:
+            type: string
+          description: Comma-separated brand IDs
+        - name: units
+          in: query
+          schema:
+            type: string
+          description: Comma-separated units
+        - name: locations
+          in: query
+          schema:
+            type: string
+          description: Comma-separated locations
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [name, createdAt, currentStock]
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+        - name: minStock
+          in: query
+          schema:
+            type: integer
+        - name: maxStock
+          in: query
+          schema:
+            type: integer
         - name: page
           in: query
           schema:
