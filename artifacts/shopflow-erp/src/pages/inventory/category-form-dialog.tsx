@@ -44,24 +44,15 @@ import {
   CommandItem,
   CommandSeparator,
 } from "@/components/ui/command";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NO_BRAND = "no-brand";
-const ADD_NEW = "add-new";
 
-const schema = z
-  .object({
-    name: z.string().min(1, "Name is required"),
-    brandSelection: z.string().default(NO_BRAND),
-    newBrandName: z.string().optional(),
-  })
-  .refine(
-    (data) =>
-      data.brandSelection !== ADD_NEW ||
-      (data.newBrandName?.trim().length ?? 0) > 0,
-    { message: "Enter a brand name", path: ["newBrandName"] }
-  );
+const schema = z.object({
+  name: z.string().min(1, "Name is required"),
+  brandSelection: z.string().default(NO_BRAND),
+});
 
 type FormValues = z.infer<typeof schema>;
 
@@ -72,7 +63,7 @@ interface EditableCategory {
   brandName?: string | null;
 }
 
-const empty: FormValues = { name: "", brandSelection: NO_BRAND, newBrandName: "" };
+const empty: FormValues = { name: "", brandSelection: NO_BRAND };
 
 export function CategoryFormDialog({
   open,
@@ -89,13 +80,20 @@ export function CategoryFormDialog({
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: empty });
   const [brandOpen, setBrandOpen] = useState(false);
 
+  // "Add new brand" inline state — separate from the dropdown
+  const [showNewBrand, setShowNewBrand] = useState(false);
+  const [newBrandName, setNewBrandName] = useState("");
+  const [newBrandSaving, setNewBrandSaving] = useState(false);
+
   const brandSelection = form.watch("brandSelection") ?? NO_BRAND;
 
   useEffect(() => {
     if (open) {
+      setShowNewBrand(false);
+      setNewBrandName("");
       if (category) {
         const selection = category.brandId ? String(category.brandId) : NO_BRAND;
-        form.reset({ name: category.name, brandSelection: selection, newBrandName: "" });
+        form.reset({ name: category.name, brandSelection: selection });
       } else {
         form.reset(empty);
       }
@@ -120,34 +118,35 @@ export function CategoryFormDialog({
     },
   });
 
-  const isSaving =
-    createMutation.isPending || updateMutation.isPending || createBrandMutation.isPending;
+  const isSaving = createMutation.isPending || updateMutation.isPending;
 
-  // Label shown in the trigger button
+  // Save the new brand and auto-select it
+  async function handleSaveNewBrand() {
+    const trimmed = newBrandName.trim();
+    if (!trimmed) { toast.error("Enter a brand name"); return; }
+    setNewBrandSaving(true);
+    try {
+      const created = await createBrandMutation.mutateAsync({ data: { name: trimmed } });
+      queryClient.invalidateQueries({ queryKey: getListBrandsQueryKey() });
+      form.setValue("brandSelection", String(created.id));
+      setShowNewBrand(false);
+      setNewBrandName("");
+      toast.success(`Brand "${created.name}" created`);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to create brand");
+    } finally {
+      setNewBrandSaving(false);
+    }
+  }
+
+  // Label shown in trigger
   const brandLabel = (() => {
     if (brandSelection === NO_BRAND) return "No Brand";
-    if (brandSelection === ADD_NEW) return "+ Add New Brand";
     return brands?.find((b) => String(b.id) === brandSelection)?.name ?? "Select brand";
   })();
 
   async function onSubmit(values: FormValues) {
-    let brandId: number | null = null;
-
-    if (values.brandSelection === ADD_NEW) {
-      try {
-        const newBrand = await createBrandMutation.mutateAsync({
-          data: { name: values.newBrandName!.trim() },
-        });
-        brandId = newBrand.id;
-        queryClient.invalidateQueries({ queryKey: getListBrandsQueryKey() });
-      } catch (e: any) {
-        toast.error(e?.message ?? "Failed to create brand");
-        return;
-      }
-    } else if (values.brandSelection !== NO_BRAND) {
-      brandId = Number(values.brandSelection);
-    }
-
+    const brandId = values.brandSelection !== NO_BRAND ? Number(values.brandSelection) : null;
     const payload = { name: values.name, brandId, brandName: null };
     if (isEditing && category)
       updateMutation.mutate({ id: category.id, data: payload as any });
@@ -179,13 +178,51 @@ export function CategoryFormDialog({
               )}
             />
 
-            {/* Brand — searchable combobox with scroll */}
+            {/* Brand field with "Add New Brand" button in the label row */}
             <FormField
               control={form.control}
               name="brandSelection"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Brand</FormLabel>
+                  <div className="flex items-center justify-between">
+                    <FormLabel>Brand</FormLabel>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2 text-xs text-primary gap-1"
+                      onClick={() => { setShowNewBrand((v) => !v); setNewBrandName(""); }}
+                    >
+                      <Plus className="h-3 w-3" />
+                      Add New Brand
+                    </Button>
+                  </div>
+
+                  {/* Inline new-brand input — shown when toggle is active */}
+                  {showNewBrand && (
+                    <div className="flex gap-2">
+                      <Input
+                        autoFocus
+                        placeholder="New brand name..."
+                        value={newBrandName}
+                        onChange={(e) => setNewBrandName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") { e.preventDefault(); handleSaveNewBrand(); }
+                          if (e.key === "Escape") { setShowNewBrand(false); setNewBrandName(""); }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={newBrandSaving || !newBrandName.trim()}
+                        onClick={handleSaveNewBrand}
+                      >
+                        {newBrandSaving ? "Saving..." : "Save"}
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Searchable brand combobox */}
                   <Popover open={brandOpen} onOpenChange={setBrandOpen}>
                     <PopoverTrigger asChild>
                       <FormControl>
@@ -195,7 +232,7 @@ export function CategoryFormDialog({
                           aria-expanded={brandOpen}
                           className="w-full justify-between font-normal text-left"
                         >
-                          <span className={cn("truncate", !field.value || field.value === NO_BRAND ? "text-muted-foreground" : "")}>
+                          <span className={cn("truncate", brandSelection === NO_BRAND && "text-muted-foreground")}>
                             {brandLabel}
                           </span>
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -214,10 +251,7 @@ export function CategoryFormDialog({
                           <CommandGroup>
                             <CommandItem
                               value="No Brand"
-                              onSelect={() => {
-                                field.onChange(NO_BRAND);
-                                setBrandOpen(false);
-                              }}
+                              onSelect={() => { field.onChange(NO_BRAND); setBrandOpen(false); }}
                             >
                               <Check className={cn("mr-2 h-4 w-4", field.value === NO_BRAND ? "opacity-100" : "opacity-0")} />
                               No Brand
@@ -232,10 +266,7 @@ export function CategoryFormDialog({
                                   <CommandItem
                                     key={b.id}
                                     value={b.name}
-                                    onSelect={() => {
-                                      field.onChange(String(b.id));
-                                      setBrandOpen(false);
-                                    }}
+                                    onSelect={() => { field.onChange(String(b.id)); setBrandOpen(false); }}
                                   >
                                     <Check
                                       className={cn(
@@ -249,20 +280,6 @@ export function CategoryFormDialog({
                               </CommandGroup>
                             </>
                           )}
-
-                          <CommandSeparator />
-                          <CommandGroup>
-                            <CommandItem
-                              value="add-new-brand"
-                              onSelect={() => {
-                                field.onChange(ADD_NEW);
-                                setBrandOpen(false);
-                              }}
-                            >
-                              <Check className={cn("mr-2 h-4 w-4", field.value === ADD_NEW ? "opacity-100" : "opacity-0")} />
-                              + Add New Brand
-                            </CommandItem>
-                          </CommandGroup>
                         </CommandList>
                       </Command>
                     </PopoverContent>
@@ -271,22 +288,6 @@ export function CategoryFormDialog({
                 </FormItem>
               )}
             />
-
-            {brandSelection === ADD_NEW && (
-              <FormField
-                control={form.control}
-                name="newBrandName"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>New Brand Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g. Tata, Amul..." {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

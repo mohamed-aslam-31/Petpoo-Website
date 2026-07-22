@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, ilike } from "drizzle-orm";
 import { db, brandsTable, categoriesTable } from "@workspace/db";
 import {
   CreateBrandBody,
@@ -28,7 +28,19 @@ router.get("/brands", async (req, res): Promise<void> => {
 router.post("/brands", async (req, res): Promise<void> => {
   const parsed = CreateBrandBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const [brand] = await db.insert(brandsTable).values(parsed.data).returning();
+
+  const trimmedName = parsed.data.name.trim();
+  const [existing] = await db
+    .select({ id: brandsTable.id, name: brandsTable.name })
+    .from(brandsTable)
+    .where(sql`lower(trim(${brandsTable.name})) = lower(trim(${trimmedName}))`)
+    .limit(1);
+  if (existing) {
+    res.status(409).json({ error: `Brand "${existing.name}" already exists. Duplicate brand names are not allowed.` });
+    return;
+  }
+
+  const [brand] = await db.insert(brandsTable).values({ ...parsed.data, name: trimmedName }).returning();
   res.status(201).json({ ...brand, categoriesCount: 0, createdAt: brand.createdAt.toISOString() });
 });
 
@@ -37,6 +49,21 @@ router.patch("/brands/:id", async (req, res): Promise<void> => {
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateBrandBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  if (parsed.data.name) {
+    const trimmedName = parsed.data.name.trim();
+    const [existing] = await db
+      .select({ id: brandsTable.id, name: brandsTable.name })
+      .from(brandsTable)
+      .where(sql`lower(trim(${brandsTable.name})) = lower(trim(${trimmedName})) and ${brandsTable.id} != ${params.data.id}`)
+      .limit(1);
+    if (existing) {
+      res.status(409).json({ error: `Brand "${existing.name}" already exists. Duplicate brand names are not allowed.` });
+      return;
+    }
+    parsed.data.name = trimmedName;
+  }
+
   const [brand] = await db.update(brandsTable).set(parsed.data).where(eq(brandsTable.id, params.data.id)).returning();
   if (!brand) { res.status(404).json({ error: "Brand not found" }); return; }
   res.json({ ...brand, categoriesCount: 0, createdAt: brand.createdAt.toISOString() });
