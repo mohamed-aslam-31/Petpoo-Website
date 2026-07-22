@@ -14,6 +14,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogClose,
   DialogHeader,
   DialogTitle,
   DialogDescription,
@@ -618,35 +619,33 @@ export function ProductFormDialog({
   const categoryValue = form.watch("categoryId");
 
   return (
-    <Dialog open={open} onOpenChange={() => {}}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-2xl max-h-[90vh] overflow-y-auto [&>button:last-child]:hidden"
+        className="max-w-2xl flex flex-col max-h-[90vh] p-0 gap-0 [&>button:last-child]:hidden"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
-        <DialogHeader>
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <DialogTitle>{isEditing ? "Edit Product" : "Add Product"}</DialogTitle>
-              <DialogDescription className="mt-1">
-                {isEditing
-                  ? "Update the product details below."
-                  : "Fill in the details to add a new product to your inventory."}
-              </DialogDescription>
-            </div>
-            <button
-              type="button"
-              onClick={() => onOpenChange(false)}
-              className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 mt-0.5"
-            >
+        {/* Sticky header */}
+        <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b shrink-0">
+          <div className="space-y-1">
+            <DialogTitle>{isEditing ? "Edit Product" : "Add Product"}</DialogTitle>
+            <DialogDescription>
+              {isEditing
+                ? "Update the product details below."
+                : "Fill in the details to add a new product to your inventory."}
+            </DialogDescription>
+          </div>
+          <DialogClose asChild>
+            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-sm opacity-70 hover:opacity-100">
               <X className="h-4 w-4" />
               <span className="sr-only">Close</span>
-            </button>
-          </div>
-        </DialogHeader>
+            </Button>
+          </DialogClose>
+        </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 min-w-0">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col flex-1 min-h-0">
+            <div className="overflow-y-auto flex-1 px-6 py-4">
             <div className="grid grid-cols-2 gap-4">
 
               {/* 1. Product Name */}
@@ -895,9 +894,10 @@ export function ProductFormDialog({
               )} />
 
             </div>
+            </div>{/* end scrollable body */}
 
-            {/* Footer */}
-            <div className="flex justify-end gap-2 pt-2">
+            {/* Sticky footer */}
+            <div className="flex justify-end gap-2 px-6 py-4 border-t shrink-0">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
                 Cancel
               </Button>
