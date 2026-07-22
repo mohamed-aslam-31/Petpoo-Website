@@ -388,7 +388,9 @@ export function ProductFormDialog({
 
   const categoryOptions = (() => {
     if (!brandComboValue || brandComboValue === NO_BRAND) {
-      return (categories ?? []).map(c => ({ value: String(c.id), label: c.name }));
+      return (categories ?? [])
+        .filter(c => !c.brandId)
+        .map(c => ({ value: String(c.id), label: c.name }));
     }
     const numericId = Number(brandComboValue);
     return (categories ?? [])
