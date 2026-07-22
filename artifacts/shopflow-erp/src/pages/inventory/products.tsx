@@ -208,23 +208,19 @@ export function Products() {
                       />
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="text-xs font-mono">
-                            <span className="text-blue-600">{product.sku}</span>
-                            {product.gstPercent != null && <span className="text-red-500"> · GST {product.gstPercent}%</span>}
-                          </div>
-                          <div className="font-medium">{product.name}</div>
-                          {product.hsnCode && (
-                            <div className="text-xs text-yellow-600 mt-0.5">HSN: {product.hsnCode}</div>
-                          )}
-                        </div>
+                      <div className="text-xs font-mono">
+                        <span className="text-blue-600">{product.sku}</span>
+                        {product.gstPercent != null && <span className="text-red-500"> · GST {product.gstPercent}%</span>}
+                      </div>
+                      <div className="font-medium">
+                        {product.name}
                         {product.barcode && (
-                          <div className="text-[10px] text-green-600 font-mono leading-tight text-right shrink-0 mt-0.5">
-                            {product.barcode}
-                          </div>
+                          <span className="text-[11px] text-green-600 font-mono font-normal ml-1">({product.barcode})</span>
                         )}
                       </div>
+                      {product.hsnCode && (
+                        <div className="text-xs text-yellow-600 mt-0.5">HSN: {product.hsnCode}</div>
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{product.brandName || "-"}</TableCell>
                     <TableCell>{product.categoryName || "-"}</TableCell>
