@@ -59,6 +59,11 @@ const DEFAULT_UNITS = [
   "pc", "pcs", "kg", "g", "mg", "l", "ml",
   "box", "dozen", "pair", "set", "roll", "sheet", "bag", "bottle",
 ];
+const LOCATIONS_STORAGE_KEY = "shopflow-locations";
+const DEFAULT_LOCATIONS = [
+  "A1", "A2", "A3", "B1", "B2", "B3", "C1", "C2",
+  "Rack1", "Rack2", "Shelf1", "Shelf2", "Floor1", "Floor2",
+];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function getStoredUnits(): string[] {
@@ -68,6 +73,15 @@ function getStoredUnits(): string[] {
     if (Array.isArray(parsed) && parsed.length > 0) return parsed;
   } catch {}
   return DEFAULT_UNITS;
+}
+
+function getStoredLocations(): string[] {
+  try {
+    const stored = localStorage.getItem(LOCATIONS_STORAGE_KEY);
+    const parsed = stored ? JSON.parse(stored) : null;
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  } catch {}
+  return DEFAULT_LOCATIONS;
 }
 
 // Red asterisk for required fields
@@ -160,9 +174,15 @@ function UnitSelect({
     u.toLowerCase().includes(search.toLowerCase())
   );
   const trimmed = search.trim();
-  const canAdd =
-    trimmed.length > 0 &&
-    !availableUnits.some(u => u.toLowerCase() === trimmed.toLowerCase());
+  const hasWhitespace = /\s/.test(trimmed);
+  const tooLong = trimmed.length > 10;
+  const notExists = !availableUnits.some(u => u.toLowerCase() === trimmed.toLowerCase());
+  const canAdd = trimmed.length >= 1 && !hasWhitespace && !tooLong && notExists;
+  const addHint = trimmed.length > 0
+    ? hasWhitespace ? "No spaces allowed"
+    : tooLong ? "Max 10 characters"
+    : null
+    : null;
 
   function select(unit: string) {
     onChange(unit);
@@ -171,7 +191,7 @@ function UnitSelect({
   }
 
   function addUnit() {
-    if (!trimmed) return;
+    if (!trimmed || hasWhitespace || tooLong) return;
     const updated = [...availableUnits, trimmed];
     setAvailableUnits(updated);
     try { localStorage.setItem(UNITS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
@@ -206,18 +226,22 @@ function UnitSelect({
         >
           <Command shouldFilter={false}>
             <CommandInput
-              placeholder="Search or add new unit…"
+              placeholder="Search or add unit…"
               value={search}
               onValueChange={setSearch}
             />
             <CommandList>
-              {canAdd && (
+              {trimmed.length > 0 && (
                 <>
                   <CommandGroup>
-                    <CommandItem value={`__add__${trimmed}`} onSelect={addUnit} className="text-primary font-medium">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add "{trimmed}"
-                    </CommandItem>
+                    {canAdd ? (
+                      <CommandItem value={`__add__${trimmed}`} onSelect={addUnit} className="text-primary font-medium">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add "{trimmed}"
+                      </CommandItem>
+                    ) : addHint ? (
+                      <div className="px-3 py-2 text-xs text-destructive">{addHint}</div>
+                    ) : null}
                   </CommandGroup>
                   <CommandSeparator />
                 </>
@@ -236,8 +260,128 @@ function UnitSelect({
                     </CommandItem>
                   ))}
                 </CommandGroup>
-              ) : !canAdd ? (
+              ) : trimmed.length === 0 ? (
                 <div className="py-6 text-center text-sm text-muted-foreground">No units found.</div>
+              ) : null}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      {error && (
+        <p className="text-[0.8rem] font-medium text-destructive mt-1">{error}</p>
+      )}
+    </div>
+  );
+}
+
+// ── Location single-select component ──────────────────────────────────────────
+function LocationSelect({
+  value,
+  onChange,
+  error,
+}: {
+  value: string;
+  onChange: (loc: string) => void;
+  error?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [availableLocs, setAvailableLocs] = useState<string[]>(getStoredLocations);
+
+  const filtered = availableLocs.filter(l =>
+    l.toLowerCase().includes(search.toLowerCase())
+  );
+  const trimmed = search.trim();
+  const hasWhitespace = /\s/.test(trimmed);
+  const tooShort = trimmed.length > 0 && trimmed.length < 2;
+  const tooLong = trimmed.length > 30;
+  const notExists = !availableLocs.some(l => l.toLowerCase() === trimmed.toLowerCase());
+  const canAdd = trimmed.length >= 2 && !hasWhitespace && !tooLong && notExists;
+  const addHint = trimmed.length > 0
+    ? hasWhitespace ? "No spaces allowed"
+    : tooLong ? "Max 30 characters"
+    : tooShort ? "Min 2 characters"
+    : null
+    : null;
+
+  function select(loc: string) {
+    onChange(loc);
+    setOpen(false);
+    setSearch("");
+  }
+
+  function addLocation() {
+    if (!trimmed || hasWhitespace || tooLong || tooShort) return;
+    const updated = [...availableLocs, trimmed];
+    setAvailableLocs(updated);
+    try { localStorage.setItem(LOCATIONS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+    select(trimmed);
+  }
+
+  return (
+    <div>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            className={cn(
+              "w-full justify-between font-normal text-left h-9",
+              error && "border-destructive"
+            )}
+          >
+            {value ? (
+              <span>{value}</span>
+            ) : (
+              <span className="text-muted-foreground">Search or select location…</span>
+            )}
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          className="p-0 w-[--radix-popover-trigger-width]"
+          align="start"
+          sideOffset={4}
+        >
+          <Command shouldFilter={false}>
+            <CommandInput
+              placeholder="Search or add location…"
+              value={search}
+              onValueChange={setSearch}
+            />
+            <CommandList>
+              {trimmed.length > 0 && (
+                <>
+                  <CommandGroup>
+                    {canAdd ? (
+                      <CommandItem value={`__add__${trimmed}`} onSelect={addLocation} className="text-primary font-medium">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add "{trimmed}"
+                      </CommandItem>
+                    ) : addHint ? (
+                      <div className="px-3 py-2 text-xs text-destructive">{addHint}</div>
+                    ) : null}
+                  </CommandGroup>
+                  <CommandSeparator />
+                </>
+              )}
+              {filtered.length > 0 ? (
+                <CommandGroup heading="Available Locations">
+                  {filtered.map(loc => (
+                    <CommandItem key={loc} value={loc} onSelect={() => select(loc)}>
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          value === loc ? "opacity-100" : "opacity-0"
+                        )}
+                      />
+                      {loc}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ) : trimmed.length === 0 ? (
+                <div className="py-6 text-center text-sm text-muted-foreground">No locations found.</div>
               ) : null}
             </CommandList>
           </Command>
@@ -342,6 +486,7 @@ export function ProductFormDialog({
   const [brandComboValue, setBrandComboValue] = useState<string | undefined>(undefined);
   const [selectedUnit, setSelectedUnit] = useState<string>("");
   const [unitError, setUnitError] = useState<string | undefined>();
+  const [selectedLocation, setSelectedLocation] = useState<string>("");
   const [skuLoading, setSkuLoading] = useState(false);
 
   const form = useForm<ProductFormValues>({
@@ -359,6 +504,7 @@ export function ProductFormDialog({
         ? product.unit.split(",").map(u => u.trim()).filter(Boolean)
         : [];
       setSelectedUnit(units[0] ?? "");
+      setSelectedLocation(product.location ?? "");
       form.reset({
         name:          product.name,
         sku:           product.sku,
@@ -378,6 +524,7 @@ export function ProductFormDialog({
     } else {
       setBrandComboValue(undefined);
       setSelectedUnit("");
+      setSelectedLocation("");
       form.reset({ ...emptyValues, sku: "" });
       setSkuLoading(true);
       fetch("/api/products/next-sku")
@@ -456,6 +603,7 @@ export function ProductFormDialog({
       barcode:     values.barcode?.trim() || undefined,
       hsnCode:     values.hsnCode?.trim() || undefined,
       unit:        selectedUnit,
+      location:    selectedLocation || undefined,
       sellingPrice: values.retailPrice,
       categoryId:  values.categoryId ? Number(values.categoryId) : undefined,
       brandId:     (values.brandId && values.brandId !== NO_BRAND) ? Number(values.brandId) : undefined,
@@ -700,18 +848,16 @@ export function ProductFormDialog({
               )} />
 
               {/* 14. Rack / Location */}
-              <FormField control={form.control} name="location" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    Rack / Location{" "}
-                    <span className="text-muted-foreground text-xs font-normal">(Optional)</span>
-                  </FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. A1, Shelf 3" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              <div className="space-y-2">
+                <p className="text-sm font-medium leading-none">
+                  Rack / Location{" "}
+                  <span className="text-muted-foreground text-xs font-normal">(Optional)</span>
+                </p>
+                <LocationSelect
+                  value={selectedLocation}
+                  onChange={setSelectedLocation}
+                />
+              </div>
 
               {/* 15. Status */}
               <FormField control={form.control} name="status" render={({ field }) => (
