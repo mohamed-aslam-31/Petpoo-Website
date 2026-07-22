@@ -37,7 +37,12 @@ function formatDateTime(iso: string) {
 }
 
 const schema = z.object({
-  name: z.string().min(1, "Name is required"),
+  name: z
+    .string()
+    .trim()
+    .min(2, "Name must be at least 2 characters")
+    .max(100, "Name must be 100 characters or fewer")
+    .refine((v) => v.trim().length > 0, "Name cannot be only spaces"),
 });
 type FormValues = z.infer<typeof schema>;
 
