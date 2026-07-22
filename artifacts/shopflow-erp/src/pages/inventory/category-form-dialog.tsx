@@ -288,7 +288,7 @@ export function CategoryFormDialog({
                             aria-expanded={brandOpen}
                             className="w-full justify-between font-normal text-left overflow-hidden"
                           >
-                            <span className={cn("truncate", (brandSelection === NO_BRAND || brandSelection === "") && "text-muted-foreground")}>
+                            <span className={cn("truncate min-w-0", (brandSelection === NO_BRAND || brandSelection === "") && "text-muted-foreground")}>
                               {brandLabel ?? "Select a brand..."}
                             </span>
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
