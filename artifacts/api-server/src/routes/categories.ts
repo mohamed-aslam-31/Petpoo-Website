@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and, isNull, ne } from "drizzle-orm";
 import { db, categoriesTable, productsTable, brandsTable } from "@workspace/db";
 import {
   CreateCategoryBody,
@@ -61,6 +61,19 @@ router.post("/categories", async (req, res): Promise<void> => {
   if (values.brandId) values.brandName = null;
   else if (values.brandName) values.brandId = null;
 
+  // Duplicate check: same name within the same brand
+  const trimmedName = (values.name ?? "").trim();
+  const dupCondition = values.brandId
+    ? and(sql`lower(trim(${categoriesTable.name})) = lower(trim(${trimmedName}))`, eq(categoriesTable.brandId, values.brandId))
+    : values.brandName
+      ? and(sql`lower(trim(${categoriesTable.name})) = lower(trim(${trimmedName}))`, eq(categoriesTable.brandName, values.brandName), isNull(categoriesTable.brandId))
+      : and(sql`lower(trim(${categoriesTable.name})) = lower(trim(${trimmedName}))`, isNull(categoriesTable.brandId), isNull(categoriesTable.brandName));
+  const [dupCat] = await db.select({ id: categoriesTable.id, name: categoriesTable.name }).from(categoriesTable).where(dupCondition).limit(1);
+  if (dupCat) {
+    res.status(409).json({ error: `Category "${dupCat.name}" already exists for this brand. Duplicate category names within the same brand are not allowed.` });
+    return;
+  }
+
   const [cat] = await db.insert(categoriesTable).values(values as any).returning();
   res.status(201).json({
     id: cat.id,
@@ -103,6 +116,27 @@ router.patch("/categories/:id", async (req, res): Promise<void> => {
   const values: typeof parsed.data = { ...parsed.data };
   if (values.brandId) values.brandName = null;
   else if (values.brandName) values.brandId = null;
+
+  // Duplicate check: same name within the same brand (excluding this category)
+  if (values.name !== undefined) {
+    const trimmedName = values.name.trim();
+    // Resolve effective brandId/brandName by merging patch values onto current row
+    const [current] = await db.select({ brandId: categoriesTable.brandId, brandName: categoriesTable.brandName }).from(categoriesTable).where(eq(categoriesTable.id, params.data.id)).limit(1);
+    if (!current) { res.status(404).json({ error: "Category not found" }); return; }
+    const effectiveBrandId = values.brandId !== undefined ? values.brandId : current.brandId;
+    const effectiveBrandName = values.brandName !== undefined ? values.brandName : current.brandName;
+    const dupCondition = effectiveBrandId
+      ? and(sql`lower(trim(${categoriesTable.name})) = lower(trim(${trimmedName}))`, eq(categoriesTable.brandId, effectiveBrandId), ne(categoriesTable.id, params.data.id))
+      : effectiveBrandName
+        ? and(sql`lower(trim(${categoriesTable.name})) = lower(trim(${trimmedName}))`, eq(categoriesTable.brandName, effectiveBrandName), isNull(categoriesTable.brandId), ne(categoriesTable.id, params.data.id))
+        : and(sql`lower(trim(${categoriesTable.name})) = lower(trim(${trimmedName}))`, isNull(categoriesTable.brandId), isNull(categoriesTable.brandName), ne(categoriesTable.id, params.data.id));
+    const [dupCat] = await db.select({ id: categoriesTable.id, name: categoriesTable.name }).from(categoriesTable).where(dupCondition).limit(1);
+    if (dupCat) {
+      res.status(409).json({ error: `Category "${dupCat.name}" already exists for this brand. Duplicate category names within the same brand are not allowed.` });
+      return;
+    }
+    values.name = trimmedName;
+  }
 
   const [cat] = await db.update(categoriesTable).set(values as any).where(eq(categoriesTable.id, params.data.id)).returning();
   if (!cat) { res.status(404).json({ error: "Category not found" }); return; }
