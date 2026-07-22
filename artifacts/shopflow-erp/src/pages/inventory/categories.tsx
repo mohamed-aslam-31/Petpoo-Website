@@ -135,22 +135,22 @@ export function Categories() {
     if (page !== 0) setPage(0);
   }
 
-  // Selected always pinned to top; unselected go through pipeline
+  // Selected categories (used for bulk-delete dialog list)
   const selectedCategories = useMemo(
     () => (data ?? []).filter(c => selectedIds.has(c.id)),
     [data, selectedIds]
   );
-  const unselectedCategories = useMemo(
-    () => processedData.filter(c => !selectedIds.has(c.id)),
-    [processedData, selectedIds]
-  );
-  const allRows = [...selectedCategories, ...unselectedCategories];
 
-  // Pagination
-  const totalRows = allRows.length;
+  // Paginate processedData directly — no global pinning
+  const totalRows = processedData.length;
   const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
   const safePage = Math.min(page, totalPages - 1);
-  const displayRows = allRows.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const pageRows = processedData.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  // Within the current page, float selected rows to the top
+  const displayRows = [
+    ...pageRows.filter(c => selectedIds.has(c.id)),
+    ...pageRows.filter(c => !selectedIds.has(c.id)),
+  ];
   const showingFrom = totalRows === 0 ? 0 : safePage * PAGE_SIZE + 1;
   const showingTo = Math.min(safePage * PAGE_SIZE + PAGE_SIZE, totalRows);
 

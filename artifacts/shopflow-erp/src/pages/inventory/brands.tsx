@@ -108,20 +108,22 @@ export function Brands() {
     if (page !== 0) setPage(0);
   }
 
-  // Selected always pinned to top (not filtered); unselected go through pipeline
+  // Selected brands (used for bulk-delete dialog list)
   const selectedBrands = useMemo(
     () => (data ?? []).filter(b => selectedIds.has(b.id)),
     [data, selectedIds]
   );
-  const unselectedBrands = useMemo(
-    () => processedData.filter(b => !selectedIds.has(b.id)),
-    [processedData, selectedIds]
-  );
-  const allRows = [...selectedBrands, ...unselectedBrands];
-  const totalRows = allRows.length;
+
+  // Paginate processedData directly — no global pinning
+  const totalRows = processedData.length;
   const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
   const safePage = Math.min(page, totalPages - 1);
-  const displayRows = allRows.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const pageRows = processedData.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  // Within the current page, float selected rows to the top
+  const displayRows = [
+    ...pageRows.filter(b => selectedIds.has(b.id)),
+    ...pageRows.filter(b => !selectedIds.has(b.id)),
+  ];
 
   // Pagination display values
   const showingFrom = totalRows === 0 ? 0 : safePage * PAGE_SIZE + 1;
