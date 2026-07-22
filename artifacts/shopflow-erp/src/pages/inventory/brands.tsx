@@ -484,13 +484,8 @@ export function Brands() {
               <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm space-y-2">
                 <div className="flex items-start gap-2 text-destructive font-medium">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>Cannot delete — this brand is linked to {deleteError.categories.length} categor{deleteError.categories.length === 1 ? "y" : "ies"}:</span>
+                  <span>{deleteError.categories.length} categor{deleteError.categories.length === 1 ? "y is" : "ies are"} linked to this brand.</span>
                 </div>
-                <ul className="ml-6 space-y-0.5 text-muted-foreground list-disc">
-                  {deleteError.categories.map(c => (
-                    <li key={c.id} className="break-all">{c.name}</li>
-                  ))}
-                </ul>
                 <p className="ml-6 text-muted-foreground">Go to the <strong>Categories</strong> page, clear the brand from those categories, then try deleting again.</p>
               </div>
             )}
@@ -532,19 +527,14 @@ export function Brands() {
             ) : (
               <div className="mt-2 space-y-3">
                 <AlertDialogDescription>
-                  Some brands could not be deleted because they are linked to categories. Go to the <strong>Categories</strong> page, clear the brand from those categories, then try again.
+                  Some brands could not be deleted. Go to the <strong>Categories</strong> page, clear the brand from those categories, then try again.
                 </AlertDialogDescription>
                 {bulkDeleteErrors.map(err => (
                   <div key={err.brandName} className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm space-y-1">
                     <div className="flex items-start gap-2 text-destructive font-medium">
                       <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                      <span>"{err.brandName}" is used by:</span>
+                      <span>"{err.brandName}" has {err.categories.length} linked categor{err.categories.length === 1 ? "y" : "ies"}.</span>
                     </div>
-                    <ul className="ml-6 space-y-0.5 text-muted-foreground list-disc">
-                      {err.categories.map(c => (
-                        <li key={c.id} className="break-all">{c.name}</li>
-                      ))}
-                    </ul>
                   </div>
                 ))}
               </div>
