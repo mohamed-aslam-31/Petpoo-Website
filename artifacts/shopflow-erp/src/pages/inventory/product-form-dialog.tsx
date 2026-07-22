@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Form,
   FormField,
@@ -50,7 +49,7 @@ import {
   CommandItem,
   CommandSeparator,
 } from "@/components/ui/command";
-import { Check, ChevronsUpDown, Plus, X } from "lucide-react";
+import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -143,14 +142,14 @@ const emptyValues: ProductFormValues = {
   status: "active",
 };
 
-// ── Unit multi-select component ───────────────────────────────────────────────
-function UnitMultiSelect({
+// ── Unit single-select component ──────────────────────────────────────────────
+function UnitSelect({
   value,
   onChange,
   error,
 }: {
-  value: string[];
-  onChange: (units: string[]) => void;
+  value: string;
+  onChange: (unit: string) => void;
   error?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -165,8 +164,10 @@ function UnitMultiSelect({
     trimmed.length > 0 &&
     !availableUnits.some(u => u.toLowerCase() === trimmed.toLowerCase());
 
-  function toggle(unit: string) {
-    onChange(value.includes(unit) ? value.filter(u => u !== unit) : [...value, unit]);
+  function select(unit: string) {
+    onChange(unit);
+    setOpen(false);
+    setSearch("");
   }
 
   function addUnit() {
@@ -174,8 +175,7 @@ function UnitMultiSelect({
     const updated = [...availableUnits, trimmed];
     setAvailableUnits(updated);
     try { localStorage.setItem(UNITS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
-    onChange([...value, trimmed]);
-    setSearch("");
+    select(trimmed);
   }
 
   return (
@@ -187,18 +187,14 @@ function UnitMultiSelect({
             variant="outline"
             role="combobox"
             className={cn(
-              "w-full justify-between font-normal text-left min-h-9 h-auto",
+              "w-full justify-between font-normal text-left h-9",
               error && "border-destructive"
             )}
           >
-            {value.length === 0 ? (
-              <span className="text-muted-foreground">Search or select units…</span>
+            {value ? (
+              <span>{value}</span>
             ) : (
-              <div className="flex flex-wrap gap-1 py-0.5">
-                {value.map(u => (
-                  <Badge key={u} variant="secondary" className="text-xs">{u}</Badge>
-                ))}
-              </div>
+              <span className="text-muted-foreground">Search or select unit…</span>
             )}
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
@@ -229,11 +225,11 @@ function UnitMultiSelect({
               {filtered.length > 0 ? (
                 <CommandGroup heading="Available Units">
                   {filtered.map(unit => (
-                    <CommandItem key={unit} value={unit} onSelect={() => toggle(unit)}>
+                    <CommandItem key={unit} value={unit} onSelect={() => select(unit)}>
                       <Check
                         className={cn(
                           "mr-2 h-4 w-4",
-                          value.includes(unit) ? "opacity-100" : "opacity-0"
+                          value === unit ? "opacity-100" : "opacity-0"
                         )}
                       />
                       {unit}
@@ -344,7 +340,7 @@ export function ProductFormDialog({
   const { data: brands } = useListBrands();
 
   const [brandComboValue, setBrandComboValue] = useState<string | undefined>(undefined);
-  const [selectedUnits, setSelectedUnits] = useState<string[]>([]);
+  const [selectedUnit, setSelectedUnit] = useState<string>("");
   const [unitError, setUnitError] = useState<string | undefined>();
   const [skuLoading, setSkuLoading] = useState(false);
 
@@ -362,7 +358,7 @@ export function ProductFormDialog({
       const units = product.unit
         ? product.unit.split(",").map(u => u.trim()).filter(Boolean)
         : [];
-      setSelectedUnits(units);
+      setSelectedUnit(units[0] ?? "");
       form.reset({
         name:          product.name,
         sku:           product.sku,
@@ -381,7 +377,7 @@ export function ProductFormDialog({
       });
     } else {
       setBrandComboValue(undefined);
-      setSelectedUnits([]);
+      setSelectedUnit("");
       form.reset({ ...emptyValues, sku: "" });
       setSkuLoading(true);
       fetch("/api/products/next-sku")
@@ -449,8 +445,8 @@ export function ProductFormDialog({
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   function onSubmit(values: ProductFormValues) {
-    if (selectedUnits.length === 0) {
-      setUnitError("At least one unit is required");
+    if (!selectedUnit) {
+      setUnitError("Unit is required");
       return;
     }
     setUnitError(undefined);
@@ -459,7 +455,7 @@ export function ProductFormDialog({
       name:        values.name.trim(),
       barcode:     values.barcode?.trim() || undefined,
       hsnCode:     values.hsnCode?.trim() || undefined,
-      unit:        selectedUnits.join(","),
+      unit:        selectedUnit,
       sellingPrice: values.retailPrice,
       categoryId:  values.categoryId ? Number(values.categoryId) : undefined,
       brandId:     (values.brandId && values.brandId !== NO_BRAND) ? Number(values.brandId) : undefined,
@@ -619,26 +615,14 @@ export function ProductFormDialog({
                 </FormItem>
               )} />
 
-              {/* 7. Unit (multi-select with search + add new, persisted) */}
+              {/* 7. Unit (single-select with search + add new, persisted) */}
               <div className="col-span-2 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium leading-none">Unit <Req /></p>
-                  {selectedUnits.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => { setSelectedUnits([]); setUnitError("At least one unit is required"); }}
-                      className="flex items-center gap-0.5 text-xs text-muted-foreground hover:text-destructive transition-colors"
-                    >
-                      <X className="h-3 w-3" />
-                      Clear
-                    </button>
-                  )}
-                </div>
-                <UnitMultiSelect
-                  value={selectedUnits}
-                  onChange={units => {
-                    setSelectedUnits(units);
-                    if (units.length > 0) setUnitError(undefined);
+                <p className="text-sm font-medium leading-none">Unit <Req /></p>
+                <UnitSelect
+                  value={selectedUnit}
+                  onChange={unit => {
+                    setSelectedUnit(unit);
+                    if (unit) setUnitError(undefined);
                   }}
                   error={unitError}
                 />
