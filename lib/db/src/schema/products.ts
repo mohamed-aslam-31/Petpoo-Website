@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, numeric, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { categoriesTable } from "./categories";
@@ -8,8 +8,8 @@ export const productsTable = pgTable("products", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   sku: text("sku").notNull().unique(),
-  barcode: text("barcode"),
-  hsnCode: text("hsn_code"),
+  barcode: varchar("barcode", { length: 20 }).unique(),
+  hsnCode: varchar("hsn_code", { length: 8 }),
   categoryId: integer("category_id").references(() => categoriesTable.id),
   brandId: integer("brand_id").references(() => brandsTable.id),
   purchasePrice: numeric("purchase_price", { precision: 12, scale: 2 }).notNull().default("0"),

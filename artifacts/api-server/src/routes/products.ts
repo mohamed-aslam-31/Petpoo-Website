@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, and, lte, sql } from "drizzle-orm";
+import { eq, ilike, and, lte, sql, ne, isNull } from "drizzle-orm";
 import { db, productsTable, categoriesTable, brandsTable, stockMovementsTable } from "@workspace/db";
 import {
   CreateProductBody,
@@ -122,7 +122,23 @@ router.get("/products", async (req, res): Promise<void> => {
 router.post("/products", async (req, res): Promise<void> => {
   const parsed = CreateProductBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const [product] = await db.insert(productsTable).values(parsed.data as any).returning();
+  const data = parsed.data as any;
+
+  // Duplicate barcode check
+  if (data.barcode) {
+    const [dup] = await db.select({ id: productsTable.id }).from(productsTable).where(eq(productsTable.barcode, data.barcode));
+    if (dup) { res.status(409).json({ error: "A product with this barcode already exists" }); return; }
+  }
+
+  // Duplicate name within same brand + category
+  const nameWhere = [ilike(productsTable.name, data.name.trim()),
+    data.brandId    ? eq(productsTable.brandId, data.brandId)       : isNull(productsTable.brandId),
+    data.categoryId ? eq(productsTable.categoryId, data.categoryId) : isNull(productsTable.categoryId),
+  ];
+  const [dupName] = await db.select({ id: productsTable.id }).from(productsTable).where(and(...nameWhere));
+  if (dupName) { res.status(409).json({ error: "A product with this name already exists in the same brand/category" }); return; }
+
+  const [product] = await db.insert(productsTable).values({ ...data, name: data.name.trim() }).returning();
   res.status(201).json(parseProductRow(product));
 });
 
@@ -169,7 +185,33 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
   const parsed = UpdateProductBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
-  const [product] = await db.update(productsTable).set(parsed.data as any).where(eq(productsTable.id, params.data.id)).returning();
+  const data = parsed.data as any;
+  const selfId = params.data.id;
+
+  // Duplicate barcode check (exclude self)
+  if (data.barcode) {
+    const [dup] = await db.select({ id: productsTable.id }).from(productsTable)
+      .where(and(eq(productsTable.barcode, data.barcode), ne(productsTable.id, selfId)));
+    if (dup) { res.status(409).json({ error: "A product with this barcode already exists" }); return; }
+  }
+
+  // Duplicate name within same brand + category (exclude self)
+  if (data.name) {
+    const [current] = await db.select().from(productsTable).where(eq(productsTable.id, selfId));
+    if (current) {
+      const effectiveBrandId    = data.brandId    !== undefined ? data.brandId    : current.brandId;
+      const effectiveCategoryId = data.categoryId !== undefined ? data.categoryId : current.categoryId;
+      const nameWhere = [ilike(productsTable.name, data.name.trim()), ne(productsTable.id, selfId),
+        effectiveBrandId    ? eq(productsTable.brandId, effectiveBrandId)       : isNull(productsTable.brandId),
+        effectiveCategoryId ? eq(productsTable.categoryId, effectiveCategoryId) : isNull(productsTable.categoryId),
+      ];
+      const [dupName] = await db.select({ id: productsTable.id }).from(productsTable).where(and(...nameWhere));
+      if (dupName) { res.status(409).json({ error: "A product with this name already exists in the same brand/category" }); return; }
+    }
+  }
+
+  const updateData = data.name ? { ...data, name: data.name.trim() } : data;
+  const [product] = await db.update(productsTable).set(updateData).where(eq(productsTable.id, selfId)).returning();
   if (!product) { res.status(404).json({ error: "Product not found" }); return; }
   res.json(parseProductRow(product));
 });

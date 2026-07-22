@@ -76,10 +76,22 @@ const Req = () => <span className="text-destructive ml-0.5">*</span>;
 
 // ── Schema ───────────────────────────────────────────────────────────────────
 const productSchema = z.object({
-  name:          z.string().min(1, "Product name is required"),
+  name: z.string()
+    .refine(s => s.trim().length >= 2, "At least 2 characters required")
+    .refine(s => s.trim().length <= 80, "Max 80 characters")
+    .refine(s => !/^\s+$/.test(s), "Cannot be only spaces")
+    .refine(s => /^[a-zA-Z0-9 \-\/&().'+ ]+$/.test(s.trim()), "Only letters, numbers, spaces, and - / & ( ) . ' + are allowed"),
   sku:           z.string().min(1, "SKU is required"),
-  barcode:       z.string().optional(),
-  hsnCode:       z.string().optional(),
+  barcode: z.string()
+    .refine(s => !s || /^[a-zA-Z0-9]+$/.test(s), "No spaces or special characters allowed")
+    .refine(s => !s || s.length >= 8, "Min 8 characters")
+    .refine(s => !s || s.length <= 20, "Max 20 characters")
+    .optional(),
+  hsnCode: z.string()
+    .refine(s => !s || /^[0-9]+$/.test(s), "Only digits 0–9 allowed")
+    .refine(s => !s || s.length >= 4, "Min 4 digits")
+    .refine(s => !s || s.length <= 8, "Max 8 digits")
+    .optional(),
   brandId:       z.string().min(1, "Brand is required"),
   categoryId:    z.string().min(1, "Category is required"),
   gstPercent:    z.coerce.number().min(0).max(100),
@@ -444,8 +456,11 @@ export function ProductFormDialog({
     setUnitError(undefined);
     const payload = {
       ...values,
+      name:        values.name.trim(),
+      barcode:     values.barcode?.trim() || undefined,
+      hsnCode:     values.hsnCode?.trim() || undefined,
       unit:        selectedUnits.join(","),
-      sellingPrice: values.retailPrice, // derive from retail price
+      sellingPrice: values.retailPrice,
       categoryId:  values.categoryId ? Number(values.categoryId) : undefined,
       brandId:     (values.brandId && values.brandId !== NO_BRAND) ? Number(values.brandId) : undefined,
     };
@@ -479,7 +494,7 @@ export function ProductFormDialog({
                 <FormItem className="col-span-2">
                   <FormLabel>Product Name <Req /></FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g. Basmati Rice 25kg" {...field} />
+                    <Input placeholder="e.g. Basmati Rice 25kg" maxLength={80} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -509,7 +524,12 @@ export function ProductFormDialog({
                     <span className="text-muted-foreground text-xs font-normal">(Optional)</span>
                   </FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g. 8901234567890" {...field} />
+                    <Input
+                      placeholder="e.g. 8901234567890"
+                      maxLength={20}
+                      {...field}
+                      onChange={e => field.onChange(e.target.value.replace(/\s/g, ""))}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -523,7 +543,13 @@ export function ProductFormDialog({
                     <span className="text-muted-foreground text-xs font-normal">(Optional)</span>
                   </FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g. 1006" {...field} />
+                    <Input
+                      placeholder="e.g. 1006"
+                      maxLength={8}
+                      inputMode="numeric"
+                      {...field}
+                      onChange={e => field.onChange(e.target.value.replace(/\D/g, ""))}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
