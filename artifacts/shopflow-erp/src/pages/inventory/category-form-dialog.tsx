@@ -179,7 +179,7 @@ export function CategoryFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md w-full overflow-hidden" onInteractOutside={(e) => e.preventDefault()}>
+      <DialogContent className="max-w-md" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{isEditing ? "Edit Category" : "Add Category"}</DialogTitle>
           <DialogDescription>
@@ -288,7 +288,7 @@ export function CategoryFormDialog({
                             aria-expanded={brandOpen}
                             className="w-full justify-between font-normal text-left overflow-hidden"
                           >
-                            <span className={cn("truncate min-w-0", (brandSelection === NO_BRAND || brandSelection === "") && "text-muted-foreground")}>
+                            <span className={cn("truncate min-w-0 flex-1", (brandSelection === NO_BRAND || brandSelection === "") && "text-muted-foreground")}>
                               {brandLabel ?? "Select a brand..."}
                             </span>
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
