@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   useListCategories, useDeleteCategory, getListCategoriesQueryKey,
   useListBrands, getListBrandsQueryKey,
@@ -28,7 +29,7 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "old", label: "Oldest first" },
 ];
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE_PRESETS = [10, 20, 50, 100];
 
 export function Categories() {
   const [search, setSearch] = useState("");
@@ -43,6 +44,7 @@ export function Categories() {
   const [minProducts, setMinProducts] = useState("");
   const [maxProducts, setMaxProducts] = useState("");
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
 
   const queryClient = useQueryClient();
   const { data, isLoading } = useListCategories({ query: { queryKey: getListCategoriesQueryKey() } });
@@ -147,15 +149,23 @@ export function Categories() {
   );
 
   const totalRows = unselectedCategories.length;
-  const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
+  const totalDisplay = processedData.length;
+
+  // Dynamic page size options: presets ≤ total, always include 10
+  const pageSizeOptions = useMemo(() => {
+    const opts = PAGE_SIZE_PRESETS.filter(s => s <= totalDisplay);
+    if (opts.length === 0) opts.push(10);
+    return opts;
+  }, [totalDisplay]);
+
+  const totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
   const safePage = Math.min(page, totalPages - 1);
-  const pageRows = unselectedCategories.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const pageRows = unselectedCategories.slice(safePage * pageSize, safePage * pageSize + pageSize);
   // Selected rows always at top, then current page's unselected rows
   const displayRows = [...selectedCategories, ...pageRows];
   // Pagination display values (total includes selected + unselected)
-  const totalDisplay = processedData.length;
-  const showingFrom = totalRows === 0 && selectedCategories.length === 0 ? 0 : safePage * PAGE_SIZE + 1;
-  const showingTo = Math.min(safePage * PAGE_SIZE + PAGE_SIZE, totalRows);
+  const showingFrom = totalRows === 0 && selectedCategories.length === 0 ? 0 : safePage * pageSize + 1;
+  const showingTo = Math.min(safePage * pageSize + pageSize, totalRows);
 
   // ── Checkbox helpers ───────────────────────────────────────────────────────
   const allChecked = displayRows.length > 0 && displayRows.every(c => selectedIds.has(c.id));
@@ -522,25 +532,47 @@ export function Categories() {
         </CardContent>
 
         {/* Pagination footer */}
-        <div className="flex items-center justify-between px-4 py-3 border-t text-sm text-muted-foreground">
-          <span>Showing {showingFrom}–{showingTo} of {totalDisplay} categor{totalDisplay !== 1 ? "ies" : "y"}</span>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage(p => Math.max(0, p - 1))}
-              disabled={safePage === 0}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 border-t text-sm text-muted-foreground">
+          {/* Rows per page */}
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="shrink-0">Rows per page</span>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(v) => { setPageSize(Number(v)); setPage(0); }}
             >
-              Previous
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-              disabled={safePage >= totalPages - 1}
-            >
-              Next
-            </Button>
+              <SelectTrigger className="h-8 w-[70px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {pageSizeOptions.map(s => (
+                  <SelectItem key={s} value={String(s)}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              type="number"
+              min={1}
+              placeholder="Custom"
+              className="h-8 w-20 text-xs"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const v = parseInt((e.target as HTMLInputElement).value);
+                  if (v >= 1) { setPageSize(v); setPage(0); (e.target as HTMLInputElement).value = ""; }
+                }
+              }}
+              onBlur={(e) => {
+                const v = parseInt(e.target.value);
+                if (v >= 1) { setPageSize(v); setPage(0); e.target.value = ""; }
+              }}
+            />
+          </div>
+          {/* Count + navigation */}
+          <div className="flex items-center gap-3">
+            <span className="shrink-0">Showing {showingFrom}–{showingTo} of {totalDisplay} categor{totalDisplay !== 1 ? "ies" : "y"}</span>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={safePage === 0}>Previous</Button>
+              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={safePage >= totalPages - 1}>Next</Button>
+            </div>
           </div>
         </div>
       </Card>
