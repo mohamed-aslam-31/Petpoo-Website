@@ -73,6 +73,8 @@ export function Products() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<any | null>(null);
+  const [deletingSelected, setDeletingSelected] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [adjustingProduct, setAdjustingProduct] = useState<any | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
@@ -126,6 +128,7 @@ export function Products() {
 
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const selectedProducts = (data?.data ?? []).filter(product => selectedIds.has(product.id));
 
   const pageSizeOptions = useMemo(() => {
     const opts = PAGE_SIZE_PRESETS.filter(s => s <= total || s === 10);
@@ -151,6 +154,32 @@ export function Products() {
   }
   function toggleStr(setter: React.Dispatch<React.SetStateAction<Set<string>>>, v: string) {
     setter(prev => { const n = new Set(prev); n.has(v) ? n.delete(v) : n.add(v); return n; });
+  }
+
+  async function deleteSelectedProducts() {
+    setBulkDeleting(true);
+    const ids = [...selectedIds];
+    let deleted = 0;
+
+    for (const id of ids) {
+      const product = (data?.data ?? []).find(p => p.id === id);
+      try {
+        await new Promise<void>((resolve, reject) =>
+          deleteMutation.mutate({ id }, { onSuccess: () => resolve(), onError: (error: any) => reject(error) })
+        );
+        deleted++;
+      } catch (error: any) {
+        toast.error(`Failed to delete "${product?.name ?? `Product #${id}`}"`, {
+          description: error?.message ?? "Please try again.",
+        });
+      }
+    }
+
+    setBulkDeleting(false);
+    setDeletingSelected(false);
+    setSelectedIds(new Set());
+    queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
+    if (deleted > 0) toast.success(`${deleted} product${deleted === 1 ? "" : "s"} deleted`);
   }
 
   // Filtered option lists for each popover
@@ -193,9 +222,17 @@ export function Products() {
           <h2 className="text-3xl font-bold tracking-tight">Products</h2>
           <p className="text-muted-foreground mt-1">Manage your inventory, pricing, and stock levels.</p>
         </div>
-        <Button className="shrink-0 gap-2" onClick={() => { setEditingProduct(null); setFormOpen(true); }}>
-          <Plus className="h-4 w-4" /> Add Product
-        </Button>
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          {selectedIds.size > 0 && (
+            <Button variant="destructive" size="sm" className="gap-2" onClick={() => setDeletingSelected(true)}>
+              <Trash2 className="h-4 w-4" />
+              Delete Selected ({selectedIds.size})
+            </Button>
+          )}
+          <Button className="gap-2" onClick={() => { setEditingProduct(null); setFormOpen(true); }}>
+            <Plus className="h-4 w-4" /> Add Product
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -664,6 +701,33 @@ export function Products() {
             >
               {deleteMutation.isPending ? "Deleting..." : "Delete"}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={deletingSelected} onOpenChange={open => { if (!open && !bulkDeleting) setDeletingSelected(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedIds.size} product{selectedIds.size > 1 ? "s" : ""}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              The following product{selectedIds.size > 1 ? "s" : ""} will be permanently removed:
+            </AlertDialogDescription>
+            <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border bg-muted/40 divide-y text-sm">
+              {selectedProducts.map(product => (
+                <li key={product.id} className="flex items-start gap-2 px-3 py-2">
+                  <Trash2 className="h-3.5 w-3.5 shrink-0 text-destructive/70 mt-0.5" />
+                  <span className="font-medium break-all">{product.name}</span>
+                </li>
+              ))}
+            </ul>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleting}>Cancel</AlertDialogCancel>
+            <Button variant="destructive" disabled={bulkDeleting} onClick={deleteSelectedProducts}>
+              {bulkDeleting ? "Deleting..." : "Delete All"}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
