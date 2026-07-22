@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, and, lte, sql, ne, isNull } from "drizzle-orm";
+import { eq, ilike, and, or, lte, sql, ne, isNull } from "drizzle-orm";
 import { db, productsTable, categoriesTable, brandsTable, stockMovementsTable } from "@workspace/db";
 import {
   CreateProductBody,
@@ -67,7 +67,12 @@ router.get("/products", async (req, res): Promise<void> => {
   const lowStock = req.query.lowStock === "true";
 
   const conditions = [];
-  if (search) conditions.push(ilike(productsTable.name, `%${search}%`));
+  if (search) conditions.push(or(
+    ilike(productsTable.name, `%${search}%`),
+    ilike(productsTable.sku, `%${search}%`),
+    ilike(productsTable.hsnCode, `%${search}%`),
+    ilike(productsTable.barcode, `%${search}%`),
+  ));
   if (categoryId) conditions.push(eq(productsTable.categoryId, categoryId));
   if (brandId) conditions.push(eq(productsTable.brandId, brandId));
   if (lowStock) conditions.push(lte(productsTable.currentStock, productsTable.minStock));

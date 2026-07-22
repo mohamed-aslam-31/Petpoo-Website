@@ -106,7 +106,7 @@ export function Products() {
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Search products by name or SKU..."
+              placeholder="Search by name, SKU, HSN or barcode..."
               className="pl-9 bg-background"
               value={search}
               onChange={(e) => {
