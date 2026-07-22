@@ -80,7 +80,7 @@ const productSchema = z.object({
   sku:           z.string().min(1, "SKU is required"),
   barcode:       z.string().optional(),
   hsnCode:       z.string().optional(),
-  brandId:       z.string().min(1, "Brand is required"),
+  brandId:       z.string().optional(),
   categoryId:    z.string().min(1, "Category is required"),
   gstPercent:    z.coerce.number().min(0).max(100),
   purchasePrice: z.coerce.number().min(0),
@@ -345,7 +345,7 @@ export function ProductFormDialog({
     if (!open) return;
     setUnitError(undefined);
     if (product) {
-      const initBrand = product.brandId ? String(product.brandId) : undefined;
+      const initBrand = product.brandId ? String(product.brandId) : NO_BRAND;
       setBrandComboValue(initBrand);
       const units = product.unit
         ? product.unit.split(",").map(u => u.trim()).filter(Boolean)
@@ -368,7 +368,7 @@ export function ProductFormDialog({
         status:        product.status === "inactive" ? "inactive" : "active",
       });
     } else {
-      setBrandComboValue(undefined);
+      setBrandComboValue(NO_BRAND);
       setSelectedUnits([]);
       form.reset({ ...emptyValues, sku: "" });
       setSkuLoading(true);
@@ -381,10 +381,13 @@ export function ProductFormDialog({
   }, [open, product, form]);
 
   // ── Options ────────────────────────────────────────────────────────────────
-  const brandOptions = (brands ?? []).map(b => ({ value: String(b.id), label: b.name }));
+  const brandOptions = [
+    { value: NO_BRAND, label: "No Brand" },
+    ...(brands ?? []).map(b => ({ value: String(b.id), label: b.name })),
+  ];
 
   const categoryOptions = (() => {
-    if (!brandComboValue) {
+    if (!brandComboValue || brandComboValue === NO_BRAND) {
       return (categories ?? []).map(c => ({ value: String(c.id), label: c.name }));
     }
     const numericId = Number(brandComboValue);
@@ -396,7 +399,7 @@ export function ProductFormDialog({
   // ── Handlers ───────────────────────────────────────────────────────────────
   function handleBrandChange(val: string | undefined) {
     setBrandComboValue(val);
-    form.setValue("brandId", val ?? "", { shouldValidate: true });
+    form.setValue("brandId", val, { shouldValidate: true });
     form.setValue("categoryId", "", { shouldValidate: false });
   }
 
@@ -442,7 +445,7 @@ export function ProductFormDialog({
       unit:        selectedUnits.join(","),
       sellingPrice: values.retailPrice, // derive from retail price
       categoryId:  values.categoryId ? Number(values.categoryId) : undefined,
-      brandId:     values.brandId ? Number(values.brandId) : undefined,
+      brandId:     (values.brandId && values.brandId !== NO_BRAND) ? Number(values.brandId) : undefined,
     };
     if (isEditing && product) {
       updateMutation.mutate({ id: product.id, data: payload });
@@ -530,7 +533,7 @@ export function ProductFormDialog({
               {/* 5. Brand */}
               <FormField control={form.control} name="brandId" render={() => (
                 <FormItem>
-                  <FormLabel>Brand <Req /></FormLabel>
+                  <FormLabel>Brand</FormLabel>
                   <SearchableCombobox
                     value={brandComboValue}
                     onValueChange={handleBrandChange}
@@ -552,15 +555,13 @@ export function ProductFormDialog({
                     onValueChange={handleCategoryChange}
                     options={categoryOptions}
                     placeholder={
-                      !brandComboValue
-                        ? "Select brand first"
-                        : categoryOptions.length === 0
-                        ? "No categories for this brand"
+                      categoryOptions.length === 0
+                        ? "No categories available"
                         : "Select category"
                     }
                     searchPlaceholder="Search categories…"
                     emptyText="No categories found."
-                    disabled={!brandComboValue || categoryOptions.length === 0}
+                    disabled={categoryOptions.length === 0}
                   />
                   <FormMessage />
                 </FormItem>
