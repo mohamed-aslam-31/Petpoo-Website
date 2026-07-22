@@ -491,19 +491,6 @@ export function Products() {
             </div>
           )}
 
-          {/* Active location badges */}
-          {locFilterActive && (
-            <div className="flex flex-wrap gap-1">
-              {[...selectedLocations].map(l => (
-                <Badge key={l} variant="secondary" className="gap-1 text-xs pl-2 pr-1">
-                  {l}
-                  <button type="button" onClick={() => toggleStr(setSelectedLocations, l)} className="ml-0.5 rounded hover:bg-muted-foreground/20 p-0.5">
-                    <X className="h-2.5 w-2.5" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-          )}
         </div>
 
         <CardContent className="px-4 py-0">
