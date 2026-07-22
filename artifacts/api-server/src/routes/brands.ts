@@ -16,13 +16,14 @@ router.get("/brands", async (req, res): Promise<void> => {
       id: brandsTable.id,
       name: brandsTable.name,
       createdAt: brandsTable.createdAt,
+      updatedAt: brandsTable.updatedAt,
       categoriesCount: sql<number>`cast(count(${categoriesTable.id}) as int)`,
     })
     .from(brandsTable)
     .leftJoin(categoriesTable, eq(categoriesTable.brandId, brandsTable.id))
     .groupBy(brandsTable.id)
     .orderBy(brandsTable.name);
-  res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
+  res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() })));
 });
 
 router.post("/brands", async (req, res): Promise<void> => {

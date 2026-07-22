@@ -28,12 +28,20 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 
+function formatDateTime(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleString("en-IN", {
+    day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit", hour12: true,
+  });
+}
+
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
 });
 type FormValues = z.infer<typeof schema>;
 
-interface EditableBrand { id: number; name: string }
+interface EditableBrand { id: number; name: string; createdAt?: string | null; updatedAt?: string | null; }
 
 const empty: FormValues = { name: "" };
 
@@ -64,8 +72,26 @@ export function BrandFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Brand" : "Add Brand"}</DialogTitle>
-          <DialogDescription>{isEditing ? "Update brand details." : "Create a new product brand."}</DialogDescription>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <DialogTitle>{isEditing ? "Edit Brand" : "Add Brand"}</DialogTitle>
+              <DialogDescription>{isEditing ? "Update brand details." : "Create a new product brand."}</DialogDescription>
+            </div>
+            {isEditing && brand?.createdAt && (
+              <div className="text-right shrink-0 space-y-1">
+                <p className="text-[11px] text-muted-foreground leading-tight">
+                  <span className="font-medium text-foreground/60">Created</span><br />
+                  {formatDateTime(brand.createdAt)}
+                </p>
+                {brand.updatedAt && brand.updatedAt !== brand.createdAt && (
+                  <p className="text-[11px] text-muted-foreground leading-tight">
+                    <span className="font-medium text-foreground/60">Last edited</span><br />
+                    {formatDateTime(brand.updatedAt)}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
