@@ -465,22 +465,6 @@ export function Brands() {
                 ))}
               </SelectContent>
             </Select>
-            <Input
-              type="number"
-              min={1}
-              placeholder="Custom"
-              className="h-8 w-20 text-xs"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  const v = parseInt((e.target as HTMLInputElement).value);
-                  if (v >= 1) { setPageSize(v); setPage(0); (e.target as HTMLInputElement).value = ""; }
-                }
-              }}
-              onBlur={(e) => {
-                const v = parseInt(e.target.value);
-                if (v >= 1) { setPageSize(v); setPage(0); e.target.value = ""; }
-              }}
-            />
           </div>
           {/* Count + navigation */}
           <div className="flex items-center gap-3">
