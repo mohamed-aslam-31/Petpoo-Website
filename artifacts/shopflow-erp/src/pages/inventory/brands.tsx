@@ -35,6 +35,8 @@ export function Brands() {
   const [activeSorts, setActiveSorts] = useState<Set<SortKey>>(new Set());
   const [minCat, setMinCat] = useState("");
   const [maxCat, setMaxCat] = useState("");
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 10;
 
   const queryClient = useQueryClient();
   const { data, isLoading } = useListBrands({ query: { queryKey: getListBrandsQueryKey() } });
@@ -98,6 +100,14 @@ export function Brands() {
     return rows;
   }, [data, search, minCat, maxCat, activeSorts]);
 
+  // Reset to first page when filters/sort change
+  const prevFilterKey = useRef("");
+  const filterKey = `${search}|${minCat}|${maxCat}|${[...activeSorts].sort().join(",")}`;
+  if (filterKey !== prevFilterKey.current) {
+    prevFilterKey.current = filterKey;
+    if (page !== 0) setPage(0);
+  }
+
   // Selected always pinned to top (not filtered); unselected go through pipeline
   const selectedBrands = useMemo(
     () => (data ?? []).filter(b => selectedIds.has(b.id)),
@@ -107,7 +117,15 @@ export function Brands() {
     () => processedData.filter(b => !selectedIds.has(b.id)),
     [processedData, selectedIds]
   );
-  const displayRows = [...selectedBrands, ...unselectedBrands];
+  const allRows = [...selectedBrands, ...unselectedBrands];
+  const totalRows = allRows.length;
+  const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const displayRows = allRows.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
+  // Pagination display values
+  const showingFrom = totalRows === 0 ? 0 : safePage * PAGE_SIZE + 1;
+  const showingTo = Math.min(safePage * PAGE_SIZE + PAGE_SIZE, totalRows);
 
   // ── Checkbox helpers ───────────────────────────────────────────────────────
   const allChecked = displayRows.length > 0 && displayRows.every(b => selectedIds.has(b.id));
@@ -373,6 +391,29 @@ export function Brands() {
             </TableBody>
           </Table>
         </CardContent>
+
+        {/* Pagination footer */}
+        <div className="flex items-center justify-between px-4 py-3 border-t text-sm text-muted-foreground">
+          <span>Showing {showingFrom}–{showingTo} of {totalRows} brand{totalRows !== 1 ? "s" : ""}</span>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={safePage === 0}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={safePage >= totalPages - 1}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
       </Card>
 
       <BrandFormDialog open={formOpen} onOpenChange={setFormOpen} brand={editingBrand} />
