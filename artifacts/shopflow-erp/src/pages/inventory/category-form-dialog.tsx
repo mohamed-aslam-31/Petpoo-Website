@@ -51,7 +51,7 @@ const NO_BRAND = "no-brand";
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
-  brandSelection: z.string().default(NO_BRAND),
+  brandSelection: z.string().min(1, "Please select a brand"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -63,7 +63,7 @@ interface EditableCategory {
   brandName?: string | null;
 }
 
-const empty: FormValues = { name: "", brandSelection: NO_BRAND };
+const empty: FormValues = { name: "", brandSelection: "" };
 
 export function CategoryFormDialog({
   open,
@@ -127,6 +127,7 @@ export function CategoryFormDialog({
 
   // Label shown in the combobox trigger
   const brandLabel = (() => {
+    if (brandSelection === "") return null;
     if (brandSelection === NO_BRAND) return "No Brand";
     return brands?.find((b) => String(b.id) === brandSelection)?.name ?? "Select brand";
   })();
@@ -243,8 +244,8 @@ export function CategoryFormDialog({
                             aria-expanded={brandOpen}
                             className="w-full justify-between font-normal text-left"
                           >
-                            <span className={cn("truncate", brandSelection === NO_BRAND && "text-muted-foreground")}>
-                              {brandLabel}
+                            <span className={cn("truncate", (brandSelection === NO_BRAND || brandSelection === "") && "text-muted-foreground")}>
+                              {brandLabel ?? "Select a brand..."}
                             </span>
                             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                           </Button>
