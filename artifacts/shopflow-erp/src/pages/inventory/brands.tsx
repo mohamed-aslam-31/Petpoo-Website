@@ -52,7 +52,7 @@ export function Brands() {
             <TableHeader className="bg-muted/50">
               <TableRow>
                 <TableHead>Name</TableHead>
-                <TableHead className="text-right">Products</TableHead>
+                <TableHead className="text-right">Categories</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -64,7 +64,7 @@ export function Brands() {
               ) : filteredData?.map((brand) => (
                 <TableRow key={brand.id} className="hover:bg-muted/50 transition-colors">
                   <TableCell className="font-medium">{brand.name}</TableCell>
-                  <TableCell className="text-right">{brand.productsCount || 0}</TableCell>
+                  <TableCell className="text-right">{(brand as any).categoriesCount || 0}</TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
