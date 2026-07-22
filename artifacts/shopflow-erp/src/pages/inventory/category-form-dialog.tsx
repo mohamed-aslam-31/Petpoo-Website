@@ -54,7 +54,7 @@ const schema = z.object({
     .string()
     .trim()
     .min(2, "Name must be at least 2 characters")
-    .max(60, "Name must be 60 characters or fewer")
+    .max(70, "Name must be 70 characters or fewer")
     .refine((v) => v.trim().length > 0, "Name cannot be only spaces"),
   brandSelection: z.string().min(1, "Please select a brand"),
 });
