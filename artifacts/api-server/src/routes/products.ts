@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, and, or, lte, sql, ne, isNull } from "drizzle-orm";
+import { eq, ilike, and, or, lte, sql, ne, isNull, isNotNull, inArray, asc, desc } from "drizzle-orm";
 import { db, productsTable, categoriesTable, brandsTable, stockMovementsTable } from "@workspace/db";
 import {
   CreateProductBody,
@@ -57,14 +57,52 @@ router.get("/products/next-sku", async (req, res): Promise<void> => {
   res.json({ sku });
 });
 
+// Returns distinct units and locations for filter dropdowns
+router.get("/products/options", async (_req, res): Promise<void> => {
+  const [unitRows, locationRows] = await Promise.all([
+    db.selectDistinct({ unit: productsTable.unit })
+      .from(productsTable)
+      .where(isNotNull(productsTable.unit))
+      .orderBy(asc(productsTable.unit)),
+    db.selectDistinct({ location: productsTable.location })
+      .from(productsTable)
+      .where(isNotNull(productsTable.location))
+      .orderBy(asc(productsTable.location)),
+  ]);
+  res.json({
+    units: unitRows.map(r => r.unit).filter(Boolean),
+    locations: locationRows.map(r => r.location).filter(Boolean),
+  });
+});
+
 router.get("/products", async (req, res): Promise<void> => {
   const page = parseInt(String(req.query.page ?? "1"), 10);
   const limit = parseInt(String(req.query.limit ?? "20"), 10);
   const offset = (page - 1) * limit;
   const search = req.query.search as string | undefined;
-  const categoryId = req.query.categoryId ? parseInt(String(req.query.categoryId), 10) : undefined;
-  const brandId = req.query.brandId ? parseInt(String(req.query.brandId), 10) : undefined;
   const lowStock = req.query.lowStock === "true";
+
+  // Multi-value filters (comma-separated)
+  const categoryIds = req.query.categoryIds
+    ? String(req.query.categoryIds).split(",").map(Number).filter(n => !isNaN(n) && n > 0)
+    : [];
+  const brandIds = req.query.brandIds
+    ? String(req.query.brandIds).split(",").map(Number).filter(n => !isNaN(n) && n > 0)
+    : [];
+  const units = req.query.units
+    ? String(req.query.units).split(",").filter(Boolean)
+    : [];
+  const locations = req.query.locations
+    ? String(req.query.locations).split(",").filter(Boolean)
+    : [];
+
+  // Sort
+  const sortBy = req.query.sortBy as string | undefined;
+  const sortOrder = req.query.sortOrder as string | undefined;
+  const orderByClause =
+    sortBy === "createdAt"
+      ? sortOrder === "asc" ? asc(productsTable.createdAt) : desc(productsTable.createdAt)
+      : sortOrder === "desc" ? desc(productsTable.name) : asc(productsTable.name);
 
   const conditions = [];
   if (search) conditions.push(or(
@@ -73,8 +111,10 @@ router.get("/products", async (req, res): Promise<void> => {
     ilike(productsTable.hsnCode, `%${search}%`),
     ilike(productsTable.barcode, `%${search}%`),
   ));
-  if (categoryId) conditions.push(eq(productsTable.categoryId, categoryId));
-  if (brandId) conditions.push(eq(productsTable.brandId, brandId));
+  if (categoryIds.length) conditions.push(inArray(productsTable.categoryId, categoryIds));
+  if (brandIds.length) conditions.push(inArray(productsTable.brandId, brandIds));
+  if (units.length) conditions.push(inArray(productsTable.unit, units));
+  if (locations.length) conditions.push(inArray(productsTable.location, locations));
   if (lowStock) conditions.push(lte(productsTable.currentStock, productsTable.minStock));
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -112,7 +152,7 @@ router.get("/products", async (req, res): Promise<void> => {
     .leftJoin(categoriesTable, eq(categoriesTable.id, productsTable.categoryId))
     .leftJoin(brandsTable, eq(brandsTable.id, productsTable.brandId))
     .where(where)
-    .orderBy(productsTable.name)
+    .orderBy(orderByClause)
     .limit(limit)
     .offset(offset);
 
