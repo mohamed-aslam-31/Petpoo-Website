@@ -156,9 +156,7 @@ export function Products() {
                     aria-label="Select all"
                   />
                 </TableHead>
-                <TableHead className="w-[260px]">Product</TableHead>
-                <TableHead>SKU</TableHead>
-                <TableHead>HSN Code</TableHead>
+                <TableHead className="w-[300px]">Product</TableHead>
                 <TableHead>Brand</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead className="text-right">Stock</TableHead>
@@ -171,10 +169,11 @@ export function Products() {
                 Array(5).fill(0).map((_, i) => (
                   <TableRow key={i}>
                     <TableCell><Skeleton className="h-4 w-4" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-[250px]" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                    <TableCell>
+                      <Skeleton className="h-3 w-16 mb-1.5" />
+                      <Skeleton className="h-4 w-[200px] mb-1.5" />
+                      <Skeleton className="h-3 w-14" />
+                    </TableCell>
                     <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                     <TableCell className="text-right"><Skeleton className="h-4 w-12 ml-auto" /></TableCell>
                     <TableCell><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
@@ -208,9 +207,13 @@ export function Products() {
                         aria-label={`Select ${product.name}`}
                       />
                     </TableCell>
-                    <TableCell className="font-medium">{product.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{product.sku}</TableCell>
-                    <TableCell className="text-muted-foreground">{product.hsnCode || "-"}</TableCell>
+                    <TableCell>
+                      <div className="text-xs text-muted-foreground font-mono">{product.sku}</div>
+                      <div className="font-medium">{product.name}</div>
+                      {product.hsnCode && (
+                        <div className="text-xs text-muted-foreground mt-0.5">HSN: {product.hsnCode}</div>
+                      )}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{product.brandName || "-"}</TableCell>
                     <TableCell>{product.categoryName || "-"}</TableCell>
                     <TableCell className="text-right">
