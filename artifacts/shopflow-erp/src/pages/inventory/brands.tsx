@@ -546,9 +546,9 @@ export function Brands() {
                 <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
                   {bulkDeleteErrors.map(err => (
                     <div key={err.brandName} className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
-                      <div className="flex items-start gap-2 text-destructive font-medium">
+                      <div className="flex items-start gap-2 text-destructive font-medium min-w-0">
                         <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                        <span>"{err.brandName}" has {err.categories.length} linked categor{err.categories.length === 1 ? "y" : "ies"}.</span>
+                        <span className="break-all">"{err.brandName}" has {err.categories.length} linked categor{err.categories.length === 1 ? "y" : "ies"}.</span>
                       </div>
                     </div>
                   ))}
