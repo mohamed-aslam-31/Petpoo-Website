@@ -108,25 +108,27 @@ export function Brands() {
     if (page !== 0) setPage(0);
   }
 
-  // Selected brands (used for bulk-delete dialog list)
+  // Selected brands always pinned to top on every page
   const selectedBrands = useMemo(
     () => (data ?? []).filter(b => selectedIds.has(b.id)),
     [data, selectedIds]
   );
+  // Unselected rows go through the filter/sort pipeline; pagination applies only to these
+  const unselectedBrands = useMemo(
+    () => processedData.filter(b => !selectedIds.has(b.id)),
+    [processedData, selectedIds]
+  );
 
-  // Paginate processedData directly — no global pinning
-  const totalRows = processedData.length;
+  const totalRows = unselectedBrands.length;
   const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
   const safePage = Math.min(page, totalPages - 1);
-  const pageRows = processedData.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
-  // Within the current page, float selected rows to the top
-  const displayRows = [
-    ...pageRows.filter(b => selectedIds.has(b.id)),
-    ...pageRows.filter(b => !selectedIds.has(b.id)),
-  ];
+  const pageRows = unselectedBrands.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  // Selected rows always at top, then current page's unselected rows
+  const displayRows = [...selectedBrands, ...pageRows];
 
-  // Pagination display values
-  const showingFrom = totalRows === 0 ? 0 : safePage * PAGE_SIZE + 1;
+  // Pagination display values (total includes selected + unselected)
+  const totalDisplay = processedData.length;
+  const showingFrom = totalRows === 0 && selectedBrands.length === 0 ? 0 : safePage * PAGE_SIZE + 1;
   const showingTo = Math.min(safePage * PAGE_SIZE + PAGE_SIZE, totalRows);
 
   // ── Checkbox helpers ───────────────────────────────────────────────────────
@@ -418,7 +420,7 @@ export function Brands() {
 
         {/* Pagination footer */}
         <div className="flex items-center justify-between px-4 py-3 border-t text-sm text-muted-foreground">
-          <span>Showing {showingFrom}–{showingTo} of {totalRows} brand{totalRows !== 1 ? "s" : ""}</span>
+          <span>Showing {showingFrom}–{showingTo} of {totalDisplay} brand{totalDisplay !== 1 ? "s" : ""}</span>
           <div className="flex gap-2">
             <Button
               variant="outline"

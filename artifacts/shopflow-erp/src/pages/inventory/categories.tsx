@@ -135,23 +135,26 @@ export function Categories() {
     if (page !== 0) setPage(0);
   }
 
-  // Selected categories (used for bulk-delete dialog list)
+  // Selected categories always pinned to top on every page
   const selectedCategories = useMemo(
     () => (data ?? []).filter(c => selectedIds.has(c.id)),
     [data, selectedIds]
   );
+  // Unselected rows go through the filter/sort pipeline; pagination applies only to these
+  const unselectedCategories = useMemo(
+    () => processedData.filter(c => !selectedIds.has(c.id)),
+    [processedData, selectedIds]
+  );
 
-  // Paginate processedData directly — no global pinning
-  const totalRows = processedData.length;
+  const totalRows = unselectedCategories.length;
   const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
   const safePage = Math.min(page, totalPages - 1);
-  const pageRows = processedData.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
-  // Within the current page, float selected rows to the top
-  const displayRows = [
-    ...pageRows.filter(c => selectedIds.has(c.id)),
-    ...pageRows.filter(c => !selectedIds.has(c.id)),
-  ];
-  const showingFrom = totalRows === 0 ? 0 : safePage * PAGE_SIZE + 1;
+  const pageRows = unselectedCategories.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  // Selected rows always at top, then current page's unselected rows
+  const displayRows = [...selectedCategories, ...pageRows];
+  // Pagination display values (total includes selected + unselected)
+  const totalDisplay = processedData.length;
+  const showingFrom = totalRows === 0 && selectedCategories.length === 0 ? 0 : safePage * PAGE_SIZE + 1;
   const showingTo = Math.min(safePage * PAGE_SIZE + PAGE_SIZE, totalRows);
 
   // ── Checkbox helpers ───────────────────────────────────────────────────────
@@ -520,7 +523,7 @@ export function Categories() {
 
         {/* Pagination footer */}
         <div className="flex items-center justify-between px-4 py-3 border-t text-sm text-muted-foreground">
-          <span>Showing {showingFrom}–{showingTo} of {totalRows} categor{totalRows !== 1 ? "ies" : "y"}</span>
+          <span>Showing {showingFrom}–{showingTo} of {totalDisplay} categor{totalDisplay !== 1 ? "ies" : "y"}</span>
           <div className="flex gap-2">
             <Button
               variant="outline"
