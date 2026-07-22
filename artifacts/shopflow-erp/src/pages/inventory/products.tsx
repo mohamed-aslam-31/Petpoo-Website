@@ -477,20 +477,6 @@ export function Products() {
             </PopoverContent>
           </Popover>
 
-          {/* Active unit badges */}
-          {unitFilterActive && (
-            <div className="flex flex-wrap gap-1">
-              {[...selectedUnits].map(u => (
-                <Badge key={u} variant="secondary" className="gap-1 text-xs pl-2 pr-1">
-                  {u}
-                  <button type="button" onClick={() => toggleStr(setSelectedUnits, u)} className="ml-0.5 rounded hover:bg-muted-foreground/20 p-0.5">
-                    <X className="h-2.5 w-2.5" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-          )}
-
         </div>
 
         <CardContent className="px-4 py-0">
