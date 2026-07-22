@@ -72,27 +72,24 @@ export function BrandFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <DialogTitle>{isEditing ? "Edit Brand" : "Add Brand"}</DialogTitle>
-              <DialogDescription>{isEditing ? "Update brand details." : "Create a new product brand."}</DialogDescription>
-            </div>
-            {isEditing && brand?.createdAt && (
-              <div className="text-right shrink-0 space-y-1">
-                <p className="text-[11px] text-muted-foreground leading-tight">
-                  <span className="font-medium text-foreground/60">Created</span><br />
-                  {formatDateTime(brand.createdAt)}
-                </p>
-                {brand.updatedAt && brand.updatedAt !== brand.createdAt && (
-                  <p className="text-[11px] text-muted-foreground leading-tight">
-                    <span className="font-medium text-foreground/60">Last edited</span><br />
-                    {formatDateTime(brand.updatedAt)}
-                  </p>
-                )}
-              </div>
+          <DialogTitle>{isEditing ? "Edit Brand" : "Add Brand"}</DialogTitle>
+          <DialogDescription>{isEditing ? "Update brand details." : "Create a new product brand."}</DialogDescription>
+        </DialogHeader>
+
+        {isEditing && brand?.createdAt && (
+          <div className="flex flex-wrap gap-x-6 gap-y-1 border rounded-md bg-muted/40 px-3 py-2">
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              <span className="font-medium text-foreground/70">Created</span>
+              <span className="ml-1">{formatDateTime(brand.createdAt)}</span>
+            </p>
+            {brand.updatedAt && brand.updatedAt !== brand.createdAt && (
+              <p className="text-[11px] text-muted-foreground leading-tight">
+                <span className="font-medium text-foreground/70">Last edited</span>
+                <span className="ml-1">{formatDateTime(brand.updatedAt)}</span>
+              </p>
             )}
           </div>
-        </DialogHeader>
+        )}
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField control={form.control} name="name" render={({ field }) => (
