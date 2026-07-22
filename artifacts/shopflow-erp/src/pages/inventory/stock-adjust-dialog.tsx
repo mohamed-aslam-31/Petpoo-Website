@@ -18,13 +18,14 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 
 const schema = z.object({
-  type: z.enum(["increase", "decrease", "damage", "lost"]),
+  type: z.enum(["increase", "decrease", "damage", "lost"]).optional()
+    .refine(value => value !== undefined, "Movement Type is required"),
   quantity: z.coerce.number().int().min(1, "Quantity must be at least 1"),
   reason: z.string().trim().min(1, "Reason is required"),
 });
 type FormValues = z.infer<typeof schema>;
 
-const empty: FormValues = { type: "increase", quantity: 1, reason: "" };
+const empty = { type: undefined, quantity: 1, reason: "" } as unknown as FormValues;
 
 interface Props {
   open: boolean;
@@ -80,9 +81,9 @@ export function StockAdjustDialog({ open, onOpenChange, product }: Props) {
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField control={form.control} name="type" render={({ field }) => (
               <FormItem>
-                <FormLabel>Movement Type</FormLabel>
+                <FormLabel>Movement Type <span className="text-destructive">*</span></FormLabel>
                 <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select movement..." /></SelectTrigger></FormControl>
                   <SelectContent>
                     <SelectItem value="increase">Increase (Stock In / Purchase)</SelectItem>
                     <SelectItem value="decrease">Decrease (Wrong count or miscount)</SelectItem>
