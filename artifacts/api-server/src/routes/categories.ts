@@ -18,6 +18,7 @@ function buildCategoryResponse(r: {
   storedBrandName: string | null;
   joinedBrandName: string | null;
   createdAt: Date;
+  updatedAt?: Date;
   productsCount?: number;
 }) {
   return {
@@ -28,6 +29,7 @@ function buildCategoryResponse(r: {
     brandName: r.joinedBrandName ?? r.storedBrandName ?? null,
     productsCount: r.productsCount ?? 0,
     createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt ? r.updatedAt.toISOString() : undefined,
   };
 }
 
@@ -40,6 +42,7 @@ router.get("/categories", async (req, res): Promise<void> => {
       storedBrandName: categoriesTable.brandName,
       joinedBrandName: brandsTable.name,
       createdAt: categoriesTable.createdAt,
+      updatedAt: categoriesTable.updatedAt,
       productsCount: sql<number>`cast(count(${productsTable.id}) as int)`,
     })
     .from(categoriesTable)

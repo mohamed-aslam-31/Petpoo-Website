@@ -56,11 +56,21 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+function formatDateTime(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleString("en-IN", {
+    day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit", hour12: true,
+  });
+}
+
 interface EditableCategory {
   id: number;
   name: string;
   brandId?: number | null;
   brandName?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 const empty: FormValues = { name: "", brandSelection: "" };
@@ -170,6 +180,21 @@ export function CategoryFormDialog({
             {isEditing ? "Update category details." : "Create a new product category."}
           </DialogDescription>
         </DialogHeader>
+
+        {isEditing && category?.createdAt && (
+          <div className="flex flex-wrap gap-x-6 gap-y-1 border rounded-md bg-muted/40 px-3 py-2">
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              <span className="font-medium text-foreground/70">Created</span>
+              <span className="ml-1">{formatDateTime(category.createdAt)}</span>
+            </p>
+            {category.updatedAt && category.updatedAt !== category.createdAt && (
+              <p className="text-[11px] text-muted-foreground leading-tight">
+                <span className="font-medium text-foreground/70">Last edited</span>
+                <span className="ml-1">{formatDateTime(category.updatedAt)}</span>
+              </p>
+            )}
+          </div>
+        )}
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
