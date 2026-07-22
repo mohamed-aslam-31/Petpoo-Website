@@ -498,12 +498,13 @@ export function Brands() {
           <AlertDialogFooter>
             <AlertDialogCancel>{deleteError ? "Close" : "Cancel"}</AlertDialogCancel>
             {!deleteError && (
-              <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              <Button
+                variant="destructive"
+                disabled={deleteMutation.isPending}
                 onClick={() => deletingBrand && deleteMutation.mutate({ id: deletingBrand.id }, { onSuccess: () => toast.success("Brand deleted") })}
               >
                 {deleteMutation.isPending ? "Deleting..." : "Delete"}
-              </AlertDialogAction>
+              </Button>
             )}
           </AlertDialogFooter>
         </AlertDialogContent>
