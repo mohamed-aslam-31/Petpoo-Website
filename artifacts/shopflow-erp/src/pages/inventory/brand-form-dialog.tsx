@@ -93,7 +93,13 @@ export function BrandFormDialog({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <FormField control={form.control} name="name" render={({ field }) => (
-              <FormItem><FormLabel>Name</FormLabel><FormControl><Input placeholder="e.g. Tata, Amul..." {...field} /></FormControl><FormMessage /></FormItem>
+              <FormItem>
+                <FormLabel>Name <span className="text-destructive">*</span></FormLabel>
+                <FormControl>
+                  <Input placeholder="Enter Brand Name..." {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
             )} />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
