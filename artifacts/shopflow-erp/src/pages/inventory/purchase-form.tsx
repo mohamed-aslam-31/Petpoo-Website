@@ -27,6 +27,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "@/components/ui/command";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -42,8 +55,74 @@ import {
   FormControl,
   FormMessage,
 } from "@/components/ui/form";
-import { Trash2, Plus, ArrowLeft, Printer, Save } from "lucide-react";
+import { Trash2, Plus, ArrowLeft, Printer, Save, Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Searchable select for table cells
+// ────────────────────────────────────────────────────────────────────────────────
+
+const NO_BRAND = "no-brand";
+const NO_CATEGORY = "no-category";
+
+function SearchableSelect({
+  value,
+  onValueChange,
+  options,
+  placeholder,
+  searchPlaceholder,
+  disabled,
+}: {
+  value: string;
+  onValueChange: (val: string) => void;
+  options: { value: string; label: string }[];
+  placeholder: string;
+  searchPlaceholder: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.value === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          disabled={disabled}
+          className="h-8 w-full justify-between px-2 text-xs font-normal overflow-hidden"
+        >
+          <span className={cn("truncate min-w-0 flex-1 text-left", !selected && "text-muted-foreground")}>
+            {selected ? selected.label : placeholder}
+          </span>
+          <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="p-0 w-48" align="start" sideOffset={4}>
+        <Command>
+          <CommandInput placeholder={searchPlaceholder} className="h-8 text-xs" />
+          <CommandList className="max-h-48 overflow-y-auto">
+            <CommandEmpty className="py-2 text-xs text-center text-muted-foreground">No results.</CommandEmpty>
+            <CommandGroup>
+              {options.map((opt) => (
+                <CommandItem
+                  key={opt.value}
+                  value={opt.label}
+                  onSelect={() => { onValueChange(opt.value); setOpen(false); }}
+                  className="text-xs"
+                >
+                  <Check className={cn("mr-2 h-3 w-3", value === opt.value ? "opacity-100" : "opacity-0")} />
+                  {opt.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Form schema
@@ -51,11 +130,12 @@ import { cn } from "@/lib/utils";
 
 const itemSchema = z.object({
   productId: z.coerce.number().min(1, "Product required"),
+  brandComboVal: z.string().min(1, "Brand required"),
   brandId: z.coerce.number().nullable().optional(),
   brandName: z.string().nullable().optional(),
+  categoryComboVal: z.string().min(1, "Category required"),
   categoryId: z.coerce.number().nullable().optional(),
   categoryName: z.string().nullable().optional(),
-  sku: z.string().optional(),
   currentStock: z.coerce.number().optional(),
   quantity: z.coerce.number().int().min(1, "Qty must be ≥ 1"),
   unit: z.string().optional(),
@@ -80,11 +160,12 @@ type FormValues = z.infer<typeof schema>;
 
 const emptyItem = (): z.infer<typeof itemSchema> => ({
   productId: 0,
+  brandComboVal: "",
   brandId: null,
   brandName: null,
+  categoryComboVal: "",
   categoryId: null,
   categoryName: null,
-  sku: "",
   currentStock: 0,
   quantity: 1,
   unit: "",
@@ -305,7 +386,6 @@ export function PurchaseForm() {
       const category = allCategories.find((c: { id: number }) => c.id === product.categoryId);
 
       form.setValue(`items.${index}.productId`, pid);
-      form.setValue(`items.${index}.sku`, product.sku ?? "");
       form.setValue(`items.${index}.currentStock`, product.currentStock ?? 0);
       form.setValue(`items.${index}.unit`, product.unit ?? "");
       form.setValue(`items.${index}.purchasePrice`, parseFloat(String(product.purchasePrice ?? 0)));
@@ -319,16 +399,17 @@ export function PurchaseForm() {
   );
 
   const handleBrandChange = useCallback(
-    (index: number, brandId: string) => {
-      const bid = Number(brandId) || null;
+    (index: number, comboVal: string) => {
+      const bid = comboVal === NO_BRAND ? null : Number(comboVal) || null;
       const brand = allBrands.find((b: { id: number }) => b.id === bid);
+      form.setValue(`items.${index}.brandComboVal`, comboVal, { shouldValidate: true });
       form.setValue(`items.${index}.brandId`, bid);
       form.setValue(`items.${index}.brandName`, brand?.name ?? null);
       // Clear product/category when brand changes
       form.setValue(`items.${index}.productId`, 0);
+      form.setValue(`items.${index}.categoryComboVal`, "");
       form.setValue(`items.${index}.categoryId`, null);
       form.setValue(`items.${index}.categoryName`, null);
-      form.setValue(`items.${index}.sku`, "");
       form.setValue(`items.${index}.currentStock`, 0);
       form.setValue(`items.${index}.unit`, "");
       form.setValue(`items.${index}.purchasePrice`, 0);
@@ -338,26 +419,20 @@ export function PurchaseForm() {
   );
 
   const handleCategoryChange = useCallback(
-    (index: number, categoryId: string) => {
-      const cid = Number(categoryId) || null;
+    (index: number, comboVal: string) => {
+      const cid = comboVal === NO_CATEGORY ? null : Number(comboVal) || null;
       const category = allCategories.find((c: { id: number }) => c.id === cid);
+      form.setValue(`items.${index}.categoryComboVal`, comboVal, { shouldValidate: true });
       form.setValue(`items.${index}.categoryId`, cid);
       form.setValue(`items.${index}.categoryName`, category?.name ?? null);
-      // Auto-select brand from category
-      if (category?.brandId) {
-        const brand = allBrands.find((b: { id: number }) => b.id === category.brandId);
-        form.setValue(`items.${index}.brandId`, category.brandId);
-        form.setValue(`items.${index}.brandName`, brand?.name ?? null);
-      }
       // Clear product
       form.setValue(`items.${index}.productId`, 0);
-      form.setValue(`items.${index}.sku`, "");
       form.setValue(`items.${index}.currentStock`, 0);
       form.setValue(`items.${index}.unit`, "");
       form.setValue(`items.${index}.purchasePrice`, 0);
       form.setValue(`items.${index}.gstPercent`, 0);
     },
-    [allCategories, allBrands, form]
+    [allCategories, form]
   );
 
   const isSaving = createMutation.isPending || createAndPrintMutation.isPending;
@@ -490,14 +565,13 @@ export function PurchaseForm() {
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">
                   <tr>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[120px]">Brand</th>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[120px]">Category</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[140px]">Brand *</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[140px]">Category *</th>
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[160px]">Product *</th>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[90px]">SKU</th>
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[80px]">In Stock</th>
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[80px]">Qty *</th>
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[70px]">Unit</th>
-                    <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[110px]">Price/Unit *</th>
+                    <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[110px]">Price *</th>
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[70px]">GST %</th>
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[110px]">Total</th>
                     <th className="w-[40px]"></th>
@@ -506,19 +580,40 @@ export function PurchaseForm() {
                 <tbody className="divide-y">
                   {fields.map((field, index) => {
                     const item = watchedItems[index];
-                    const brandId = item?.brandId;
-                    const categoryId = item?.categoryId;
+                    const brandComboVal = item?.brandComboVal ?? "";
+                    const categoryComboVal = item?.categoryComboVal ?? "";
 
-                    // Filtered dropdowns
-                    const filteredCategories = brandId
-                      ? allCategories.filter((c) => c.brandId === Number(brandId))
-                      : allCategories;
+                    // Brand options: No Brand + all brands
+                    const brandOptions = [
+                      { value: NO_BRAND, label: "No Brand" },
+                      ...allBrands.map((b) => ({ value: String(b.id), label: b.name })),
+                    ];
 
+                    // Category options filtered by selected brand
+                    const filteredCats = (() => {
+                      if (!brandComboVal) return [];
+                      if (brandComboVal === NO_BRAND)
+                        return allCategories.filter((c) => !c.brandId);
+                      return allCategories.filter((c) => c.brandId === Number(brandComboVal));
+                    })();
+                    const categoryOptions = [
+                      { value: NO_CATEGORY, label: "No Category" },
+                      ...filteredCats.map((c) => ({ value: String(c.id), label: c.name })),
+                    ];
+
+                    // Product options filtered by brand + category
                     const filteredProducts = allProducts.filter((p) => {
-                      const matchesBrand = brandId ? p.brandId === Number(brandId) : true;
-                      const matchesCat = categoryId ? p.categoryId === Number(categoryId) : true;
-                      return matchesBrand && matchesCat;
+                      if (!brandComboVal || !categoryComboVal) return false;
+                      const brandOk =
+                        brandComboVal === NO_BRAND ? !p.brandId : p.brandId === Number(brandComboVal);
+                      const catOk =
+                        categoryComboVal === NO_CATEGORY ? !p.categoryId : p.categoryId === Number(categoryComboVal);
+                      return brandOk && catOk;
                     });
+                    const productOptions = filteredProducts.map((p) => ({
+                      value: String(p.id),
+                      label: p.name,
+                    }));
 
                     const lineTotal =
                       (Number(item?.quantity) || 0) * (Number(item?.purchasePrice) || 0);
@@ -528,70 +623,36 @@ export function PurchaseForm() {
                       <tr key={field.id} className="hover:bg-muted/20">
                         {/* Brand */}
                         <td className="px-2 py-2">
-                          <Select
-                            value={item?.brandId ? String(item.brandId) : ""}
+                          <SearchableSelect
+                            value={brandComboVal}
                             onValueChange={(v) => handleBrandChange(index, v)}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Any…" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="">Any</SelectItem>
-                              {allBrands.map((b) => (
-                                <SelectItem key={b.id} value={String(b.id)}>
-                                  {b.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            options={brandOptions}
+                            placeholder="Select brand…"
+                            searchPlaceholder="Search brands…"
+                          />
                         </td>
 
                         {/* Category */}
                         <td className="px-2 py-2">
-                          <Select
-                            value={item?.categoryId ? String(item.categoryId) : ""}
+                          <SearchableSelect
+                            value={categoryComboVal}
                             onValueChange={(v) => handleCategoryChange(index, v)}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Any…" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="">Any</SelectItem>
-                              {filteredCategories.map((c) => (
-                                <SelectItem key={c.id} value={String(c.id)}>
-                                  {c.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            options={categoryOptions}
+                            placeholder={!brandComboVal ? "Select brand first" : "Select category…"}
+                            searchPlaceholder="Search categories…"
+                            disabled={!brandComboVal}
+                          />
                         </td>
 
                         {/* Product */}
                         <td className="px-2 py-2">
-                          <Select
+                          <SearchableSelect
                             value={item?.productId ? String(item.productId) : ""}
                             onValueChange={(v) => handleProductChange(index, v)}
-                          >
-                            <SelectTrigger className={cn("h-8 text-xs", !item?.productId && "border-destructive/50")}>
-                              <SelectValue placeholder="Select product…" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {filteredProducts.map((p) => (
-                                <SelectItem key={p.id} value={String(p.id)}>
-                                  {p.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </td>
-
-                        {/* SKU */}
-                        <td className="px-2 py-2">
-                          <Input
-                            value={item?.sku ?? ""}
-                            readOnly
-                            className="h-8 text-xs bg-muted/40 text-muted-foreground"
-                            tabIndex={-1}
+                            options={productOptions}
+                            placeholder={!categoryComboVal ? "Select category first" : "Select product…"}
+                            searchPlaceholder="Search products…"
+                            disabled={!categoryComboVal}
                           />
                         </td>
 

@@ -736,22 +736,6 @@ export function ProductFormDialog({
                 );
               }} />
 
-              {/* 2. SKU (auto-generated, read-only for new products) */}
-              <FormField control={form.control} name="sku" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>SKU <Req /></FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      readOnly={!isEditing}
-                      placeholder={skuLoading ? "Generating…" : "SKU-001"}
-                      className={!isEditing ? "bg-muted text-muted-foreground cursor-default" : ""}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-
               {/* 3. Barcode */}
               <FormField control={form.control} name="barcode" render={({ field }) => (
                 <FormItem>
