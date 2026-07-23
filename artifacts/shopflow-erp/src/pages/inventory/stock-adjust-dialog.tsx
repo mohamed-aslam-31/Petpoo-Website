@@ -273,7 +273,7 @@ export function StockAdjustDialog({ open, onOpenChange, product }: Props) {
                 control={form.control}
                 name="quantity"
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem className="ml-3">
                     <FormLabel>Quantity</FormLabel>
                     <FormControl>
                       <Input type="number" min={1} {...field} />
@@ -305,7 +305,7 @@ export function StockAdjustDialog({ open, onOpenChange, product }: Props) {
                   control={form.control}
                   name="reason"
                   render={({ field }) => (
-                    <FormItem>
+                    <FormItem className="ml-3">
                       <FormLabel>
                         Reason <span className="text-destructive">*</span>
                       </FormLabel>
