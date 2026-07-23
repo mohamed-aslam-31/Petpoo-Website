@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/command";
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getMargins } from "@/lib/price-margins";
 import { Checkbox } from "@/components/ui/checkbox";
 
 function formatDateTime(iso: string) {
@@ -887,7 +888,7 @@ export function ProductFormDialog({
                     </FormItem>
                   )} />
 
-                  {/* 9. Purchase Price — auto-fills wholesale (+25%) and retail (+50%) */}
+                  {/* 9. Purchase Price — auto-fills wholesale & retail from saved margins */}
                   <FormField control={form.control} name="purchasePrice" render={({ field }) => (
                     <FormItem>
                       <FormLabel>
@@ -904,8 +905,9 @@ export function ProductFormDialog({
                             field.onChange(e);
                             const purchase = parseFloat(e.target.value);
                             if (!isNaN(purchase) && purchase >= 0) {
-                              const wholesale = Math.round(purchase * 1.25 * 100) / 100;
-                              const retail    = Math.round(purchase * 1.50 * 100) / 100;
+                              const { wholesale: wPct, retail: rPct } = getMargins();
+                              const wholesale = Math.round(purchase * (1 + wPct / 100) * 100) / 100;
+                              const retail    = Math.round(purchase * (1 + rPct / 100) * 100) / 100;
                               form.setValue("wholesalePrice", wholesale, { shouldValidate: true });
                               form.setValue("retailPrice",    retail,    { shouldValidate: true });
                             }
@@ -916,12 +918,12 @@ export function ProductFormDialog({
                     </FormItem>
                   )} />
 
-                  {/* 10. Wholesale Price (auto-filled as purchase + 25%, editable) */}
+                  {/* 10. Wholesale Price (auto-filled from saved wholesale margin, editable) */}
                   <FormField control={form.control} name="wholesalePrice" render={({ field }) => (
                     <FormItem>
                       <FormLabel>
                         Wholesale Price{selectedUnit && <span className="text-muted-foreground font-normal text-xs ml-1">/ {selectedUnit}</span>}
-                        <span className="text-muted-foreground font-normal text-xs ml-1">(+25%)</span>
+                        <span className="text-muted-foreground font-normal text-xs ml-1">(+{getMargins().wholesale}%)</span>
                       </FormLabel>
                       <FormControl>
                         <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />
@@ -930,12 +932,12 @@ export function ProductFormDialog({
                     </FormItem>
                   )} />
 
-                  {/* 11. Retail Price (auto-filled as purchase + 50%, editable) */}
+                  {/* 11. Retail Price (auto-filled from saved retail margin, editable) */}
                   <FormField control={form.control} name="retailPrice" render={({ field }) => (
                     <FormItem>
                       <FormLabel>
                         Retail Price{selectedUnit && <span className="text-muted-foreground font-normal text-xs ml-1">/ {selectedUnit}</span>}
-                        <span className="text-muted-foreground font-normal text-xs ml-1">(+50%)</span>
+                        <span className="text-muted-foreground font-normal text-xs ml-1">(+{getMargins().retail}%)</span>
                       </FormLabel>
                       <FormControl>
                         <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />

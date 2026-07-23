@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from "react";
+import { useState, useRef, useMemo, useCallback } from "react";
 import { toast } from "sonner";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
@@ -17,7 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Search, Plus, Filter, MoreHorizontal, Edit, Trash2, Package, ChevronsUpDown, Check, X, AlertCircle } from "lucide-react";
+import { Search, Plus, Filter, MoreHorizontal, Edit, Trash2, Package, ChevronsUpDown, Check, X, AlertCircle, Settings2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -28,6 +28,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ProductFormDialog } from "./product-form-dialog";
 import { StockAdjustDialog } from "./stock-adjust-dialog";
 import { cn } from "@/lib/utils";
+import { getMargins, saveMargins, type PriceMargins } from "@/lib/price-margins";
 
 const PAGE_SIZE_PRESETS = [10, 20, 50, 100];
 
@@ -82,6 +83,30 @@ export function Products() {
   const [adjustingProduct, setAdjustingProduct] = useState<any | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectedProductMap, setSelectedProductMap] = useState<Map<number, any>>(new Map());
+
+  // ── Profit-margin settings ─────────────────────────────────────────────────
+  const [margins, setMargins] = useState<PriceMargins>(getMargins);
+  const [marginsOpen, setMarginsOpen] = useState(false);
+  const [draftWholesale, setDraftWholesale] = useState(String(margins.wholesale));
+  const [draftRetail,    setDraftRetail]    = useState(String(margins.retail));
+
+  function openMarginsPanel() {
+    const m = getMargins();
+    setDraftWholesale(String(m.wholesale));
+    setDraftRetail(String(m.retail));
+    setMarginsOpen(true);
+  }
+
+  function applyMargins() {
+    const w = parseFloat(draftWholesale);
+    const r = parseFloat(draftRetail);
+    if (isNaN(w) || w < 0 || isNaN(r) || r < 0) return;
+    const next = { wholesale: w, retail: r };
+    saveMargins(next);
+    setMargins(next);
+    setMarginsOpen(false);
+    toast.success("Profit margins saved");
+  }
 
   const queryClient = useQueryClient();
   const { data: categories } = useListCategories({ query: { queryKey: getListCategoriesQueryKey() } });
@@ -251,6 +276,92 @@ export function Products() {
               Delete Selected ({selectedIds.size})
             </Button>
           )}
+          {/* Profit margin settings */}
+          <Popover open={marginsOpen} onOpenChange={setMarginsOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 shrink-0"
+                title="Profit margin settings"
+                onClick={openMarginsPanel}
+              >
+                <Settings2 className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-72 p-4" align="end">
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm font-semibold">Profit Margin Settings</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Applied automatically when you enter a purchase price.
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium">Wholesale Margin %</label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        placeholder="25"
+                        className="h-8 text-sm"
+                        value={draftWholesale}
+                        onChange={e => setDraftWholesale(e.target.value)}
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">% markup</span>
+                    </div>
+                    {draftWholesale !== "" && !isNaN(parseFloat(draftWholesale)) && parseFloat(draftWholesale) >= 0 && (
+                      <p className="text-[11px] text-muted-foreground">
+                        e.g. ₹200 purchase → ₹{(200 * (1 + parseFloat(draftWholesale) / 100)).toFixed(2)} wholesale
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium">Retail Margin %</label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        placeholder="50"
+                        className="h-8 text-sm"
+                        value={draftRetail}
+                        onChange={e => setDraftRetail(e.target.value)}
+                      />
+                      <span className="text-xs text-muted-foreground shrink-0">% markup</span>
+                    </div>
+                    {draftRetail !== "" && !isNaN(parseFloat(draftRetail)) && parseFloat(draftRetail) >= 0 && (
+                      <p className="text-[11px] text-muted-foreground">
+                        e.g. ₹200 purchase → ₹{(200 * (1 + parseFloat(draftRetail) / 100)).toFixed(2)} retail
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <Button variant="outline" size="sm" className="flex-1" onClick={() => setMarginsOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="flex-1"
+                    onClick={applyMargins}
+                    disabled={
+                      isNaN(parseFloat(draftWholesale)) || parseFloat(draftWholesale) < 0 ||
+                      isNaN(parseFloat(draftRetail))    || parseFloat(draftRetail)    < 0
+                    }
+                  >
+                    Save
+                  </Button>
+                </div>
+                <p className="text-[10px] text-muted-foreground border-t pt-2">
+                  Current: Wholesale {margins.wholesale}% · Retail {margins.retail}%
+                </p>
+              </div>
+            </PopoverContent>
+          </Popover>
+
           <Button className="gap-2" onClick={() => { setEditingProduct(null); setFormOpen(true); }}>
             <Plus className="h-4 w-4" /> Add Product
           </Button>
