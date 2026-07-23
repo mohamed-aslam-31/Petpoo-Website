@@ -75,7 +75,7 @@ export function Products() {
   const [deletingProduct, setDeletingProduct] = useState<any | null>(null);
   const [deletingSelected, setDeletingSelected] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [bulkDeleteErrors, setBulkDeleteErrors] = useState<{ productId: number; productName: string; currentStock: number }[]>([]);
+  const [bulkDeleteErrors, setBulkDeleteErrors] = useState<{ productId: number; productName: string; currentStock: number; unit: string }[]>([]);
   const [adjustingProduct, setAdjustingProduct] = useState<any | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectedProductMap, setSelectedProductMap] = useState<Map<number, any>>(new Map());
@@ -164,7 +164,7 @@ export function Products() {
     setBulkDeleting(true);
     const ids = [...selectedIds];
     let deleted = 0;
-    const errors: { productId: number; productName: string; currentStock: number }[] = [];
+    const errors: { productId: number; productName: string; currentStock: number; unit: string }[] = [];
 
     for (const id of ids) {
       const product = selectedProductMap.get(id);
@@ -176,7 +176,7 @@ export function Products() {
       } catch (error: any) {
         const stock = error?.data?.currentStock;
         if (error?.status === 409 && stock !== undefined) {
-          errors.push({ productId: id, productName: product?.name ?? `Product #${id}`, currentStock: stock });
+          errors.push({ productId: id, productName: product?.name ?? `Product #${id}`, currentStock: stock, unit: product?.unit ?? "pcs" });
         } else {
           toast.error(`Failed to delete "${product?.name ?? `Product #${id}`}"`, {
             description: error?.data?.error ?? error?.message ?? "Please try again.",
@@ -686,7 +686,7 @@ export function Products() {
                     <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm space-y-2">
                       <div className="flex items-start gap-2 text-destructive font-medium">
                         <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                        <span>This product has <strong>{stock}</strong> unit(s) in stock.</span>
+                        <span>This product has <strong>{stock} {deletingProduct?.unit ?? "pcs"}</strong> in stock.</span>
                       </div>
                       <p className="ml-6 text-muted-foreground">
                         Clear the stock first, then the product will be deleted automatically.
@@ -758,7 +758,7 @@ export function Products() {
                     <div key={err.productName} className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
                       <div className="flex items-start gap-2 text-destructive font-medium min-w-0">
                         <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                        <span className="break-all">"{err.productName}" has {err.currentStock} unit(s) in stock.</span>
+                        <span className="break-all">"{err.productName}" has {err.currentStock} {err.unit} in stock.</span>
                       </div>
                     </div>
                   ))}
