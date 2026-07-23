@@ -94,6 +94,7 @@ export function Products() {
   // Bulk price-update state
   const [bulkPriceConfirmOpen, setBulkPriceConfirmOpen] = useState(false);
   const [pendingMargins, setPendingMargins] = useState<PriceMargins | null>(null);
+  const [previousMargins, setPreviousMargins] = useState<PriceMargins | null>(null);
   const [bulkPriceUpdating, setBulkPriceUpdating] = useState(false);
   const [bulkPriceProgress, setBulkPriceProgress] = useState({ done: 0, total: 0 });
 
@@ -109,11 +110,26 @@ export function Products() {
     const r = parseFloat(draftRetail);
     if (isNaN(w) || w < 0 || isNaN(r) || r < 0) return;
     const next = { wholesale: w, retail: r };
+    // snapshot old margins so Cancel can revert
+    setPreviousMargins(margins);
     saveMargins(next);
     setMargins(next);
     setMarginsOpen(false);
     setPendingMargins(next);
     setBulkPriceConfirmOpen(true);
+  }
+
+  function cancelMargins() {
+    // revert to the margins that were active before the dialog opened
+    if (previousMargins) {
+      saveMargins(previousMargins);
+      setMargins(previousMargins);
+      setDraftWholesale(String(previousMargins.wholesale));
+      setDraftRetail(String(previousMargins.retail));
+    }
+    setBulkPriceConfirmOpen(false);
+    setPendingMargins(null);
+    setPreviousMargins(null);
   }
 
   async function updateAllProductPrices(next: PriceMargins) {
@@ -1046,7 +1062,7 @@ export function Products() {
           <AlertDialogFooter>
             <AlertDialogCancel
               disabled={bulkPriceUpdating}
-              onClick={() => { setBulkPriceConfirmOpen(false); setPendingMargins(null); }}
+              onClick={cancelMargins}
             >
               Cancel
             </AlertDialogCancel>
