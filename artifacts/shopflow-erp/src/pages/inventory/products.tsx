@@ -362,7 +362,7 @@ export function Products() {
                 <Settings2 className="h-4 w-4" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-72 p-4" align="end">
+            <PopoverContent className="w-72 p-4" align="end" onInteractOutside={(e) => e.preventDefault()}>
               <div className="space-y-4">
                 <div>
                   <p className="text-sm font-semibold">Profit Margin Settings</p>
