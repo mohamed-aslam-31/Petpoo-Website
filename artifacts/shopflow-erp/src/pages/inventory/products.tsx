@@ -1044,9 +1044,19 @@ export function Products() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={bulkPriceUpdating}>
-              Skip — settings only
+            <AlertDialogCancel
+              disabled={bulkPriceUpdating}
+              onClick={() => { setBulkPriceConfirmOpen(false); setPendingMargins(null); }}
+            >
+              Cancel
             </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={bulkPriceUpdating}
+              onClick={(e) => { e.preventDefault(); setBulkPriceConfirmOpen(false); setPendingMargins(null); }}
+              className="bg-muted text-foreground hover:bg-muted/80 border shadow-sm"
+            >
+              Skip — settings only
+            </AlertDialogAction>
             <Button
               disabled={bulkPriceUpdating}
               onClick={() => pendingMargins && updateAllProductPrices(pendingMargins)}
