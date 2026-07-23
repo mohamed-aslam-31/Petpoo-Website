@@ -655,12 +655,12 @@ export function PurchaseForm() {
                         aria-label="Select all items"
                       />
                     </th>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[140px]">Brand *</th>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[140px]">Category *</th>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[160px]">Product *</th>
-                    <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[80px]">Qty *</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[140px]">Brand <span className="text-destructive">*</span></th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[140px]">Category <span className="text-destructive">*</span></th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[160px]">Product <span className="text-destructive">*</span></th>
+                    <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[80px]">Qty <span className="text-destructive">*</span></th>
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[70px]">Unit</th>
-                    <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[110px]">Price *</th>
+                    <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[110px]">Price <span className="text-destructive">*</span></th>
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[90px]">Disc</th>
                     {withGST && <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[70px] text-xs">GST %</th>}
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground min-w-[100px]">Total</th>
@@ -763,6 +763,7 @@ export function PurchaseForm() {
                             type="number"
                             min={1}
                             className="h-8 text-xs text-right"
+                            disabled={!supplierSelected}
                             {...form.register(`items.${index}.quantity`)}
                           />
                         </td>
@@ -784,6 +785,7 @@ export function PurchaseForm() {
                             min={0}
                             step="0.01"
                             className="h-8 text-xs text-right"
+                            disabled={!supplierSelected}
                             {...form.register(`items.${index}.purchasePrice`)}
                           />
                         </td>
@@ -796,6 +798,7 @@ export function PurchaseForm() {
                             step="0.01"
                             placeholder="0"
                             className="h-8 text-xs text-right"
+                            disabled={!supplierSelected}
                             {...form.register(`items.${index}.itemDiscount`)}
                           />
                         </td>
@@ -808,6 +811,7 @@ export function PurchaseForm() {
                               min={0}
                               step="0.01"
                               className="h-8 text-xs text-right"
+                              disabled={!supplierSelected}
                               {...form.register(`items.${index}.gstPercent`)}
                             />
                           </td>
@@ -870,24 +874,24 @@ export function PurchaseForm() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-sm">Packing Charges</Label>
-                  <Input type="number" min={0} step="0.01" placeholder="0.00" className="text-right" {...form.register("packingCharges")} />
+                  <Input type="number" min={0} step="0.01" placeholder="0.00" className="text-right" disabled={!supplierSelected} {...form.register("packingCharges")} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-sm">Transport Charges</Label>
-                  <Input type="number" min={0} step="0.01" placeholder="0.00" className="text-right" {...form.register("transportCharges")} />
+                  <Input type="number" min={0} step="0.01" placeholder="0.00" className="text-right" disabled={!supplierSelected} {...form.register("transportCharges")} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-sm">Loading / Unloading</Label>
-                  <Input type="number" min={0} step="0.01" placeholder="0.00" className="text-right" {...form.register("loadingCharges")} />
+                  <Input type="number" min={0} step="0.01" placeholder="0.00" className="text-right" disabled={!supplierSelected} {...form.register("loadingCharges")} />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-sm">Other Charges</Label>
-                  <Input type="number" min={0} step="0.01" placeholder="0.00" className="text-right" {...form.register("otherCharges")} />
+                  <Input type="number" min={0} step="0.01" placeholder="0.00" className="text-right" disabled={!supplierSelected} {...form.register("otherCharges")} />
                 </div>
               </div>
               <div className="space-y-1">
                 <Label className="text-sm">Discount</Label>
-                <Input type="number" min={0} step="0.01" placeholder="0.00" className="text-right" {...form.register("discount")} />
+                <Input type="number" min={0} step="0.01" placeholder="0.00" className="text-right" disabled={!supplierSelected} {...form.register("discount")} />
               </div>
             </div>
 
