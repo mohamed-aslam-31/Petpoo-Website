@@ -72,6 +72,8 @@ function SearchableSelect({
   placeholder,
   searchPlaceholder,
   disabled,
+  buttonClassName,
+  popoverWidth = "w-48",
 }: {
   value: string;
   onValueChange: (val: string) => void;
@@ -79,6 +81,8 @@ function SearchableSelect({
   placeholder: string;
   searchPlaceholder: string;
   disabled?: boolean;
+  buttonClassName?: string;
+  popoverWidth?: string;
 }) {
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value);
@@ -91,7 +95,7 @@ function SearchableSelect({
           variant="outline"
           role="combobox"
           disabled={disabled}
-          className="h-8 w-full justify-between px-2 text-xs font-normal overflow-hidden"
+          className={cn("h-8 w-full justify-between px-2 text-xs font-normal overflow-hidden", buttonClassName)}
         >
           <span className={cn("truncate min-w-0 flex-1 text-left", !selected && "text-muted-foreground")}>
             {selected ? selected.label : placeholder}
@@ -99,7 +103,7 @@ function SearchableSelect({
           <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="p-0 w-48" align="start" sideOffset={4}>
+      <PopoverContent className={cn("p-0", popoverWidth)} align="start" sideOffset={4}>
         <Command>
           <CommandInput placeholder={searchPlaceholder} className="h-8 text-xs" />
           <CommandList className="max-h-48 overflow-y-auto">
@@ -390,8 +394,14 @@ export function PurchaseForm() {
       form.setValue(`items.${index}.unit`, product.unit ?? "");
       form.setValue(`items.${index}.purchasePrice`, parseFloat(String(product.purchasePrice ?? 0)));
       form.setValue(`items.${index}.gstPercent`, parseFloat(String(product.gstPercent ?? 0)));
+      // Auto-fill brand
+      const brandCombo = product.brandId ? String(product.brandId) : NO_BRAND;
+      form.setValue(`items.${index}.brandComboVal`, brandCombo, { shouldValidate: true });
       form.setValue(`items.${index}.brandId`, product.brandId ?? null);
       form.setValue(`items.${index}.brandName`, brand?.name ?? null);
+      // Auto-fill category
+      const catCombo = product.categoryId ? String(product.categoryId) : NO_CATEGORY;
+      form.setValue(`items.${index}.categoryComboVal`, catCombo, { shouldValidate: true });
       form.setValue(`items.${index}.categoryId`, product.categoryId ?? null);
       form.setValue(`items.${index}.categoryName`, category?.name ?? null);
     },
@@ -405,17 +415,30 @@ export function PurchaseForm() {
       form.setValue(`items.${index}.brandComboVal`, comboVal, { shouldValidate: true });
       form.setValue(`items.${index}.brandId`, bid);
       form.setValue(`items.${index}.brandName`, brand?.name ?? null);
-      // Clear product/category when brand changes
+      // Check if the current category is still valid for the new brand
+      const currentCatCombo = form.getValues(`items.${index}.categoryComboVal`);
+      const currentCatId = form.getValues(`items.${index}.categoryId`);
+      const catStillValid = (() => {
+        if (!currentCatCombo) return false;
+        if (currentCatCombo === NO_CATEGORY) return true; // No Category is always valid
+        const cat = allCategories.find((c: { id: number }) => c.id === currentCatId);
+        if (!cat) return false;
+        if (comboVal === NO_BRAND) return !cat.brandId;
+        return cat.brandId === bid;
+      })();
+      if (!catStillValid) {
+        form.setValue(`items.${index}.categoryComboVal`, "");
+        form.setValue(`items.${index}.categoryId`, null);
+        form.setValue(`items.${index}.categoryName`, null);
+      }
+      // Clear product so user re-selects
       form.setValue(`items.${index}.productId`, 0);
-      form.setValue(`items.${index}.categoryComboVal`, "");
-      form.setValue(`items.${index}.categoryId`, null);
-      form.setValue(`items.${index}.categoryName`, null);
       form.setValue(`items.${index}.currentStock`, 0);
       form.setValue(`items.${index}.unit`, "");
       form.setValue(`items.${index}.purchasePrice`, 0);
       form.setValue(`items.${index}.gstPercent`, 0);
     },
-    [allBrands, form]
+    [allBrands, allCategories, form]
   );
 
   const handleCategoryChange = useCallback(
@@ -425,14 +448,22 @@ export function PurchaseForm() {
       form.setValue(`items.${index}.categoryComboVal`, comboVal, { shouldValidate: true });
       form.setValue(`items.${index}.categoryId`, cid);
       form.setValue(`items.${index}.categoryName`, category?.name ?? null);
-      // Clear product
+      // Auto-set brand based on category's brandId
+      if (comboVal !== NO_CATEGORY && category) {
+        const brandCombo = category.brandId ? String(category.brandId) : NO_BRAND;
+        const brand = allBrands.find((b: { id: number }) => b.id === category.brandId);
+        form.setValue(`items.${index}.brandComboVal`, brandCombo, { shouldValidate: true });
+        form.setValue(`items.${index}.brandId`, category.brandId ?? null);
+        form.setValue(`items.${index}.brandName`, brand?.name ?? null);
+      }
+      // Clear product so user re-selects
       form.setValue(`items.${index}.productId`, 0);
       form.setValue(`items.${index}.currentStock`, 0);
       form.setValue(`items.${index}.unit`, "");
       form.setValue(`items.${index}.purchasePrice`, 0);
       form.setValue(`items.${index}.gstPercent`, 0);
     },
-    [allCategories, form]
+    [allCategories, allBrands, form]
   );
 
   const isSaving = createMutation.isPending || createAndPrintMutation.isPending;
@@ -487,7 +518,7 @@ export function PurchaseForm() {
 
               {/* Supplier */}
               <div className="space-y-2">
-                <Label htmlFor="supplier-select">Supplier *</Label>
+                <Label>Supplier *</Label>
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <FormField
@@ -495,23 +526,15 @@ export function PurchaseForm() {
                       name="supplierId"
                       render={({ field }) => (
                         <FormItem>
-                          <Select
-                            onValueChange={(v) => field.onChange(Number(v))}
+                          <SearchableSelect
                             value={field.value ? String(field.value) : ""}
-                          >
-                            <FormControl>
-                              <SelectTrigger id="supplier-select">
-                                <SelectValue placeholder="Select supplier…" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {suppliers.map((s) => (
-                                <SelectItem key={s.id} value={String(s.id)}>
-                                  {s.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            onValueChange={(v) => field.onChange(Number(v))}
+                            options={suppliers.map((s) => ({ value: String(s.id), label: s.name }))}
+                            placeholder="Search supplier…"
+                            searchPlaceholder="Type to search…"
+                            buttonClassName="h-10 text-sm px-3"
+                            popoverWidth="w-72"
+                          />
                           <FormMessage />
                         </FormItem>
                       )}
@@ -522,28 +545,13 @@ export function PurchaseForm() {
                     variant="outline"
                     size="sm"
                     onClick={() => setAddSupplierOpen(true)}
-                    className="shrink-0 text-xs px-3"
+                    className="shrink-0 text-xs px-3 h-10"
                   >
                     + New
                   </Button>
                 </div>
               </div>
             </div>
-
-            {/* Notes */}
-            <FormField
-              control={form.control}
-              name="notes"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Notes</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Optional remarks…" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
           </div>
 
           {/* ── Items table ────────────────────────────────────────────────────── */}
@@ -582,17 +590,16 @@ export function PurchaseForm() {
                     const brandComboVal = item?.brandComboVal ?? "";
                     const categoryComboVal = item?.categoryComboVal ?? "";
 
-                    // Brand options: No Brand + all brands
+                    // Brand options: No Brand + all brands (unfiltered)
                     const brandOptions = [
                       { value: NO_BRAND, label: "No Brand" },
                       ...allBrands.map((b) => ({ value: String(b.id), label: b.name })),
                     ];
 
-                    // Category options filtered by selected brand
+                    // Category options — filtered by brand if brand is selected, otherwise show all
                     const filteredCats = (() => {
-                      if (!brandComboVal) return [];
-                      if (brandComboVal === NO_BRAND)
-                        return allCategories.filter((c) => !c.brandId);
+                      if (!brandComboVal) return allCategories;
+                      if (brandComboVal === NO_BRAND) return allCategories.filter((c) => !c.brandId);
                       return allCategories.filter((c) => c.brandId === Number(brandComboVal));
                     })();
                     const categoryOptions = [
@@ -600,13 +607,14 @@ export function PurchaseForm() {
                       ...filteredCats.map((c) => ({ value: String(c.id), label: c.name })),
                     ];
 
-                    // Product options filtered by brand + category
+                    // Product options — filter by whatever is already selected (any order)
                     const filteredProducts = allProducts.filter((p) => {
-                      if (!brandComboVal || !categoryComboVal) return false;
-                      const brandOk =
-                        brandComboVal === NO_BRAND ? !p.brandId : p.brandId === Number(brandComboVal);
-                      const catOk =
-                        categoryComboVal === NO_CATEGORY ? !p.categoryId : p.categoryId === Number(categoryComboVal);
+                      const brandOk = !brandComboVal || (
+                        brandComboVal === NO_BRAND ? !p.brandId : p.brandId === Number(brandComboVal)
+                      );
+                      const catOk = !categoryComboVal || (
+                        categoryComboVal === NO_CATEGORY ? !p.categoryId : p.categoryId === Number(categoryComboVal)
+                      );
                       return brandOk && catOk;
                     });
                     const productOptions = filteredProducts.map((p) => ({
@@ -637,9 +645,8 @@ export function PurchaseForm() {
                             value={categoryComboVal}
                             onValueChange={(v) => handleCategoryChange(index, v)}
                             options={categoryOptions}
-                            placeholder={!brandComboVal ? "Select brand first" : "Select category…"}
+                            placeholder="Select category…"
                             searchPlaceholder="Search categories…"
-                            disabled={!brandComboVal}
                           />
                         </td>
 
@@ -649,9 +656,8 @@ export function PurchaseForm() {
                             value={item?.productId ? String(item.productId) : ""}
                             onValueChange={(v) => handleProductChange(index, v)}
                             options={productOptions}
-                            placeholder={!categoryComboVal ? "Select category first" : "Select product…"}
+                            placeholder="Select product…"
                             searchPlaceholder="Search products…"
-                            disabled={!categoryComboVal}
                           />
                         </td>
 
