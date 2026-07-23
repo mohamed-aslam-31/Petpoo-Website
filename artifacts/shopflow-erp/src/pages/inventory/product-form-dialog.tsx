@@ -561,18 +561,22 @@ export function ProductFormDialog({
 
   const categoryOptions = (() => {
     if (!brandComboValue) return [];
+    const noCatOption = { value: NO_CATEGORY, label: "No Category" };
     if (brandComboValue === NO_BRAND) {
       return [
-        { value: NO_CATEGORY, label: "No Category" },
+        noCatOption,
         ...(categories ?? [])
           .filter(c => !c.brandId)
           .map(c => ({ value: String(c.id), label: c.name })),
       ];
     }
     const numericId = Number(brandComboValue);
-    return (categories ?? [])
-      .filter(c => c.brandId === numericId)
-      .map(c => ({ value: String(c.id), label: c.name }));
+    return [
+      noCatOption,
+      ...(categories ?? [])
+        .filter(c => c.brandId === numericId)
+        .map(c => ({ value: String(c.id), label: c.name })),
+    ];
   })();
 
   // ── Handlers ───────────────────────────────────────────────────────────────
