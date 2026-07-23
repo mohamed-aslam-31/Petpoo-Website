@@ -633,7 +633,7 @@ export function PurchaseForm() {
                 style={{ maxHeight: "min(calc(100vh - 480px), 420px)" }}
               >
               <table className="w-full text-sm">
-                <thead className="bg-muted/50 sticky top-0 z-10">
+                <thead className="bg-muted sticky top-0 z-10">
                   <tr>
                     <th className="px-3 py-2 w-[36px]">
                       <Checkbox
