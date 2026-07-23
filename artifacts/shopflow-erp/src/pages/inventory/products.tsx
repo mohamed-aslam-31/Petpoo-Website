@@ -675,7 +675,15 @@ export function Products() {
             <AlertDialogDescription asChild>
               <div>
                 <p className="font-medium text-foreground/80 break-all mb-1">"{deletingProduct?.name}"</p>
-                {!deleteStockError && <p>This will permanently remove this product.</p>}
+                {!deleteStockError && (
+                  <>
+                    <p>This will permanently remove this product.</p>
+                    <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40 p-3 text-sm flex items-start gap-2 text-amber-800 dark:text-amber-300">
+                      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>Deleting this product will also permanently delete <strong>all stock movements</strong> and <strong>every transaction history</strong> associated with it. This cannot be undone.</span>
+                    </div>
+                  </>
+                )}
               </div>
             </AlertDialogDescription>
             {deleteStockError && (
@@ -747,6 +755,10 @@ export function Products() {
                     </li>
                   ))}
                 </ul>
+                <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40 p-3 text-sm flex items-start gap-2 text-amber-800 dark:text-amber-300">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>Deleting these products will also permanently delete <strong>all stock movements</strong> and <strong>every transaction history</strong> associated with them. This cannot be undone.</span>
+                </div>
               </>
             ) : (
               <div className="mt-2 space-y-3">
