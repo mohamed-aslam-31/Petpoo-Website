@@ -84,7 +84,7 @@ const empty: FormValues = { movementKey: "", otherSign: undefined, quantity: 1, 
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  product: { id: number; name: string; currentStock: number } | null;
+  product: { id: number; name: string; currentStock: number; unit?: string } | null;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -170,7 +170,7 @@ export function StockAdjustDialog({ open, onOpenChange, product }: Props) {
                     Movement Type <span className="text-destructive">*</span>
                   </FormLabel>
                   <FormControl>
-                    <div className="flex flex-col gap-1.5">
+                    <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
                       {MOVEMENT_OPTIONS.map((opt) => {
                         const isSelected = field.value === opt.key;
                         const isPlus  = opt.sign === "+";
@@ -292,7 +292,7 @@ export function StockAdjustDialog({ open, onOpenChange, product }: Props) {
                       : "text-green-700"
                   }`}
                 >
-                  {previewStock} units
+                  {previewStock} {product.unit ?? "pcs"}
                 </span>
               </div>
             )}
