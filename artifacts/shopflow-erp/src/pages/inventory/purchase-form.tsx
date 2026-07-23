@@ -568,12 +568,11 @@ export function PurchaseForm() {
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[140px]">Brand *</th>
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[140px]">Category *</th>
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[160px]">Product *</th>
-                    <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[80px]">In Stock</th>
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[80px]">Qty *</th>
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[70px]">Unit</th>
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[110px]">Price *</th>
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[70px]">GST %</th>
-                    <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[110px]">Total</th>
+                    <th className="text-right px-3 py-2 font-medium text-muted-foreground min-w-[100px]">Total</th>
                     <th className="w-[40px]"></th>
                   </tr>
                 </thead>
@@ -656,16 +655,6 @@ export function PurchaseForm() {
                           />
                         </td>
 
-                        {/* Current Stock */}
-                        <td className="px-2 py-2">
-                          <Input
-                            value={item?.currentStock ?? 0}
-                            readOnly
-                            className="h-8 text-xs bg-muted/40 text-muted-foreground text-right"
-                            tabIndex={-1}
-                          />
-                        </td>
-
                         {/* Qty */}
                         <td className="px-2 py-2">
                           <Input
@@ -710,11 +699,13 @@ export function PurchaseForm() {
 
                         {/* Total */}
                         <td className="px-2 py-2 text-right">
-                          <div className="text-xs font-medium pr-1">
+                          <div className="text-xs font-medium pr-1 whitespace-nowrap">
                             {fmt(lineTotal + gstAmt)}
                           </div>
-                          <div className="text-xs text-muted-foreground pr-1">
-                            {fmt(lineTotal)} + {fmt(gstAmt)} GST
+                          <div className="text-[10px] text-muted-foreground pr-1 leading-tight">
+                            <span className="whitespace-nowrap">{fmt(lineTotal)}</span>
+                            {" + "}
+                            <span className="whitespace-nowrap">{fmt(gstAmt)} GST</span>
                           </div>
                         </td>
 
