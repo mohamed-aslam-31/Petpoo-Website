@@ -356,7 +356,7 @@ export function Products() {
                 <button type="button" onClick={() => setFilterNoCategory(v => !v)}
                   className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted transition-colors">
                   <Check className={cn("h-3.5 w-3.5 shrink-0", filterNoCategory ? "opacity-100 text-primary" : "opacity-0")} />
-                  <span className="truncate text-muted-foreground italic">No Category</span>
+                  <span className="truncate text-muted-foreground">No Category</span>
                 </button>
                 {filteredCategories.length === 0
                   ? <p className="text-xs text-muted-foreground text-center py-3">No categories found</p>
@@ -400,7 +400,7 @@ export function Products() {
                 <button type="button" onClick={() => setFilterNoBrand(v => !v)}
                   className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted transition-colors">
                   <Check className={cn("h-3.5 w-3.5 shrink-0", filterNoBrand ? "opacity-100 text-primary" : "opacity-0")} />
-                  <span className="truncate text-muted-foreground italic">No Brand</span>
+                  <span className="truncate text-muted-foreground">No Brand</span>
                 </button>
                 {filteredBrands.length === 0
                   ? <p className="text-xs text-muted-foreground text-center py-3">No brands found</p>
