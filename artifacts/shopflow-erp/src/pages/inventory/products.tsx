@@ -17,7 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Search, Plus, Filter, MoreHorizontal, Edit, Trash2, Package, ChevronsUpDown, Check, X } from "lucide-react";
+import { Search, Plus, Filter, MoreHorizontal, Edit, Trash2, Package, ChevronsUpDown, Check, X, AlertCircle } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -73,8 +73,10 @@ export function Products() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<any | null>(null);
+  const [deleteError, setDeleteError] = useState<{ message: string; currentStock: number } | null>(null);
   const [deletingSelected, setDeletingSelected] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteErrors, setBulkDeleteErrors] = useState<{ productName: string; currentStock: number }[]>([]);
   const [adjustingProduct, setAdjustingProduct] = useState<any | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectedProductMap, setSelectedProductMap] = useState<Map<number, any>>(new Map());
@@ -119,11 +121,8 @@ export function Products() {
   const deleteMutation = useDeleteProduct({
     mutation: {
       onSuccess: () => {
-        toast.success("Product deleted");
         queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
-        setDeletingProduct(null);
       },
-      onError: (err: any) => toast.error(err?.message ?? "Failed to delete product"),
     },
   });
 
@@ -166,6 +165,7 @@ export function Products() {
     setBulkDeleting(true);
     const ids = [...selectedIds];
     let deleted = 0;
+    const errors: { productName: string; currentStock: number }[] = [];
 
     for (const id of ids) {
       const product = selectedProductMap.get(id);
@@ -175,18 +175,28 @@ export function Products() {
         );
         deleted++;
       } catch (error: any) {
-        toast.error(`Failed to delete "${product?.name ?? `Product #${id}`}"`, {
-          description: error?.message ?? "Please try again.",
-        });
+        const stock = error?.data?.currentStock;
+        if (error?.status === 409 && stock !== undefined) {
+          errors.push({ productName: product?.name ?? `Product #${id}`, currentStock: stock });
+        } else {
+          toast.error(`Failed to delete "${product?.name ?? `Product #${id}`}"`, {
+            description: error?.data?.error ?? error?.message ?? "Please try again.",
+          });
+        }
       }
     }
 
     setBulkDeleting(false);
-    setDeletingSelected(false);
-    setSelectedIds(new Set());
-    setSelectedProductMap(new Map());
     queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
     if (deleted > 0) toast.success(`${deleted} product${deleted === 1 ? "" : "s"} deleted`);
+
+    if (errors.length > 0) {
+      setBulkDeleteErrors(errors);
+    } else {
+      setDeletingSelected(false);
+      setSelectedIds(new Set());
+      setSelectedProductMap(new Map());
+    }
   }
 
   // Filtered option lists for each popover
@@ -656,49 +666,114 @@ export function Products() {
       <ProductFormDialog open={formOpen} onOpenChange={setFormOpen} product={editingProduct} />
       <StockAdjustDialog open={!!adjustingProduct} onOpenChange={v => !v && setAdjustingProduct(null)} product={adjustingProduct} />
 
-      <AlertDialog open={!!deletingProduct} onOpenChange={open => !open && setDeletingProduct(null)}>
+      {/* Single delete */}
+      <AlertDialog open={!!deletingProduct} onOpenChange={open => { if (!open) { setDeletingProduct(null); setDeleteError(null); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete "{deletingProduct?.name}"?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently remove the product from your inventory. This action cannot be undone.
+            <AlertDialogTitle>Delete product?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                <p className="font-medium text-foreground/80 break-all mb-1">"{deletingProduct?.name}"</p>
+                {!deleteError && <p>This will permanently remove this product from your inventory.</p>}
+              </div>
             </AlertDialogDescription>
+            {deleteError && (
+              <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm space-y-2">
+                <div className="flex items-start gap-2 text-destructive font-medium">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>This product has {deleteError.currentStock} unit(s) in stock.</span>
+                </div>
+                <p className="ml-6 text-muted-foreground">
+                  Use <strong>Adjust Stock</strong> to bring the stock to 0, then try deleting again.
+                </p>
+              </div>
+            )}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deletingProduct && deleteMutation.mutate({ id: deletingProduct.id })}
-            >
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
+            <AlertDialogCancel>{deleteError ? "Close" : "Cancel"}</AlertDialogCancel>
+            {!deleteError && (
+              <Button
+                variant="destructive"
+                disabled={deleteMutation.isPending}
+                onClick={() => {
+                  if (!deletingProduct) return;
+                  deleteMutation.mutate(
+                    { id: deletingProduct.id },
+                    {
+                      onSuccess: () => {
+                        setDeletingProduct(null);
+                        setDeleteError(null);
+                        toast.success("Product deleted");
+                      },
+                      onError: (e: any) => {
+                        const stock = e?.data?.currentStock;
+                        if (e?.status === 409 && stock !== undefined) {
+                          setDeleteError({ message: e.data.error, currentStock: stock });
+                        } else {
+                          toast.error(e?.data?.error ?? e?.message ?? "Failed to delete");
+                        }
+                      },
+                    }
+                  );
+                }}
+              >
+                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+              </Button>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={deletingSelected} onOpenChange={open => { if (!open && !bulkDeleting) setDeletingSelected(false); }}>
+      {/* Bulk delete */}
+      <AlertDialog open={deletingSelected} onOpenChange={open => {
+        if (!open && !bulkDeleting) {
+          setDeletingSelected(false);
+          setBulkDeleteErrors([]);
+          if (bulkDeleteErrors.length === 0) { setSelectedIds(new Set()); setSelectedProductMap(new Map()); }
+        }
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              Delete {selectedIds.size} product{selectedIds.size > 1 ? "s" : ""}?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              The following product{selectedIds.size > 1 ? "s" : ""} will be permanently removed:
-            </AlertDialogDescription>
-            <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border bg-muted/40 divide-y text-sm">
-              {selectedProducts.map(product => (
-                <li key={product.id} className="flex items-start gap-2 px-3 py-2">
-                  <Trash2 className="h-3.5 w-3.5 shrink-0 text-destructive/70 mt-0.5" />
-                  <span className="font-medium break-all">{product.name}</span>
-                </li>
-              ))}
-            </ul>
+            <AlertDialogTitle>Delete {selectedIds.size} product{selectedIds.size > 1 ? "s" : ""}?</AlertDialogTitle>
+            {bulkDeleteErrors.length === 0 ? (
+              <>
+                <AlertDialogDescription>
+                  The following product{selectedIds.size > 1 ? "s" : ""} will be permanently removed:
+                </AlertDialogDescription>
+                <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border bg-muted/40 divide-y text-sm">
+                  {selectedProducts.map(product => (
+                    <li key={product.id} className="flex items-start gap-2 px-3 py-2">
+                      <Trash2 className="h-3.5 w-3.5 shrink-0 text-destructive/70 mt-0.5" />
+                      <span className="font-medium break-all">{product.name}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <div className="mt-2 space-y-3">
+                <AlertDialogDescription>
+                  Some products could not be deleted. Use <strong>Adjust Stock</strong> to bring their stock to 0, then try again.
+                </AlertDialogDescription>
+                <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
+                  {bulkDeleteErrors.map(err => (
+                    <div key={err.productName} className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+                      <div className="flex items-start gap-2 text-destructive font-medium min-w-0">
+                        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                        <span className="break-all">"{err.productName}" has {err.currentStock} unit(s) in stock.</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={bulkDeleting}>Cancel</AlertDialogCancel>
-            <Button variant="destructive" disabled={bulkDeleting} onClick={deleteSelectedProducts}>
-              {bulkDeleting ? "Deleting..." : "Delete All"}
-            </Button>
+            <AlertDialogCancel disabled={bulkDeleting}>{bulkDeleteErrors.length > 0 ? "Close" : "Cancel"}</AlertDialogCancel>
+            {bulkDeleteErrors.length === 0 && (
+              <Button variant="destructive" disabled={bulkDeleting} onClick={deleteSelectedProducts}>
+                {bulkDeleting ? "Deleting..." : "Delete All"}
+              </Button>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -287,6 +287,22 @@ router.patch("/products/:id", async (req, res): Promise<void> => {
 router.delete("/products/:id", async (req, res): Promise<void> => {
   const params = DeleteProductParams.safeParse(req.params);
   if (!params.success) { res.status(400).json({ error: params.error.message }); return; }
+
+  // Check stock before deleting
+  const [existing] = await db
+    .select({ id: productsTable.id, name: productsTable.name, currentStock: productsTable.currentStock })
+    .from(productsTable)
+    .where(eq(productsTable.id, params.data.id));
+  if (!existing) { res.status(404).json({ error: "Product not found" }); return; }
+
+  if (existing.currentStock > 0) {
+    res.status(409).json({
+      error: `"${existing.name}" has ${existing.currentStock} unit(s) in stock. Adjust stock to 0 before deleting.`,
+      currentStock: existing.currentStock,
+    });
+    return;
+  }
+
   const [product] = await db.delete(productsTable).where(eq(productsTable.id, params.data.id)).returning();
   if (!product) { res.status(404).json({ error: "Product not found" }); return; }
   res.sendStatus(204);
