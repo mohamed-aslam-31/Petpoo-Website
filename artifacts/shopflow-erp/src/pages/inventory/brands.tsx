@@ -31,10 +31,10 @@ export function Brands() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingBrand, setEditingBrand] = useState<any | null>(null);
   const [deletingBrand, setDeletingBrand] = useState<any | null>(null);
-  const [deleteError, setDeleteError] = useState<{ message: string; categories: { id: number; name: string }[] } | null>(null);
+  const [deleteError, setDeleteError] = useState<{ message: string; categories: { id: number; name: string }[]; products: { id: number; name: string }[] } | null>(null);
   const [deletingSelected, setDeletingSelected] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
-  const [bulkDeleteErrors, setBulkDeleteErrors] = useState<{ brandName: string; categories: { id: number; name: string }[] }[]>([]);
+  const [bulkDeleteErrors, setBulkDeleteErrors] = useState<{ brandName: string; categories: { id: number; name: string }[]; products: { id: number; name: string }[] }[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [activeSorts, setActiveSorts] = useState<Set<SortKey>>(new Set());
   const [minCat, setMinCat] = useState("");
@@ -178,9 +178,10 @@ export function Brands() {
         );
         deleted++;
       } catch (e: any) {
-        const linked = e?.data?.linkedCategories as { id: number; name: string }[] | undefined;
-        if (e?.status === 409 && linked?.length) {
-          linkedErrors.push({ brandName: brand?.name ?? `Brand #${id}`, categories: linked });
+        const linkedCats = e?.data?.linkedCategories as { id: number; name: string }[] | undefined;
+        const linkedProds = e?.data?.linkedProducts as { id: number; name: string }[] | undefined;
+        if (e?.status === 409 && (linkedCats?.length || linkedProds?.length)) {
+          linkedErrors.push({ brandName: brand?.name ?? `Brand #${id}`, categories: linkedCats ?? [], products: linkedProds ?? [] });
         } else {
           toast.error(`Failed to delete "${brand?.name ?? `Brand #${id}`}"`);
         }
@@ -490,13 +491,41 @@ export function Brands() {
                 {!deleteError && <p>This will permanently remove this brand.</p>}
               </div>
             </AlertDialogDescription>
+
+            {/* Upfront linked-count warning (from list data) */}
+            {!deleteError && deletingBrand && (() => {
+              const catCount = (deletingBrand as any).categoriesCount ?? 0;
+              const prodCount = (deletingBrand as any).productsCount ?? 0;
+              const total = catCount + prodCount;
+              if (total === 0) return null;
+              const parts: string[] = [];
+              if (catCount > 0) parts.push(`${catCount} categor${catCount === 1 ? "y" : "ies"}`);
+              if (prodCount > 0) parts.push(`${prodCount} product${prodCount === 1 ? "" : "s"}`);
+              return (
+                <div className="mt-3 rounded-md border border-amber-400/40 bg-amber-50 dark:bg-amber-950/20 p-3 text-sm space-y-1.5">
+                  <div className="flex items-start gap-2 text-amber-700 dark:text-amber-400 font-medium">
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span>{parts.join(" and ")} linked to this brand.</span>
+                  </div>
+                  <p className="ml-6 text-muted-foreground text-xs">Deleting this brand will fail unless you remove these links first.</p>
+                </div>
+              );
+            })()}
+
+            {/* Post-attempt conflict error */}
             {deleteError && (
               <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm space-y-2">
                 <div className="flex items-start gap-2 text-destructive font-medium">
                   <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>{deleteError.categories.length} categor{deleteError.categories.length === 1 ? "y is" : "ies are"} linked to this brand.</span>
+                  <span>
+                    {[
+                      deleteError.categories.length > 0 && `${deleteError.categories.length} categor${deleteError.categories.length === 1 ? "y" : "ies"}`,
+                      deleteError.products.length > 0 && `${deleteError.products.length} product${deleteError.products.length === 1 ? "" : "s"}`,
+                    ].filter(Boolean).join(" and ")} {" "}
+                    {deleteError.categories.length + deleteError.products.length === 1 ? "is" : "are"} still linked to this brand.
+                  </span>
                 </div>
-                <p className="ml-6 text-muted-foreground">Go to the <strong>Categories</strong> page, clear the brand from those categories, then try deleting again.</p>
+                <p className="ml-6 text-muted-foreground">Remove these links from <strong>Categories</strong> and <strong>Products</strong>, then try deleting again.</p>
               </div>
             )}
           </AlertDialogHeader>
@@ -519,9 +548,10 @@ export function Brands() {
                         toast.success("Brand deleted");
                       },
                       onError: (e: any) => {
-                        const linked = e?.data?.linkedCategories as { id: number; name: string }[] | undefined;
-                        if (e?.status === 409 && linked?.length) {
-                          setDeleteError({ message: e.data.error, categories: linked });
+                        const linkedCats = e?.data?.linkedCategories as { id: number; name: string }[] | undefined;
+                        const linkedProds = e?.data?.linkedProducts as { id: number; name: string }[] | undefined;
+                        if (e?.status === 409 && (linkedCats?.length || linkedProds?.length)) {
+                          setDeleteError({ message: e.data.error, categories: linkedCats ?? [], products: linkedProds ?? [] });
                         } else {
                           toast.error(e?.data?.error ?? e?.message ?? "Failed to delete");
                         }
@@ -548,28 +578,55 @@ export function Brands() {
                   The following brand{selectedIds.size > 1 ? "s" : ""} will be permanently removed:
                 </AlertDialogDescription>
                 <ul className="mt-2 max-h-48 overflow-y-auto rounded-md border bg-muted/40 divide-y text-sm">
-                  {selectedBrands.map(b => (
-                    <li key={b.id} className="flex items-start gap-2 px-3 py-2">
-                      <Trash2 className="h-3.5 w-3.5 shrink-0 text-destructive/70 mt-0.5" />
-                      <span className="font-medium break-all">{b.name}</span>
-                    </li>
-                  ))}
+                  {selectedBrands.map(b => {
+                    const catCount = (b as any).categoriesCount ?? 0;
+                    const prodCount = (b as any).productsCount ?? 0;
+                    const total = catCount + prodCount;
+                    const parts: string[] = [];
+                    if (catCount > 0) parts.push(`${catCount} categor${catCount === 1 ? "y" : "ies"}`);
+                    if (prodCount > 0) parts.push(`${prodCount} product${prodCount === 1 ? "" : "s"}`);
+                    return (
+                      <li key={b.id} className="flex items-start gap-2 px-3 py-2">
+                        <Trash2 className="h-3.5 w-3.5 shrink-0 text-destructive/70 mt-0.5" />
+                        <div className="min-w-0">
+                          <span className="font-medium break-all">{b.name}</span>
+                          {total > 0 && (
+                            <span className="ml-2 inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-normal">
+                              <AlertCircle className="h-3 w-3 shrink-0" />
+                              {parts.join(" + ")} linked
+                            </span>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
+                {selectedBrands.some(b => ((b as any).categoriesCount ?? 0) + ((b as any).productsCount ?? 0) > 0) && (
+                  <p className="mt-2 text-xs text-muted-foreground flex items-start gap-1.5">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-500" />
+                    Brands with linked items will fail to delete. Remove their links first.
+                  </p>
+                )}
               </>
             ) : (
               <div className="mt-2 space-y-3">
                 <AlertDialogDescription>
-                  Some brands could not be deleted. Go to the <strong>Categories</strong> page, clear the brand from those categories, then try again.
+                  Some brands could not be deleted. Remove their links from <strong>Categories</strong> and <strong>Products</strong>, then try again.
                 </AlertDialogDescription>
                 <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
-                  {bulkDeleteErrors.map(err => (
-                    <div key={err.brandName} className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
-                      <div className="flex items-start gap-2 text-destructive font-medium min-w-0">
-                        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                        <span className="break-all">"{err.brandName}" has {err.categories.length} linked categor{err.categories.length === 1 ? "y" : "ies"}.</span>
+                  {bulkDeleteErrors.map(err => {
+                    const parts: string[] = [];
+                    if (err.categories.length > 0) parts.push(`${err.categories.length} categor${err.categories.length === 1 ? "y" : "ies"}`);
+                    if (err.products.length > 0) parts.push(`${err.products.length} product${err.products.length === 1 ? "" : "s"}`);
+                    return (
+                      <div key={err.brandName} className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+                        <div className="flex items-start gap-2 text-destructive font-medium min-w-0">
+                          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                          <span className="break-all">"{err.brandName}" has {parts.join(" and ")} linked.</span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
