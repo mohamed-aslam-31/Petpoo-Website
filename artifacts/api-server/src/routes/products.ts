@@ -192,6 +192,20 @@ router.post("/products", async (req, res): Promise<void> => {
   if (dupName) { res.status(409).json({ error: "A product with this name already exists in the same brand/category" }); return; }
 
   const [product] = await db.insert(productsTable).values({ ...data, name: data.name.trim() }).returning();
+
+  // Auto-create Opening Stock movement when product is created with stock > 0
+  if (product.currentStock > 0) {
+    await db.insert(stockMovementsTable).values({
+      productId: product.id,
+      type: "increase",
+      quantity: product.currentStock,
+      beforeStock: 0,
+      afterStock: product.currentStock,
+      reason: "Opening Stock Added",
+      notes: null,
+    });
+  }
+
   res.status(201).json(parseProductRow(product));
 });
 

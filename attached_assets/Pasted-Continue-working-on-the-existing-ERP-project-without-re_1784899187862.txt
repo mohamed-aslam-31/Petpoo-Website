@@ -1,0 +1,23 @@
+Continue working on the existing ERP project without rebuilding, redesigning, or replacing the current implementation. Reuse the existing codebase, database, APIs, UI components, routing, and business logic. Preserve all existing functionality and only implement the requested changes.
+
+Update the Add Product module by introducing an Opening Stock (Old Stock) workflow. After the Unit field, add a checkbox labeled "This product has Opening Stock". By default, this checkbox should remain unchecked. When unchecked, the fields GST %, Purchase Price, Wholesale Price, Retail Price, and Current Stock must remain hidden because these values are only required when adding products that already exist in inventory. Once the user checks the checkbox, these fields should become visible and editable.
+
+The Current Stock entered here must be treated as Opening Stock, not as a normal stock update. When a product is created with Opening Stock, automatically create a Stock Movement record with the following details:
+
+Transaction Type: Stock In
+Reason: Opening Stock Added
+Quantity: Opening Stock entered by the user
+Reference: Product Creation
+Date & Time: Current timestamp
+
+This transaction must appear in the Stock Movement history exactly like any other inventory transaction.
+
+Additionally, ensure that Purchase Price, Wholesale Price, and Retail Price are always interpreted as the price per selected unit, never as the total value of the entered stock. For example:
+
+If Unit = Kg and Purchase Price = ₹200, it means ₹200 per Kg.
+If Wholesale Price = ₹220, it means ₹220 per Kg.
+If Retail Price = ₹250, it means ₹250 per Kg.
+If Current Stock = 1000 Kg, the prices remain per Kg, not for the total 1000 Kg.
+Similarly, if the unit is Meter, Piece, Liter, Box, Roll, or any other unit, all prices must always represent the price for one unit of the selected measurement.
+
+Update all calculations across the ERP—including Product, Purchase, Sales, Stock, Invoices, Reports, and Inventory Valuation—to consistently use the selected unit as the pricing basis. Do not multiply or treat these prices as the total stock value unless explicitly calculating inventory valuation. Maintain backward compatibility, preserve all existing data, and ensure the changes are reflected throughout the application without breaking any existing functionality.

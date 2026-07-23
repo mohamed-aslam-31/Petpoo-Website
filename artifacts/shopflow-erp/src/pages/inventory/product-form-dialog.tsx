@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useId } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/command";
 import { Check, ChevronsUpDown, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
 
 function formatDateTime(iso: string) {
   const d = new Date(iso);
@@ -499,6 +500,8 @@ export function ProductFormDialog({
   const [unitError, setUnitError] = useState<string | undefined>();
   const [selectedLocation, setSelectedLocation] = useState<string>("");
   const [skuLoading, setSkuLoading] = useState(false);
+  const [hasOpeningStock, setHasOpeningStock] = useState(false);
+  const openingStockCheckId = useId();
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -536,6 +539,7 @@ export function ProductFormDialog({
       setBrandComboValue(undefined);
       setSelectedUnit("");
       setSelectedLocation("");
+      setHasOpeningStock(false);
       form.reset({ ...emptyValues, sku: "" });
       setSkuLoading(true);
       fetch("/api/products/next-sku")
@@ -608,7 +612,12 @@ export function ProductFormDialog({
       return;
     }
     setUnitError(undefined);
+    // When no opening stock, clear price/stock fields to 0
+    const stockValues = (!isEditing && !hasOpeningStock)
+      ? { gstPercent: 0, purchasePrice: 0, wholesalePrice: 0, retailPrice: 0, currentStock: 0 }
+      : {};
     const payload = {
+      ...stockValues,
       ...values,
       name:        values.name.trim(),
       barcode:     values.barcode?.trim() || undefined,
@@ -816,65 +825,117 @@ export function ProductFormDialog({
                 />
               </div>
 
-              {/* 8. GST % */}
-              <FormField control={form.control} name="gstPercent" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>GST %</FormLabel>
-                  <FormControl>
-                    <Input type="number" step="0.01" min="0" max="100" placeholder="0" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
+              {/* 7b. Opening Stock checkbox — Add mode only */}
+              {!isEditing && (
+                <div className="col-span-2 flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2.5">
+                  <Checkbox
+                    id={openingStockCheckId}
+                    checked={hasOpeningStock}
+                    onCheckedChange={v => {
+                      setHasOpeningStock(!!v);
+                      if (!v) {
+                        form.setValue("gstPercent", 0);
+                        form.setValue("purchasePrice", 0);
+                        form.setValue("wholesalePrice", 0);
+                        form.setValue("retailPrice", 0);
+                        form.setValue("currentStock", 0);
+                      }
+                    }}
+                  />
+                  <label
+                    htmlFor={openingStockCheckId}
+                    className="text-sm font-medium leading-none cursor-pointer select-none"
+                  >
+                    This product has Opening Stock
+                  </label>
+                  {hasOpeningStock && (
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      A <em>Stock In</em> movement will be recorded automatically.
+                    </span>
+                  )}
+                </div>
+              )}
 
-              {/* 9. Purchase Price */}
-              <FormField control={form.control} name="purchasePrice" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Purchase Price</FormLabel>
-                  <FormControl>
-                    <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-
-              {/* 10. Wholesale Price */}
-              <FormField control={form.control} name="wholesalePrice" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Wholesale Price</FormLabel>
-                  <FormControl>
-                    <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-
-              {/* 11. Retail Price */}
-              <FormField control={form.control} name="retailPrice" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Retail Price</FormLabel>
-                  <FormControl>
-                    <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-
-              {/* 12. Current Stock */}
-              <FormField control={form.control} name="currentStock" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Current Stock</FormLabel>
-                  <FormControl>
-                    <Input type="number" min="0" placeholder="0" {...field} disabled={isEditing} />
-                  </FormControl>
-                  {isEditing && (
-                    <p className="text-xs text-muted-foreground">
-                      Use Stock Adjustment to change stock.
+              {/* Price / stock fields — always shown when editing; shown only when hasOpeningStock when adding */}
+              {(isEditing || hasOpeningStock) && (
+                <>
+                  {/* unit hint helper */}
+                  {!isEditing && selectedUnit && (
+                    <p className="col-span-2 text-xs text-muted-foreground -mb-1">
+                      All prices below are <strong>per {selectedUnit}</strong>, not for the total stock quantity.
                     </p>
                   )}
-                  <FormMessage />
-                </FormItem>
-              )} />
+
+                  {/* 8. GST % */}
+                  <FormField control={form.control} name="gstPercent" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>GST %</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" min="0" max="100" placeholder="0" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  {/* 9. Purchase Price */}
+                  <FormField control={form.control} name="purchasePrice" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Purchase Price{selectedUnit && <span className="text-muted-foreground font-normal text-xs ml-1">/ {selectedUnit}</span>}
+                      </FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  {/* 10. Wholesale Price */}
+                  <FormField control={form.control} name="wholesalePrice" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Wholesale Price{selectedUnit && <span className="text-muted-foreground font-normal text-xs ml-1">/ {selectedUnit}</span>}
+                      </FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  {/* 11. Retail Price */}
+                  <FormField control={form.control} name="retailPrice" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Retail Price{selectedUnit && <span className="text-muted-foreground font-normal text-xs ml-1">/ {selectedUnit}</span>}
+                      </FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+
+                  {/* 12. Opening Stock / Current Stock */}
+                  <FormField control={form.control} name="currentStock" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        {isEditing ? "Current Stock" : "Opening Stock"}
+                        {selectedUnit && !isEditing && <span className="text-muted-foreground font-normal text-xs ml-1">({selectedUnit})</span>}
+                      </FormLabel>
+                      <FormControl>
+                        <Input type="number" min="0" placeholder="0" {...field} disabled={isEditing} />
+                      </FormControl>
+                      {isEditing && (
+                        <p className="text-xs text-muted-foreground">
+                          Use Stock Adjustment to change stock.
+                        </p>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </>
+              )}
 
               {/* 13. Minimum Stock */}
               <FormField control={form.control} name="minStock" render={({ field }) => (
