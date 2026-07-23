@@ -10,28 +10,84 @@ import {
   getListStockMovementsQueryKey,
 } from "@workspace/api-client-react";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import {
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormMessage,
+} from "@/components/ui/form";
 
-const schema = z.object({
-  type: z.enum(["increase", "decrease", "damage", "lost", "wastage"]).optional()
-    .refine(value => value !== undefined, "Movement Type is required"),
-  quantity: z.coerce.number().int().min(1, "Quantity must be at least 1"),
-  reason: z.string().trim().min(1, "Reason is required"),
-});
+// ─── Movement type definitions ───────────────────────────────────────────────
+
+type PresetKey =
+  | "increase_old_stock"
+  | "increase_purchase"
+  | "decrease_miscount"
+  | "decrease_damaged"
+  | "decrease_lost"
+  | "other";
+
+interface MovementOption {
+  key: PresetKey;
+  label: string;
+  sign: "+" | "-" | null; // null = user picks for "other"
+  apiType: "increase" | "decrease" | "damage" | "lost" | null; // null = derived for "other"
+  autoReason: string | null; // null = user must type
+}
+
+const MOVEMENT_OPTIONS: MovementOption[] = [
+  { key: "increase_old_stock", label: "Increase (Old Stock)",        sign: "+", apiType: "increase", autoReason: "Old Stock" },
+  { key: "increase_purchase",  label: "Increase (Purchase)",         sign: "+", apiType: "increase", autoReason: "Purchase" },
+  { key: "decrease_miscount",  label: "Decrease (Wrong Count / Miscount)", sign: "-", apiType: "decrease", autoReason: "Wrong Count / Miscount" },
+  { key: "decrease_damaged",   label: "Decrease (Damaged)",          sign: "-", apiType: "damage",   autoReason: "Damaged" },
+  { key: "decrease_lost",      label: "Decrease (Lost / Missing)",   sign: "-", apiType: "lost",     autoReason: "Lost / Missing" },
+  { key: "other",              label: "Other",                       sign: null, apiType: null,      autoReason: null },
+];
+
+// ─── Form schema ─────────────────────────────────────────────────────────────
+
+const schema = z
+  .object({
+    movementKey: z.string().min(1, "Movement type is required"),
+    otherSign: z.enum(["increase", "decrease"]).optional(),
+    quantity: z.coerce.number().int().min(1, "Quantity must be at least 1"),
+    reason: z.string().trim(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.movementKey === "other") {
+      if (!val.otherSign) {
+        ctx.addIssue({ code: "custom", path: ["otherSign"], message: "Select + or −" });
+      }
+      if (!val.reason || val.reason.trim().length === 0) {
+        ctx.addIssue({ code: "custom", path: ["reason"], message: "Reason is required" });
+      }
+    }
+  });
+
 type FormValues = z.infer<typeof schema>;
 
-const empty = { type: undefined, quantity: 1, reason: "" } as unknown as FormValues;
+const empty: FormValues = { movementKey: "", otherSign: undefined, quantity: 1, reason: "" };
+
+// ─── Props ───────────────────────────────────────────────────────────────────
 
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   product: { id: number; name: string; currentStock: number } | null;
 }
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export function StockAdjustDialog({ open, onOpenChange, product }: Props) {
   const queryClient = useQueryClient();
@@ -55,76 +111,229 @@ export function StockAdjustDialog({ open, onOpenChange, product }: Props) {
 
   function onSubmit(values: FormValues) {
     if (!product) return;
-    mutation.mutate({ id: product.id, data: values });
+    const opt = MOVEMENT_OPTIONS.find((o) => o.key === values.movementKey)!;
+    const apiType = opt.apiType ?? (values.otherSign as "increase" | "decrease");
+    const reason = opt.autoReason ?? values.reason;
+    mutation.mutate({ id: product.id, data: { type: apiType, quantity: values.quantity, reason } });
   }
 
-  const watchedType = form.watch("type");
-  const watchedQty = form.watch("quantity") || 0;
+  // ── Derived state ──────────────────────────────────────────────────────────
+
+  const movementKey = form.watch("movementKey");
+  const otherSign   = form.watch("otherSign");
+  const qty         = form.watch("quantity") || 0;
+
+  const selectedOpt = MOVEMENT_OPTIONS.find((o) => o.key === movementKey) ?? null;
+  const isOther     = movementKey === "other";
+  const isIncrease  = selectedOpt?.sign === "+" || (isOther && otherSign === "increase");
+
   const previewStock = product
-    ? watchedType === "increase"
-      ? product.currentStock + watchedQty
-      : Math.max(0, product.currentStock - watchedQty)
+    ? isIncrease
+      ? product.currentStock + qty
+      : Math.max(0, product.currentStock - qty)
     : 0;
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      {/* hideClose + block backdrop-click */}
+      <DialogContent
+        className="max-w-md [&>button:last-of-type]:hidden"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Adjust Stock</DialogTitle>
           <DialogDescription>
             {product ? (
-              <>Adjusting stock for <strong>{product.name}</strong>. Current: <strong>{product.currentStock}</strong> units.</>
-            ) : "Adjust inventory stock level."}
+              <>
+                Adjusting stock for <strong>{product.name}</strong>. Current:{" "}
+                <strong>{product.currentStock}</strong> units.
+              </>
+            ) : (
+              "Adjust inventory stock level."
+            )}
           </DialogDescription>
         </DialogHeader>
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField control={form.control} name="type" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Movement Type <span className="text-destructive">*</span></FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select movement..." /></SelectTrigger></FormControl>
-                  <SelectContent>
-                    <SelectItem value="increase">Increase (Stock In / Purchase)</SelectItem>
-                    <SelectItem value="decrease">Decrease (Wrong count or miscount)</SelectItem>
-                    <SelectItem value="damage">Damage</SelectItem>
-                    <SelectItem value="lost">Lost / Missing</SelectItem>
-                    <SelectItem value="wastage">Wastage</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )} />
 
-            <FormField control={form.control} name="quantity" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Quantity</FormLabel>
-                <FormControl><Input type="number" min={1} {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
+            {/* ── Movement Type ── */}
+            <FormField
+              control={form.control}
+              name="movementKey"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Movement Type <span className="text-destructive">*</span>
+                  </FormLabel>
+                  <FormControl>
+                    <div className="flex flex-col gap-1.5">
+                      {MOVEMENT_OPTIONS.map((opt) => {
+                        const isSelected = field.value === opt.key;
+                        const isPlus  = opt.sign === "+";
+                        const isMinus = opt.sign === "-";
+                        return (
+                          <button
+                            key={opt.key}
+                            type="button"
+                            onClick={() => {
+                              field.onChange(opt.key);
+                              // clear otherSign when switching away from other
+                              if (opt.key !== "other") form.setValue("otherSign", undefined);
+                            }}
+                            className={[
+                              "flex items-center gap-2 rounded-md border px-3 py-2 text-sm text-left transition-colors",
+                              isSelected
+                                ? isPlus
+                                  ? "border-green-500 bg-green-50 text-green-800"
+                                  : isMinus
+                                  ? "border-red-500 bg-red-50 text-red-800"
+                                  : "border-primary bg-primary/10 text-primary"
+                                : "border-border bg-background hover:bg-muted/50 text-foreground",
+                            ].join(" ")}
+                          >
+                            {/* sign badge */}
+                            {opt.sign && (
+                              <span
+                                className={[
+                                  "inline-flex h-5 w-5 items-center justify-center rounded font-bold text-xs shrink-0",
+                                  isPlus  ? "bg-green-500 text-white" : "bg-red-500 text-white",
+                                ].join(" ")}
+                              >
+                                {opt.sign}
+                              </span>
+                            )}
+                            {!opt.sign && (
+                              <span className="inline-flex h-5 w-5 items-center justify-center rounded font-bold text-xs bg-muted text-muted-foreground shrink-0">
+                                ±
+                              </span>
+                            )}
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-            {product && (
+            {/* ── Other: + / − toggle ── */}
+            {isOther && (
+              <FormField
+                control={form.control}
+                name="otherSign"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Direction <span className="text-destructive">*</span>
+                    </FormLabel>
+                    <FormControl>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => field.onChange("increase")}
+                          className={[
+                            "flex-1 rounded-md border py-2 font-semibold text-sm transition-colors",
+                            field.value === "increase"
+                              ? "border-green-500 bg-green-500 text-white"
+                              : "border-green-500 text-green-700 hover:bg-green-50",
+                          ].join(" ")}
+                        >
+                          + Increase
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => field.onChange("decrease")}
+                          className={[
+                            "flex-1 rounded-md border py-2 font-semibold text-sm transition-colors",
+                            field.value === "decrease"
+                              ? "border-red-500 bg-red-500 text-white"
+                              : "border-red-500 text-red-700 hover:bg-red-50",
+                          ].join(" ")}
+                        >
+                          − Decrease
+                        </button>
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {/* ── Quantity ── */}
+            <FormField
+              control={form.control}
+              name="quantity"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Quantity</FormLabel>
+                  <FormControl>
+                    <Input type="number" min={1} {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* ── Stock preview ── */}
+            {product && movementKey && (
               <div className="rounded-md bg-muted/50 px-4 py-2 text-sm flex justify-between">
                 <span className="text-muted-foreground">New stock after adjustment:</span>
-                <span className={`font-semibold ${previewStock <= (product as any).minStock ? "text-red-600" : "text-green-700"}`}>
+                <span
+                  className={`font-semibold ${
+                    previewStock <= (product as any).minStock
+                      ? "text-red-600"
+                      : "text-green-700"
+                  }`}
+                >
                   {previewStock} units
                 </span>
               </div>
             )}
 
-            <FormField control={form.control} name="reason" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Reason <span className="text-destructive">*</span></FormLabel>
-                <FormControl><Input placeholder="e.g. Physical count correction, Supplier delivery..." {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
+            {/* ── Reason — auto-filled for presets, manual for Other ── */}
+            {isOther && (
+              <FormField
+                control={form.control}
+                name="reason"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Reason <span className="text-destructive">*</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input placeholder="Describe the reason for adjustment…" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {/* ── Auto-reason display for presets ── */}
+            {selectedOpt?.autoReason && (
+              <div className="rounded-md bg-muted/40 border border-border px-3 py-2 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Reason: </span>
+                {selectedOpt.autoReason}
+              </div>
+            )}
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
               <Button type="submit" disabled={mutation.isPending}>
-                {mutation.isPending ? "Saving..." : "Apply Adjustment"}
+                {mutation.isPending ? "Saving…" : "Apply Adjustment"}
               </Button>
             </DialogFooter>
           </form>
