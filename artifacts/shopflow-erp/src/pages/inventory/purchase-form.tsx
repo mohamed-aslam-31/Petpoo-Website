@@ -311,6 +311,8 @@ export function PurchaseForm() {
   const watchedItems = form.watch("items");
   const watchedCharges = form.watch(["packingCharges", "transportCharges", "loadingCharges", "otherCharges", "discount"]);
 
+  const [withGST, setWithGST] = useState(true);
+
   // ── Totals ────────────────────────────────────────────────────────────────────
 
   const subtotal = watchedItems.reduce((acc, item) => {
@@ -469,7 +471,6 @@ export function PurchaseForm() {
 
   const isSaving = createMutation.isPending || createAndPrintMutation.isPending;
   const supplierSelected = Number(form.watch("supplierId")) > 0;
-  const [withGST, setWithGST] = useState(true);
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
