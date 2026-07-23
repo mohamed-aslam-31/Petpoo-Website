@@ -41,18 +41,18 @@ type PresetKey =
 interface MovementOption {
   key: PresetKey;
   label: string;
-  sign: "+" | "-" | null; // null = user picks for "other"
-  apiType: "increase" | "decrease" | "damage" | "lost" | null; // null = derived for "other"
-  autoReason: string | null; // null = user must type
+  sign: "+" | "-" | null;
+  apiType: "increase" | "decrease" | "damage" | "lost" | null;
+  autoReason: string | null;
 }
 
 const MOVEMENT_OPTIONS: MovementOption[] = [
-  { key: "increase_old_stock", label: "Increase (Old Stock)",        sign: "+", apiType: "increase", autoReason: "Old Stock" },
-  { key: "increase_purchase",  label: "Increase (Purchase)",         sign: "+", apiType: "increase", autoReason: "Purchase" },
+  { key: "increase_old_stock", label: "Increase (Old Stock)",              sign: "+", apiType: "increase", autoReason: "Old Stock" },
+  { key: "increase_purchase",  label: "Increase (Purchase)",               sign: "+", apiType: "increase", autoReason: "Purchase" },
   { key: "decrease_miscount",  label: "Decrease (Wrong Count / Miscount)", sign: "-", apiType: "decrease", autoReason: "Wrong Count / Miscount" },
-  { key: "decrease_damaged",   label: "Decrease (Damaged)",          sign: "-", apiType: "damage",   autoReason: "Damaged" },
-  { key: "decrease_lost",      label: "Decrease (Lost / Missing)",   sign: "-", apiType: "lost",     autoReason: "Lost / Missing" },
-  { key: "other",              label: "Other",                       sign: null, apiType: null,      autoReason: null },
+  { key: "decrease_damaged",   label: "Decrease (Damaged)",                sign: "-", apiType: "damage",   autoReason: "Damaged" },
+  { key: "decrease_lost",      label: "Decrease (Lost / Missing)",         sign: "-", apiType: "lost",     autoReason: "Lost / Missing" },
+  { key: "other",              label: "Other",                             sign: null, apiType: null,      autoReason: null },
 ];
 
 // ─── Form schema ─────────────────────────────────────────────────────────────
@@ -119,13 +119,14 @@ export function StockAdjustDialog({ open, onOpenChange, product }: Props) {
 
   // ── Derived state ──────────────────────────────────────────────────────────
 
-  const movementKey = form.watch("movementKey");
-  const otherSign   = form.watch("otherSign");
-  const qty         = form.watch("quantity") || 0;
+  const movementKey  = form.watch("movementKey");
+  const otherSign    = form.watch("otherSign");
+  const qty          = form.watch("quantity") || 0;
+  const unit         = product?.unit ?? "pcs";
 
-  const selectedOpt = MOVEMENT_OPTIONS.find((o) => o.key === movementKey) ?? null;
-  const isOther     = movementKey === "other";
-  const isIncrease  = selectedOpt?.sign === "+" || (isOther && otherSign === "increase");
+  const selectedOpt  = MOVEMENT_OPTIONS.find((o) => o.key === movementKey) ?? null;
+  const isOther      = movementKey === "other";
+  const isIncrease   = selectedOpt?.sign === "+" || (isOther && otherSign === "increase");
 
   const previewStock = product
     ? isIncrease
@@ -137,19 +138,19 @@ export function StockAdjustDialog({ open, onOpenChange, product }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* hideClose + block backdrop-click */}
       <DialogContent
-        className="max-w-md [&>button:last-of-type]:hidden"
+        className="max-w-md flex flex-col max-h-[88vh] [&>button:last-of-type]:hidden"
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
-        <DialogHeader>
+        {/* Fixed header */}
+        <DialogHeader className="shrink-0">
           <DialogTitle>Adjust Stock</DialogTitle>
           <DialogDescription>
             {product ? (
               <>
                 Adjusting stock for <strong>{product.name}</strong>. Current:{" "}
-                <strong>{product.currentStock}</strong> units.
+                <strong>{product.currentStock}</strong> {unit}.
               </>
             ) : (
               "Adjust inventory stock level."
@@ -158,173 +159,178 @@ export function StockAdjustDialog({ open, onOpenChange, product }: Props) {
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col min-h-0 flex-1 gap-0">
 
-            {/* ── Movement Type ── */}
-            <FormField
-              control={form.control}
-              name="movementKey"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    Movement Type <span className="text-destructive">*</span>
-                  </FormLabel>
-                  <FormControl>
-                    <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
-                      {MOVEMENT_OPTIONS.map((opt) => {
-                        const isSelected = field.value === opt.key;
-                        const isPlus  = opt.sign === "+";
-                        const isMinus = opt.sign === "-";
-                        return (
-                          <button
-                            key={opt.key}
-                            type="button"
-                            onClick={() => {
-                              field.onChange(opt.key);
-                              // clear otherSign when switching away from other
-                              if (opt.key !== "other") form.setValue("otherSign", undefined);
-                            }}
-                            className={[
-                              "flex items-center gap-2 rounded-md border px-3 py-2 text-sm text-left transition-colors",
-                              isSelected
-                                ? isPlus
-                                  ? "border-green-500 bg-green-50 text-green-800"
-                                  : isMinus
-                                  ? "border-red-500 bg-red-50 text-red-800"
-                                  : "border-primary bg-primary/10 text-primary"
-                                : "border-border bg-background hover:bg-muted/50 text-foreground",
-                            ].join(" ")}
-                          >
-                            {/* sign badge */}
-                            {opt.sign && (
-                              <span
-                                className={[
-                                  "inline-flex h-5 w-5 items-center justify-center rounded font-bold text-xs shrink-0",
-                                  isPlus  ? "bg-green-500 text-white" : "bg-red-500 text-white",
-                                ].join(" ")}
-                              >
-                                {opt.sign}
-                              </span>
-                            )}
-                            {!opt.sign && (
-                              <span className="inline-flex h-5 w-5 items-center justify-center rounded font-bold text-xs bg-muted text-muted-foreground shrink-0">
-                                ±
-                              </span>
-                            )}
-                            {opt.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Scrollable body */}
+            <div className="overflow-y-auto flex-1 space-y-4 pr-0.5 pb-1">
 
-            {/* ── Other: + / − toggle ── */}
-            {isOther && (
+              {/* ── Movement Type ── */}
               <FormField
                 control={form.control}
-                name="otherSign"
+                name="movementKey"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      Direction <span className="text-destructive">*</span>
+                      Movement Type <span className="text-destructive">*</span>
                     </FormLabel>
                     <FormControl>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => field.onChange("increase")}
-                          className={[
-                            "flex-1 rounded-md border py-2 font-semibold text-sm transition-colors",
-                            field.value === "increase"
-                              ? "border-green-500 bg-green-500 text-white"
-                              : "border-green-500 text-green-700 hover:bg-green-50",
-                          ].join(" ")}
-                        >
-                          + Increase
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => field.onChange("decrease")}
-                          className={[
-                            "flex-1 rounded-md border py-2 font-semibold text-sm transition-colors",
-                            field.value === "decrease"
-                              ? "border-red-500 bg-red-500 text-white"
-                              : "border-red-500 text-red-700 hover:bg-red-50",
-                          ].join(" ")}
-                        >
-                          − Decrease
-                        </button>
+                      <div className="flex flex-col gap-1.5 max-h-44 overflow-y-auto pr-1">
+                        {MOVEMENT_OPTIONS.map((opt) => {
+                          const isSelected = field.value === opt.key;
+                          const isPlus  = opt.sign === "+";
+                          const isMinus = opt.sign === "-";
+                          return (
+                            <button
+                              key={opt.key}
+                              type="button"
+                              onClick={() => {
+                                field.onChange(opt.key);
+                                if (opt.key !== "other") form.setValue("otherSign", undefined);
+                              }}
+                              className={[
+                                "flex items-center gap-2 rounded-md border px-3 py-2 text-sm text-left transition-colors shrink-0",
+                                isSelected
+                                  ? isPlus
+                                    ? "border-green-500 bg-green-50 text-green-800"
+                                    : isMinus
+                                    ? "border-red-500 bg-red-50 text-red-800"
+                                    : "border-primary bg-primary/10 text-primary"
+                                  : "border-border bg-background hover:bg-muted/50 text-foreground",
+                              ].join(" ")}
+                            >
+                              {opt.sign && (
+                                <span
+                                  className={[
+                                    "inline-flex h-5 w-5 items-center justify-center rounded font-bold text-xs shrink-0",
+                                    isPlus ? "bg-green-500 text-white" : "bg-red-500 text-white",
+                                  ].join(" ")}
+                                >
+                                  {opt.sign}
+                                </span>
+                              )}
+                              {!opt.sign && (
+                                <span className="inline-flex h-5 w-5 items-center justify-center rounded font-bold text-xs bg-muted text-muted-foreground shrink-0">
+                                  ±
+                                </span>
+                              )}
+                              {opt.label}
+                            </button>
+                          );
+                        })}
                       </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            )}
 
-            {/* ── Quantity ── */}
-            <FormField
-              control={form.control}
-              name="quantity"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Quantity</FormLabel>
-                  <FormControl>
-                    <Input type="number" min={1} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
+              {/* ── Other: + / − toggle ── */}
+              {isOther && (
+                <FormField
+                  control={form.control}
+                  name="otherSign"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Direction <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => field.onChange("increase")}
+                            className={[
+                              "flex-1 rounded-md border py-2 font-semibold text-sm transition-colors",
+                              field.value === "increase"
+                                ? "border-green-500 bg-green-500 text-white"
+                                : "border-green-500 text-green-700 hover:bg-green-50",
+                            ].join(" ")}
+                          >
+                            + Increase
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => field.onChange("decrease")}
+                            className={[
+                              "flex-1 rounded-md border py-2 font-semibold text-sm transition-colors",
+                              field.value === "decrease"
+                                ? "border-red-500 bg-red-500 text-white"
+                                : "border-red-500 text-red-700 hover:bg-red-50",
+                            ].join(" ")}
+                          >
+                            − Decrease
+                          </button>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               )}
-            />
 
-            {/* ── Stock preview ── */}
-            {product && movementKey && (
-              <div className="rounded-md bg-muted/50 px-4 py-2 text-sm flex justify-between">
-                <span className="text-muted-foreground">New stock after adjustment:</span>
-                <span
-                  className={`font-semibold ${
-                    previewStock <= (product as any).minStock
-                      ? "text-red-600"
-                      : "text-green-700"
-                  }`}
-                >
-                  {previewStock} {product.unit ?? "pcs"}
-                </span>
-              </div>
-            )}
-
-            {/* ── Reason — auto-filled for presets, manual for Other ── */}
-            {isOther && (
+              {/* ── Quantity ── */}
               <FormField
                 control={form.control}
-                name="reason"
+                name="quantity"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      Reason <span className="text-destructive">*</span>
-                    </FormLabel>
+                    <FormLabel>Quantity</FormLabel>
                     <FormControl>
-                      <Input placeholder="Describe the reason for adjustment…" {...field} />
+                      <Input type="number" min={1} {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            )}
 
-            {/* ── Auto-reason display for presets ── */}
-            {selectedOpt?.autoReason && (
-              <div className="rounded-md bg-muted/40 border border-border px-3 py-2 text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">Reason: </span>
-                {selectedOpt.autoReason}
-              </div>
-            )}
+              {/* ── Stock preview ── */}
+              {product && movementKey && (
+                <div className="rounded-md bg-muted/50 px-4 py-2 text-sm flex justify-between">
+                  <span className="text-muted-foreground">New stock after adjustment:</span>
+                  <span
+                    className={`font-semibold ${
+                      previewStock <= (product as any).minStock
+                        ? "text-red-600"
+                        : "text-green-700"
+                    }`}
+                  >
+                    {previewStock} {unit}
+                  </span>
+                </div>
+              )}
 
-            <DialogFooter>
+              {/* ── Reason — manual only for Other ── */}
+              {isOther && (
+                <FormField
+                  control={form.control}
+                  name="reason"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>
+                        Reason <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input placeholder="Describe the reason for adjustment…" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {/* ── Auto-reason for presets ── */}
+              {selectedOpt?.autoReason && (
+                <div className="rounded-md bg-muted/40 border border-border px-3 py-2 text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">Reason: </span>
+                  {selectedOpt.autoReason}
+                </div>
+              )}
+
+            </div>
+            {/* end scrollable body */}
+
+            {/* Fixed footer */}
+            <DialogFooter className="shrink-0 pt-4 border-t mt-3">
               <Button
                 type="button"
                 variant="outline"
@@ -336,6 +342,7 @@ export function StockAdjustDialog({ open, onOpenChange, product }: Props) {
                 {mutation.isPending ? "Saving…" : "Apply Adjustment"}
               </Button>
             </DialogFooter>
+
           </form>
         </Form>
       </DialogContent>
