@@ -2,3 +2,4 @@
 - [ShopFlow ERP stack](shopflow-erp-stack.md) — key stack decisions, port, workflow, and API patterns for this project.
 - [Credit Limit Enforcement](credit-limit-enforcement.md) — informational only across quotations/orders/invoices; never blocks, surfaces `creditWarning(s)` on success; creditLimit=0 means unlimited.
 - [OpenAPI code generation](openapi-codegen-path.md) — Orval needs an absolute config-relative OpenAPI target in this workspace.
+- [Brands/Categories API shape](brands-categories-shape.md) — useListBrands/useListCategories return T[] directly (no pagination wrapper); useListProducts/useListSuppliers return paginated Page objects with .data.
