@@ -73,6 +73,7 @@ export function Products() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<any | null>(null);
+  const [deleteStockError, setDeleteStockError] = useState<{ stock: number; unit: string } | null>(null);
   const [deletingSelected, setDeletingSelected] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkDeleteErrors, setBulkDeleteErrors] = useState<{ productId: number; productName: string; currentStock: number; unit: string }[]>([]);
@@ -667,59 +668,58 @@ export function Products() {
       <StockAdjustDialog open={!!adjustingProduct} onOpenChange={v => !v && setAdjustingProduct(null)} product={adjustingProduct} />
 
       {/* Single delete */}
-      <AlertDialog open={!!deletingProduct} onOpenChange={open => { if (!open) setDeletingProduct(null); }}>
+      <AlertDialog open={!!deletingProduct} onOpenChange={open => { if (!open) { setDeletingProduct(null); setDeleteStockError(null); } }}>
         <AlertDialogContent>
-          {(() => {
-            const stock = deletingProduct?.currentStock ?? 0;
-            const hasStock = stock > 0;
-            return (
-              <>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete product?</AlertDialogTitle>
-                  <AlertDialogDescription asChild>
-                    <div>
-                      <p className="font-medium text-foreground/80 break-all mb-1">"{deletingProduct?.name}"</p>
-                      {!hasStock && <p>This will permanently remove this product from your inventory.</p>}
-                    </div>
-                  </AlertDialogDescription>
-                  {hasStock && (
-                    <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm space-y-2">
-                      <div className="flex items-start gap-2 text-destructive font-medium">
-                        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                        <span>This product has <strong>{stock} {deletingProduct?.unit ?? "pcs"}</strong> in stock.</span>
-                      </div>
-                      <p className="ml-6 text-muted-foreground">
-                        Clear the stock first, then the product will be deleted automatically.
-                      </p>
-                    </div>
-                  )}
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={deleteMutation.isPending}>
-                    {hasStock ? "Close" : "Cancel"}
-                  </AlertDialogCancel>
-                  {!hasStock && (
-                    <Button
-                      variant="destructive"
-                      disabled={deleteMutation.isPending}
-                      onClick={() => {
-                        if (!deletingProduct) return;
-                        deleteMutation.mutate(
-                          { id: deletingProduct.id },
-                          {
-                            onSuccess: () => { setDeletingProduct(null); toast.success("Product deleted"); },
-                            onError: (e: any) => toast.error(e?.data?.error ?? e?.message ?? "Failed to delete"),
-                          }
-                        );
-                      }}
-                    >
-                      {deleteMutation.isPending ? "Deleting..." : "Delete"}
-                    </Button>
-                  )}
-                </AlertDialogFooter>
-              </>
-            );
-          })()}
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete product?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                <p className="font-medium text-foreground/80 break-all mb-1">"{deletingProduct?.name}"</p>
+                {!deleteStockError && <p>This will permanently remove this product.</p>}
+              </div>
+            </AlertDialogDescription>
+            {deleteStockError && (
+              <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm space-y-2">
+                <div className="flex items-start gap-2 text-destructive font-medium">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>This product has <strong>{deleteStockError.stock} {deleteStockError.unit}</strong> in stock.</span>
+                </div>
+                <p className="ml-6 text-muted-foreground">
+                  Use <strong>Adjust Stock</strong> to bring stock to 0, then delete.
+                </p>
+              </div>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              {deleteStockError ? "Close" : "Cancel"}
+            </AlertDialogCancel>
+            {!deleteStockError && (
+              <Button
+                variant="destructive"
+                disabled={deleteMutation.isPending}
+                onClick={() => {
+                  if (!deletingProduct) return;
+                  deleteMutation.mutate(
+                    { id: deletingProduct.id },
+                    {
+                      onSuccess: () => { setDeletingProduct(null); setDeleteStockError(null); toast.success("Product deleted"); },
+                      onError: (e: any) => {
+                        const stock = e?.data?.currentStock;
+                        if (e?.status === 409 && stock !== undefined) {
+                          setDeleteStockError({ stock, unit: deletingProduct?.unit ?? "pcs" });
+                        } else {
+                          toast.error(e?.data?.error ?? e?.message ?? "Failed to delete");
+                        }
+                      },
+                    }
+                  );
+                }}
+              >
+                {deleteMutation.isPending ? "Deleting..." : "Delete"}
+              </Button>
+            )}
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
