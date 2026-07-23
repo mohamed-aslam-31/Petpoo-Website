@@ -174,7 +174,7 @@ export function StockAdjustDialog({ open, onOpenChange, product }: Props) {
                       Movement Type <span className="text-destructive">*</span>
                     </FormLabel>
                     <FormControl>
-                      <div className="flex flex-col gap-1.5 max-h-44 overflow-y-auto pr-1">
+                      <div className="flex flex-col gap-1.5">
                         {MOVEMENT_OPTIONS.map((opt) => {
                           const isSelected = field.value === opt.key;
                           const isPlus  = opt.sign === "+";
