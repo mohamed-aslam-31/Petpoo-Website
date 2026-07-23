@@ -367,7 +367,9 @@ export function PurchaseForm() {
   const otherCharges = Number(watchedCharges[3]) || 0;
   const discount = Number(watchedCharges[4]) || 0;
   const additionalCharges = packingCharges + transportCharges + loadingCharges + otherCharges;
-  const grandTotal = subtotal + (withGST ? gstTotal : 0) + additionalCharges - discount;
+  const afterDiscount = subtotal - discount;
+  const afterGST = afterDiscount + (withGST ? gstTotal : 0);
+  const grandTotal = afterGST + additionalCharges;
 
   // ── Mutation ──────────────────────────────────────────────────────────────────
 
@@ -870,26 +872,54 @@ export function PurchaseForm() {
             <div className="rounded-lg border bg-card shadow-sm p-6 space-y-3">
               <h2 className="font-semibold text-base">Summary</h2>
               <div className="space-y-2 text-sm">
+                {/* Step 1 — Subtotal */}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal</span>
                   <span className="font-medium">{fmt(subtotal)}</span>
                 </div>
-                {withGST && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">GST Total</span>
-                    <span className="font-medium">{fmt(gstTotal)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Additional Charges</span>
-                  <span className="font-medium">{fmt(additionalCharges)}</span>
-                </div>
+
+                {/* Step 2 — Discount */}
                 {discount > 0 && (
-                  <div className="flex justify-between text-green-600">
-                    <span>Discount</span>
-                    <span>- {fmt(discount)}</span>
-                  </div>
+                  <>
+                    <div className="flex justify-between text-green-600">
+                      <span>Discount</span>
+                      <span>− {fmt(discount)}</span>
+                    </div>
+                    <div className="flex justify-between bg-muted/40 rounded px-2 py-1">
+                      <span className="text-muted-foreground text-xs">After Discount</span>
+                      <span className="font-medium">{fmt(afterDiscount)}</span>
+                    </div>
+                  </>
                 )}
+
+                {/* Step 3 — GST */}
+                {withGST && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">GST Total</span>
+                      <span className="font-medium">+ {fmt(gstTotal)}</span>
+                    </div>
+                    <div className="flex justify-between bg-muted/40 rounded px-2 py-1">
+                      <span className="text-muted-foreground text-xs">After GST</span>
+                      <span className="font-medium">{fmt(afterGST)}</span>
+                    </div>
+                  </>
+                )}
+
+                {/* Step 4 — Additional Charges */}
+                {additionalCharges > 0 && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Additional Charges</span>
+                      <span className="font-medium">+ {fmt(additionalCharges)}</span>
+                    </div>
+                    <div className="flex justify-between bg-muted/40 rounded px-2 py-1">
+                      <span className="text-muted-foreground text-xs">After Charges</span>
+                      <span className="font-medium">{fmt(grandTotal)}</span>
+                    </div>
+                  </>
+                )}
+
                 <Separator />
                 <div className="flex justify-between text-base font-bold">
                   <span>Grand Total</span>
