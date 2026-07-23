@@ -887,24 +887,41 @@ export function ProductFormDialog({
                     </FormItem>
                   )} />
 
-                  {/* 9. Purchase Price */}
+                  {/* 9. Purchase Price — auto-fills wholesale (+25%) and retail (+50%) */}
                   <FormField control={form.control} name="purchasePrice" render={({ field }) => (
                     <FormItem>
                       <FormLabel>
                         Purchase Price{selectedUnit && <span className="text-muted-foreground font-normal text-xs ml-1">/ {selectedUnit}</span>}
                       </FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          {...field}
+                          onChange={e => {
+                            field.onChange(e);
+                            const purchase = parseFloat(e.target.value);
+                            if (!isNaN(purchase) && purchase >= 0) {
+                              const wholesale = Math.round(purchase * 1.25 * 100) / 100;
+                              const retail    = Math.round(purchase * 1.50 * 100) / 100;
+                              form.setValue("wholesalePrice", wholesale, { shouldValidate: true });
+                              form.setValue("retailPrice",    retail,    { shouldValidate: true });
+                            }
+                          }}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
 
-                  {/* 10. Wholesale Price */}
+                  {/* 10. Wholesale Price (auto-filled as purchase + 25%, editable) */}
                   <FormField control={form.control} name="wholesalePrice" render={({ field }) => (
                     <FormItem>
                       <FormLabel>
                         Wholesale Price{selectedUnit && <span className="text-muted-foreground font-normal text-xs ml-1">/ {selectedUnit}</span>}
+                        <span className="text-muted-foreground font-normal text-xs ml-1">(+25%)</span>
                       </FormLabel>
                       <FormControl>
                         <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />
@@ -913,11 +930,12 @@ export function ProductFormDialog({
                     </FormItem>
                   )} />
 
-                  {/* 11. Retail Price */}
+                  {/* 11. Retail Price (auto-filled as purchase + 50%, editable) */}
                   <FormField control={form.control} name="retailPrice" render={({ field }) => (
                     <FormItem>
                       <FormLabel>
                         Retail Price{selectedUnit && <span className="text-muted-foreground font-normal text-xs ml-1">/ {selectedUnit}</span>}
+                        <span className="text-muted-foreground font-normal text-xs ml-1">(+50%)</span>
                       </FormLabel>
                       <FormControl>
                         <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />
