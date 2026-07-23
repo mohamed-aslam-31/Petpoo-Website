@@ -6,7 +6,6 @@ import {
   useListCategories,
   useListBrands,
   useDeleteProduct,
-  useAdjustStock,
   getListProductsQueryKey,
   getListBrandsQueryKey,
   getListCategoriesQueryKey,
@@ -77,7 +76,6 @@ export function Products() {
   const [deletingSelected, setDeletingSelected] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkDeleteErrors, setBulkDeleteErrors] = useState<{ productId: number; productName: string; currentStock: number }[]>([]);
-  const [clearingStock, setClearingStock] = useState(false);
   const [adjustingProduct, setAdjustingProduct] = useState<any | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [selectedProductMap, setSelectedProductMap] = useState<Map<number, any>>(new Map());
@@ -126,8 +124,6 @@ export function Products() {
       },
     },
   });
-
-  const adjustStockMutation = useAdjustStock();
 
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -202,74 +198,6 @@ export function Products() {
     }
   }
 
-  async function clearStockAndDelete() {
-    if (!deletingProduct) return;
-    const stock = deletingProduct.currentStock ?? 0;
-    if (stock <= 0) return;
-    setClearingStock(true);
-    try {
-      await new Promise<void>((resolve, reject) =>
-        adjustStockMutation.mutate(
-          { id: deletingProduct.id, data: { type: "decrease", quantity: stock, reason: "Cleared for deletion" } },
-          { onSuccess: () => resolve(), onError: (e: any) => reject(e) }
-        )
-      );
-      await new Promise<void>((resolve, reject) =>
-        deleteMutation.mutate(
-          { id: deletingProduct.id },
-          { onSuccess: () => resolve(), onError: (e: any) => reject(e) }
-        )
-      );
-      setDeletingProduct(null);
-      toast.success("Stock cleared and product deleted");
-    } catch (e: any) {
-      toast.error(e?.data?.error ?? e?.message ?? "Failed to clear stock");
-    } finally {
-      setClearingStock(false);
-    }
-  }
-
-  async function clearStockAndDeleteAll() {
-    setClearingStock(true);
-    const toProcess = [...bulkDeleteErrors];
-    setBulkDeleteErrors([]);
-    let done = 0;
-    const stillFailed: { productId: number; productName: string; currentStock: number }[] = [];
-
-    for (const err of toProcess) {
-      try {
-        await new Promise<void>((resolve, reject) =>
-          adjustStockMutation.mutate(
-            { id: err.productId, data: { type: "decrease", quantity: err.currentStock, reason: "Cleared for deletion" } },
-            { onSuccess: () => resolve(), onError: (e: any) => reject(e) }
-          )
-        );
-        await new Promise<void>((resolve, reject) =>
-          deleteMutation.mutate(
-            { id: err.productId },
-            { onSuccess: () => resolve(), onError: (e: any) => reject(e) }
-          )
-        );
-        done++;
-      } catch (e: any) {
-        stillFailed.push(err);
-        toast.error(`Failed for "${err.productName}": ${e?.data?.error ?? e?.message ?? "Try again."}`);
-      }
-    }
-
-    setClearingStock(false);
-    queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
-    if (done > 0) toast.success(`${done} product${done === 1 ? "" : "s"} cleared and deleted`);
-
-    if (stillFailed.length > 0) {
-      setBulkDeleteErrors(stillFailed);
-    } else {
-      setDeletingSelected(false);
-      setBulkDeleteErrors([]);
-      setSelectedIds(new Set());
-      setSelectedProductMap(new Map());
-    }
-  }
 
   // Filtered option lists for each popover
   const filteredCategories = useMemo(() => {
@@ -767,12 +695,10 @@ export function Products() {
                   )}
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel disabled={clearingStock || deleteMutation.isPending}>Cancel</AlertDialogCancel>
-                  {hasStock ? (
-                    <Button variant="destructive" disabled={clearingStock} onClick={clearStockAndDelete}>
-                      {clearingStock ? "Clearing..." : "Clear Stock & Delete"}
-                    </Button>
-                  ) : (
+                  <AlertDialogCancel disabled={deleteMutation.isPending}>
+                    {hasStock ? "Close" : "Cancel"}
+                  </AlertDialogCancel>
+                  {!hasStock && (
                     <Button
                       variant="destructive"
                       disabled={deleteMutation.isPending}
@@ -841,14 +767,12 @@ export function Products() {
             )}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={bulkDeleting || clearingStock}>Cancel</AlertDialogCancel>
-            {bulkDeleteErrors.length === 0 ? (
+            <AlertDialogCancel disabled={bulkDeleting}>
+              {bulkDeleteErrors.length > 0 ? "Close" : "Cancel"}
+            </AlertDialogCancel>
+            {bulkDeleteErrors.length === 0 && (
               <Button variant="destructive" disabled={bulkDeleting} onClick={deleteSelectedProducts}>
                 {bulkDeleting ? "Deleting..." : "Delete All"}
-              </Button>
-            ) : (
-              <Button variant="destructive" disabled={clearingStock} onClick={clearStockAndDeleteAll}>
-                {clearingStock ? "Clearing..." : "Clear Stock & Delete All"}
               </Button>
             )}
           </AlertDialogFooter>
