@@ -860,7 +860,7 @@ export function ProductFormDialog({
               {(isEditing || hasOpeningStock) && (
                 <>
                   {/* unit hint helper */}
-                  {!isEditing && selectedUnit && (
+                  {selectedUnit && (
                     <p className="col-span-2 text-xs text-muted-foreground -mb-1">
                       All prices below are <strong>per {selectedUnit}</strong>, not for the total stock quantity.
                     </p>
@@ -921,7 +921,7 @@ export function ProductFormDialog({
                     <FormItem>
                       <FormLabel>
                         {isEditing ? "Current Stock" : "Opening Stock"}
-                        {selectedUnit && !isEditing && <span className="text-muted-foreground font-normal text-xs ml-1">({selectedUnit})</span>}
+                        {selectedUnit && <span className="text-muted-foreground font-normal text-xs ml-1">({selectedUnit})</span>}
                       </FormLabel>
                       <FormControl>
                         <Input type="number" min="0" placeholder="0" {...field} disabled={isEditing} />
