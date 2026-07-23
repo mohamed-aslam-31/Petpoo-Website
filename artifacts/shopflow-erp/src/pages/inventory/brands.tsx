@@ -39,6 +39,8 @@ export function Brands() {
   const [activeSorts, setActiveSorts] = useState<Set<SortKey>>(new Set());
   const [minCat, setMinCat] = useState("");
   const [maxCat, setMaxCat] = useState("");
+  const [minProd, setMinProd] = useState("");
+  const [maxProd, setMaxProd] = useState("");
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const PAGE_SIZE_PRESETS = [10, 20, 50, 100];
@@ -85,6 +87,11 @@ export function Brands() {
     if (minN !== null) rows = rows.filter(b => ((b as any).categoriesCount ?? 0) >= minN);
     if (maxN !== null) rows = rows.filter(b => ((b as any).categoriesCount ?? 0) <= maxN);
 
+    const minP = minProd !== "" ? Number(minProd) : null;
+    const maxP = maxProd !== "" ? Number(maxProd) : null;
+    if (minP !== null) rows = rows.filter(b => ((b as any).productsCount ?? 0) >= minP);
+    if (maxP !== null) rows = rows.filter(b => ((b as any).productsCount ?? 0) <= maxP);
+
     rows.sort((a, b) => {
       // Name axis
       if (activeSorts.has("az") || activeSorts.has("za")) {
@@ -102,11 +109,11 @@ export function Brands() {
     });
 
     return rows;
-  }, [data, search, minCat, maxCat, activeSorts]);
+  }, [data, search, minCat, maxCat, minProd, maxProd, activeSorts]);
 
   // Reset to first page when filters/sort change
   const prevFilterKey = useRef("");
-  const filterKey = `${search}|${minCat}|${maxCat}|${[...activeSorts].sort().join(",")}`;
+  const filterKey = `${search}|${minCat}|${maxCat}|${minProd}|${maxProd}|${[...activeSorts].sort().join(",")}`;
   if (filterKey !== prevFilterKey.current) {
     prevFilterKey.current = filterKey;
     if (page !== 0) setPage(0);
@@ -202,6 +209,7 @@ export function Brands() {
   }
 
   const catFilterActive = minCat !== "" || maxCat !== "";
+  const prodFilterActive = minProd !== "" || maxProd !== "";
 
   return (
     <div className="space-y-6">
@@ -334,6 +342,57 @@ export function Brands() {
               )}
             </PopoverContent>
           </Popover>
+
+          {/* Products count range filter */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+                <Filter className="h-3 w-3" />
+                Products
+                {prodFilterActive && (
+                  <Badge variant="secondary" className="ml-0.5 px-1.5 h-4 text-[10px]">on</Badge>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-52 p-3" align="start">
+              <p className="text-xs font-semibold mb-3">Products Count</p>
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <label className="text-[10px] text-muted-foreground mb-1 block">Min</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="0"
+                    className="h-7 text-xs"
+                    value={minProd}
+                    onChange={e => setMinProd(e.target.value)}
+                  />
+                </div>
+                <span className="text-muted-foreground text-xs mt-4">–</span>
+                <div className="flex-1">
+                  <label className="text-[10px] text-muted-foreground mb-1 block">Max</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="∞"
+                    className="h-7 text-xs"
+                    value={maxProd}
+                    onChange={e => setMaxProd(e.target.value)}
+                  />
+                </div>
+              </div>
+              {prodFilterActive && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-2 h-7 text-xs w-full"
+                  onClick={() => { setMinProd(""); setMaxProd(""); }}
+                >
+                  Clear filter
+                </Button>
+              )}
+            </PopoverContent>
+          </Popover>
         </div>
 
         {/* Table */}
@@ -350,6 +409,7 @@ export function Brands() {
                 </TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead className="text-right">Categories</TableHead>
+                <TableHead className="text-right">Products</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -360,12 +420,13 @@ export function Brands() {
                     <TableCell className="pl-4"><Skeleton className="h-4 w-4" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                     <TableCell className="text-right"><Skeleton className="h-4 w-8 ml-auto" /></TableCell>
+                    <TableCell className="text-right"><Skeleton className="h-4 w-8 ml-auto" /></TableCell>
                     <TableCell><Skeleton className="h-8 w-8 rounded ml-auto" /></TableCell>
                   </TableRow>
                 ))
               ) : displayRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="h-32 text-center text-muted-foreground">
+                  <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
                     No brands found.
                   </TableCell>
                 </TableRow>
@@ -394,6 +455,7 @@ export function Brands() {
                         </TableCell>
                         <TableCell className="font-medium">{brand.name}</TableCell>
                         <TableCell className="text-right">{(brand as any).categoriesCount ?? 0}</TableCell>
+                        <TableCell className="text-right">{(brand as any).productsCount ?? 0}</TableCell>
                         <TableCell className="text-right">
                           {/* Wide screens: inline icon buttons */}
                           <div className="hidden sm:flex items-center justify-end gap-1">
