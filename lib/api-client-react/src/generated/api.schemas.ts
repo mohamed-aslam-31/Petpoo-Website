@@ -802,6 +802,77 @@ export interface ProfitLossReport {
   breakdown?: ProfitLossReportBreakdownItem[];
 }
 
+export interface PurchaseItem {
+  productId: number;
+  productName: string;
+  sku: string;
+  /** @nullable */
+  brandId?: number | null;
+  /** @nullable */
+  brandName?: string | null;
+  /** @nullable */
+  categoryId?: number | null;
+  /** @nullable */
+  categoryName?: string | null;
+  currentStock?: number;
+  quantity: number;
+  unit: string;
+  purchasePrice: number;
+  gstPercent: number;
+  lineTotal: number;
+  gstAmount: number;
+}
+
+export interface PurchaseItemInput {
+  productId: number;
+  quantity: number;
+  purchasePrice: number;
+  gstPercent?: number;
+  brandId?: number;
+  brandName?: string;
+  categoryId?: number;
+  categoryName?: string;
+}
+
+export interface PurchaseInput {
+  supplierId: number;
+  purchaseDate: string;
+  items: PurchaseItemInput[];
+  packingCharges?: number;
+  transportCharges?: number;
+  loadingCharges?: number;
+  otherCharges?: number;
+  discount?: number;
+  notes?: string;
+}
+
+export interface Purchase {
+  id: number;
+  purchaseNumber: string;
+  supplierId: number;
+  supplierName: string;
+  purchaseDate: string;
+  items: PurchaseItem[];
+  packingCharges?: number;
+  transportCharges?: number;
+  loadingCharges?: number;
+  otherCharges?: number;
+  discount?: number;
+  subtotal: number;
+  gstTotal: number;
+  grandTotal: number;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+}
+
+export interface PurchasesPage {
+  data: Purchase[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 export type ListProductsParams = {
 search?: string;
 categoryId?: number;
@@ -863,6 +934,12 @@ limit?: number;
 };
 
 export type ListSuppliersParams = {
+search?: string;
+page?: number;
+limit?: number;
+};
+
+export type ListPurchasesParams = {
 search?: string;
 page?: number;
 limit?: number;

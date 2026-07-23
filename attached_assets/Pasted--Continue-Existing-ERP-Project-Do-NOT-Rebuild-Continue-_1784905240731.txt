@@ -1,0 +1,124 @@
+## Continue Existing ERP Project (Do NOT Rebuild)
+
+Continue working on the existing ERP project without rebuilding, redesigning, or replacing the existing implementation. Reuse the current codebase, database, APIs, UI components, routing, and business logic. Maintain the existing theme, layout, responsiveness, and user experience. Only implement the requested functionality while preserving all existing features and data.
+
+Create a new module under the **Inventory** menu named **Purchases** (or **Stock Purchases** if it better matches the current navigation). This page will be used to record supplier purchase bills and automatically increase inventory stock.
+
+The Purchase page should follow the same UI design, spacing, colors, tables, forms, buttons, and modal style used throughout the ERP. The page should include a **Purchase ID** that is automatically generated and cannot be edited by the user. The format should be **ACTP-000001**, **ACTP-000002**, **ACTP-000003**, and so on.
+
+The Purchase form should include the following header fields:
+
+* Purchase ID (Auto Generated, Read Only)
+* Purchase Date
+* Supplier
+* Add New Supplier
+
+The Supplier dropdown must load all suppliers from the existing **Suppliers** module. If the supplier does not exist, the user should be able to click **Add New Supplier** without leaving the page. Open the existing supplier modal and use the same fields already available:
+
+* Supplier Name
+* Phone
+* Email
+* GST Number
+* Address
+* Notes
+
+After saving, the new supplier should automatically appear in the Supplier dropdown and be selected.
+
+Below the supplier section, add a **Purchase Items** table with an **Add Product** button. Each row should contain:
+
+* Brand
+* Category
+* Product
+* SKU (Auto Filled)
+* Current Stock (Read Only)
+* Purchase Quantity
+* Unit (Auto Filled)
+* Purchase Price (Per Unit)
+* GST %
+* Total
+
+The Brand, Category, and Product fields must work together intelligently.
+
+If the user selects a **Brand** first, the Category dropdown should only display categories belonging to that Brand, and the Product dropdown should only display products under the selected Brand.
+
+If the user selects a **Category** first, the Brand should automatically be selected based on that Category, and the Product dropdown should display only products belonging to that Category.
+
+If the user selects a **Product** first, the system should automatically fill:
+
+* Brand
+* Category
+* SKU
+* Current Stock
+* Unit
+* GST %
+* Purchase Price (default purchase price from Product)
+
+The Unit must always be fetched from the Product master and displayed automatically. For example:
+
+* Kg
+* Gram
+* Meter
+* Piece
+* Box
+* Roll
+* Liter
+* Pack
+* Bundle
+  or any other unit already assigned to that product.
+
+The Purchase Price must always represent the **price per selected unit**, never the total price.
+
+The line total should automatically calculate:
+
+**Quantity × Purchase Price**
+
+If GST is applicable, calculate GST based on the configured GST percentage.
+
+Below the items table, add additional charge fields:
+
+* Packing Charges
+* Transport Charges
+* Loading/Unloading Charges
+* Other Charges
+* Discount (Optional)
+
+The system should automatically calculate:
+
+* Subtotal
+* GST Total
+* Additional Charges Total
+* Grand Total
+
+Provide buttons to:
+
+* Save Purchase
+* Save & Print
+* Cancel
+
+After saving the purchase:
+
+* Automatically increase the product stock based on the purchased quantity.
+* Create a Stock Movement entry for each purchased product.
+* Transaction Type: **Stock In**
+* Reason: **Purchase**
+* Reference: Purchase ID
+* Supplier Name
+* Purchase Date
+* Quantity Added
+* User
+* Timestamp
+
+The Purchase should also become available for future Purchase Reports and Inventory Reports.
+
+Validation requirements:
+
+* Purchase ID must be auto-generated and read-only.
+* Purchase Date is mandatory.
+* Supplier is mandatory.
+* At least one product is required.
+* Quantity must be greater than zero.
+* Purchase Price must be greater than zero.
+* Prevent duplicate empty rows.
+* Prevent saving incomplete products.
+
+The entire module should match the existing ERP design and should not introduce a different layout or styling. Reuse existing components wherever possible, update all necessary APIs and database tables, maintain proper relationships between Supplier, Product, Stock Movement, and Purchase records, and ensure all inventory calculations remain accurate without breaking any existing functionality.

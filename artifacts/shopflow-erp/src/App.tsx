@@ -13,6 +13,8 @@ import { Products } from "./pages/inventory/products";
 import { Categories } from "./pages/inventory/categories";
 import { Brands } from "./pages/inventory/brands";
 import { Stock } from "./pages/inventory/stock";
+import { Purchases } from "./pages/inventory/purchases";
+import { PurchaseForm } from "./pages/inventory/purchase-form";
 import { Invoices } from "./pages/billing/invoices";
 import { Quotations } from "./pages/billing/quotations";
 import { CreditNotes } from "./pages/billing/credit-notes";
@@ -69,6 +71,8 @@ function Router() {
       <Route path="/inventory/categories" component={() => <ProtectedRoute component={Categories} />} />
       <Route path="/inventory/brands" component={() => <ProtectedRoute component={Brands} />} />
       <Route path="/inventory/stock" component={() => <ProtectedRoute component={Stock} />} />
+      <Route path="/inventory/purchases" component={() => <ProtectedRoute component={Purchases} />} />
+      <Route path="/inventory/purchases/new" component={() => <ProtectedRoute component={PurchaseForm} />} />
       <Route path="/billing/invoices" component={() => <ProtectedRoute component={Invoices} />} />
       <Route path="/billing/quotations" component={() => <ProtectedRoute component={Quotations} />} />
       <Route path="/billing/credit-notes" component={() => <ProtectedRoute component={CreditNotes} />} />

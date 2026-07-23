@@ -15,6 +15,7 @@ import stockRouter from "./stock";
 import quotationsRouter from "./quotations";
 import creditNotesRouter from "./credit-notes";
 import auditLogRouter from "./audit-log";
+import purchasesRouter from "./purchases";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use(stockRouter);
 router.use(quotationsRouter);
 router.use(creditNotesRouter);
 router.use(auditLogRouter);
+router.use(purchasesRouter);
 
 export default router;

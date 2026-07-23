@@ -5,6 +5,7 @@ import {
   Tags,
   Briefcase,
   ArrowRightLeft,
+  ShoppingBag,
   FileText,
   ClipboardList,
   FileMinus,
@@ -28,6 +29,7 @@ const navigation = [
       { name: "Categories", href: "/inventory/categories", icon: Tags },
       { name: "Brands", href: "/inventory/brands", icon: Briefcase },
       { name: "Stock Movements", href: "/inventory/stock", icon: ArrowRightLeft },
+      { name: "Purchases", href: "/inventory/purchases", icon: ShoppingBag },
     ]
   },
   {

@@ -20,6 +20,7 @@ tags:
   - name: employees
   - name: expenses
   - name: stock
+  - name: purchases
 
 paths:
   /healthz:
@@ -733,6 +734,82 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/LedgerEntry"
+
+  # Purchases
+  /purchases:
+    get:
+      operationId: listPurchases
+      tags: [purchases]
+      summary: List stock purchases
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Purchases list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PurchasesPage"
+    post:
+      operationId: createPurchase
+      tags: [purchases]
+      summary: Create a stock purchase (increases stock automatically)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PurchaseInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Purchase"
+
+  /purchases/{id}:
+    get:
+      operationId: getPurchase
+      tags: [purchases]
+      summary: Get a purchase by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Purchase
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Purchase"
+    delete:
+      operationId: deletePurchase
+      tags: [purchases]
+      summary: Delete a purchase and reverse its stock
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
 
   # Orders
   /orders:
@@ -2169,3 +2246,79 @@ components:
             properties:
               category: { type: string }
               amount:   { type: number }
+
+    PurchaseItem:
+      type: object
+      required: [productId, productName, sku, quantity, unit, purchasePrice, gstPercent, lineTotal, gstAmount]
+      properties:
+        productId:    { type: integer }
+        productName:  { type: string }
+        sku:          { type: string }
+        brandId:      { type: ["integer", "null"] }
+        brandName:    { type: ["string", "null"] }
+        categoryId:   { type: ["integer", "null"] }
+        categoryName: { type: ["string", "null"] }
+        currentStock: { type: integer }
+        quantity:     { type: integer }
+        unit:         { type: string }
+        purchasePrice: { type: number }
+        gstPercent:   { type: number }
+        lineTotal:    { type: number }
+        gstAmount:    { type: number }
+
+    PurchaseItemInput:
+      type: object
+      required: [productId, quantity, purchasePrice]
+      properties:
+        productId:     { type: integer }
+        quantity:      { type: integer }
+        purchasePrice: { type: number }
+        gstPercent:    { type: number }
+        brandId:       { type: integer }
+        brandName:     { type: string }
+        categoryId:    { type: integer }
+        categoryName:  { type: string }
+
+    PurchaseInput:
+      type: object
+      required: [supplierId, purchaseDate, items]
+      properties:
+        supplierId:        { type: integer }
+        purchaseDate:      { type: string }
+        items:             { type: array, items: { $ref: "#/components/schemas/PurchaseItemInput" } }
+        packingCharges:    { type: number }
+        transportCharges:  { type: number }
+        loadingCharges:    { type: number }
+        otherCharges:      { type: number }
+        discount:          { type: number }
+        notes:             { type: string }
+
+    Purchase:
+      type: object
+      required: [id, purchaseNumber, supplierId, supplierName, purchaseDate, items, subtotal, gstTotal, grandTotal, createdAt]
+      properties:
+        id:               { type: integer }
+        purchaseNumber:   { type: string }
+        supplierId:       { type: integer }
+        supplierName:     { type: string }
+        purchaseDate:     { type: string }
+        items:            { type: array, items: { $ref: "#/components/schemas/PurchaseItem" } }
+        packingCharges:   { type: number }
+        transportCharges: { type: number }
+        loadingCharges:   { type: number }
+        otherCharges:     { type: number }
+        discount:         { type: number }
+        subtotal:         { type: number }
+        gstTotal:         { type: number }
+        grandTotal:       { type: number }
+        notes:            { type: ["string", "null"] }
+        createdAt:        { type: string }
+
+    PurchasesPage:
+      type: object
+      required: [data, total, page, limit]
+      properties:
+        data:  { type: array, items: { $ref: "#/components/schemas/Purchase" } }
+        total: { type: integer }
+        page:  { type: integer }
+        limit: { type: integer }

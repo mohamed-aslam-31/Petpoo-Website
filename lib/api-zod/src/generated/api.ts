@@ -798,6 +798,166 @@ export const GetSupplierLedgerResponse = zod.array(GetSupplierLedgerResponseItem
 
 
 /**
+ * @summary List stock purchases
+ */
+export const ListPurchasesQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "page": zod.coerce.number().optional(),
+  "limit": zod.coerce.number().optional()
+})
+
+export const ListPurchasesResponse = zod.object({
+  "data": zod.array(zod.object({
+  "id": zod.number(),
+  "purchaseNumber": zod.string(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "purchaseDate": zod.string(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "sku": zod.string(),
+  "brandId": zod.number().nullish(),
+  "brandName": zod.string().nullish(),
+  "categoryId": zod.number().nullish(),
+  "categoryName": zod.string().nullish(),
+  "currentStock": zod.number().optional(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "purchasePrice": zod.number(),
+  "gstPercent": zod.number(),
+  "lineTotal": zod.number(),
+  "gstAmount": zod.number()
+})),
+  "packingCharges": zod.number().optional(),
+  "transportCharges": zod.number().optional(),
+  "loadingCharges": zod.number().optional(),
+  "otherCharges": zod.number().optional(),
+  "discount": zod.number().optional(),
+  "subtotal": zod.number(),
+  "gstTotal": zod.number(),
+  "grandTotal": zod.number(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "limit": zod.number()
+})
+
+
+/**
+ * @summary Create a stock purchase (increases stock automatically)
+ */
+export const CreatePurchaseBody = zod.object({
+  "supplierId": zod.number(),
+  "purchaseDate": zod.string(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "quantity": zod.number(),
+  "purchasePrice": zod.number(),
+  "gstPercent": zod.number().optional(),
+  "brandId": zod.number().optional(),
+  "brandName": zod.string().optional(),
+  "categoryId": zod.number().optional(),
+  "categoryName": zod.string().optional()
+})),
+  "packingCharges": zod.number().optional(),
+  "transportCharges": zod.number().optional(),
+  "loadingCharges": zod.number().optional(),
+  "otherCharges": zod.number().optional(),
+  "discount": zod.number().optional(),
+  "notes": zod.string().optional()
+})
+
+export const CreatePurchaseResponse = zod.object({
+  "id": zod.number(),
+  "purchaseNumber": zod.string(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "purchaseDate": zod.string(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "sku": zod.string(),
+  "brandId": zod.number().nullish(),
+  "brandName": zod.string().nullish(),
+  "categoryId": zod.number().nullish(),
+  "categoryName": zod.string().nullish(),
+  "currentStock": zod.number().optional(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "purchasePrice": zod.number(),
+  "gstPercent": zod.number(),
+  "lineTotal": zod.number(),
+  "gstAmount": zod.number()
+})),
+  "packingCharges": zod.number().optional(),
+  "transportCharges": zod.number().optional(),
+  "loadingCharges": zod.number().optional(),
+  "otherCharges": zod.number().optional(),
+  "discount": zod.number().optional(),
+  "subtotal": zod.number(),
+  "gstTotal": zod.number(),
+  "grandTotal": zod.number(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Get a purchase by ID
+ */
+export const GetPurchaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetPurchaseResponse = zod.object({
+  "id": zod.number(),
+  "purchaseNumber": zod.string(),
+  "supplierId": zod.number(),
+  "supplierName": zod.string(),
+  "purchaseDate": zod.string(),
+  "items": zod.array(zod.object({
+  "productId": zod.number(),
+  "productName": zod.string(),
+  "sku": zod.string(),
+  "brandId": zod.number().nullish(),
+  "brandName": zod.string().nullish(),
+  "categoryId": zod.number().nullish(),
+  "categoryName": zod.string().nullish(),
+  "currentStock": zod.number().optional(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "purchasePrice": zod.number(),
+  "gstPercent": zod.number(),
+  "lineTotal": zod.number(),
+  "gstAmount": zod.number()
+})),
+  "packingCharges": zod.number().optional(),
+  "transportCharges": zod.number().optional(),
+  "loadingCharges": zod.number().optional(),
+  "otherCharges": zod.number().optional(),
+  "discount": zod.number().optional(),
+  "subtotal": zod.number(),
+  "gstTotal": zod.number(),
+  "grandTotal": zod.number(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Delete a purchase and reverse its stock
+ */
+export const DeletePurchaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeletePurchaseResponse = zod.void()
+
+
+/**
  * @summary List orders
  */
 export const ListOrdersQueryParams = zod.object({
