@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, Plus, MoreHorizontal, Edit, Trash2, Filter, ChevronsUpDown, Check, AlertCircle } from "lucide-react";
+import { Search, Plus, MoreHorizontal, Edit, Trash2, Filter, ChevronsUpDown, Check, AlertCircle, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -393,6 +393,24 @@ export function Brands() {
               )}
             </PopoverContent>
           </Popover>
+
+          {/* Clear all filters */}
+          {(search !== "" || activeSorts.size > 0 || catFilterActive || prodFilterActive) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                setSearch("");
+                setActiveSorts(new Set());
+                setMinCat(""); setMaxCat("");
+                setMinProd(""); setMaxProd("");
+              }}
+            >
+              <X className="h-3.5 w-3.5" />
+              Clear all filters
+            </Button>
+          )}
         </div>
 
         {/* Table */}

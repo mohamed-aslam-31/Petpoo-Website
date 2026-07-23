@@ -423,6 +423,25 @@ export function Categories() {
             </PopoverContent>
           </Popover>
 
+          {/* Clear all filters */}
+          {(search !== "" || activeSorts.size > 0 || brandFilterActive || productFilterActive) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                setSearch("");
+                setActiveSorts(new Set());
+                setSelectedBrandIds(new Set());
+                setFilterNoBrand(false);
+                setBrandSearch("");
+                setMinProducts(""); setMaxProducts("");
+              }}
+            >
+              <X className="h-3.5 w-3.5" />
+              Clear all filters
+            </Button>
+          )}
         </div>
 
         {/* Table */}

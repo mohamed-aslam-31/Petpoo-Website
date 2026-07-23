@@ -502,6 +502,26 @@ export function Products() {
             </PopoverContent>
           </Popover>
 
+          {/* Clear all filters */}
+          {(search !== "" || activeSorts.size > 0 || stockFilterActive || catFilterActive || brandFilterActive || unitFilterActive || locFilterActive) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                setSearch("");
+                setActiveSorts(new Set());
+                setMinStock(""); setMaxStock("");
+                setSelectedCategoryIds(new Set()); setFilterNoCategory(false); setCatSearch("");
+                setSelectedBrandIds(new Set()); setFilterNoBrand(false); setBrandSearch("");
+                setSelectedUnits(new Set()); setUnitSearch("");
+                setSelectedLocations(new Set()); setLocSearch("");
+              }}
+            >
+              <X className="h-3.5 w-3.5" />
+              Clear all filters
+            </Button>
+          )}
         </div>
 
         <CardContent className="px-4 py-0">
