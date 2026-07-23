@@ -56,6 +56,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Trash2, Plus, ArrowLeft, Printer, Save, Check, ChevronsUpDown } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -468,6 +469,7 @@ export function PurchaseForm() {
 
   const isSaving = createMutation.isPending || createAndPrintMutation.isPending;
   const supplierSelected = Number(form.watch("supplierId")) > 0;
+  const [withGST, setWithGST] = useState(true);
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -495,6 +497,16 @@ export function PurchaseForm() {
           {/* ── Header section ─────────────────────────────────────────────────── */}
           <div className="rounded-lg border bg-card shadow-sm p-6 space-y-4">
             <h2 className="font-semibold text-base">Purchase Details</h2>
+            <div className="flex items-center gap-2 mb-1">
+              <Checkbox
+                id="withGST"
+                checked={withGST}
+                onCheckedChange={(v) => setWithGST(Boolean(v))}
+              />
+              <label htmlFor="withGST" className="text-sm cursor-pointer select-none">
+                With GST
+              </label>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Purchase ID - read only */}
               <div className="space-y-2">
@@ -580,7 +592,7 @@ export function PurchaseForm() {
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[80px]">Qty *</th>
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[70px]">Unit</th>
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[110px]">Price *</th>
-                    <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[70px]">GST %</th>
+                    {withGST && <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[70px] text-xs">GST %</th>}
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground min-w-[100px]">Total</th>
                     <th className="w-[40px]"></th>
                   </tr>
@@ -697,26 +709,30 @@ export function PurchaseForm() {
                         </td>
 
                         {/* GST % */}
-                        <td className="px-2 py-2">
-                          <Input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            className="h-8 text-xs text-right"
-                            {...form.register(`items.${index}.gstPercent`)}
-                          />
-                        </td>
+                        {withGST && (
+                          <td className="px-2 py-2">
+                            <Input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              className="h-8 text-xs text-right"
+                              {...form.register(`items.${index}.gstPercent`)}
+                            />
+                          </td>
+                        )}
 
                         {/* Total */}
                         <td className="px-2 py-2 text-right">
                           <div className="text-xs font-medium pr-1 whitespace-nowrap">
-                            {fmt(lineTotal + gstAmt)}
+                            {fmt(withGST ? lineTotal + gstAmt : lineTotal)}
                           </div>
-                          <div className="text-[10px] text-muted-foreground pr-1 leading-tight">
-                            <span className="whitespace-nowrap">{fmt(lineTotal)}</span>
-                            {" + "}
-                            <span className="whitespace-nowrap">{fmt(gstAmt)} GST</span>
-                          </div>
+                          {withGST && (
+                            <div className="text-[10px] text-muted-foreground pr-1 leading-tight">
+                              <span className="whitespace-nowrap">{fmt(lineTotal)}</span>
+                              {" + "}
+                              <span className="whitespace-nowrap">{fmt(gstAmt)} GST</span>
+                            </div>
+                          )}
                         </td>
 
                         {/* Remove */}
