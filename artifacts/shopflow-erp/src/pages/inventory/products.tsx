@@ -74,7 +74,6 @@ export function Products() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
   const [deletingProduct, setDeletingProduct] = useState<any | null>(null);
-  const [deleteError, setDeleteError] = useState<{ message: string; currentStock: number } | null>(null);
   const [deletingSelected, setDeletingSelected] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [bulkDeleteErrors, setBulkDeleteErrors] = useState<{ productId: number; productName: string; currentStock: number }[]>([]);
@@ -204,12 +203,14 @@ export function Products() {
   }
 
   async function clearStockAndDelete() {
-    if (!deletingProduct || !deleteError) return;
+    if (!deletingProduct) return;
+    const stock = deletingProduct.currentStock ?? 0;
+    if (stock <= 0) return;
     setClearingStock(true);
     try {
       await new Promise<void>((resolve, reject) =>
         adjustStockMutation.mutate(
-          { id: deletingProduct.id, data: { type: "decrease", quantity: deleteError.currentStock, reason: "Cleared for deletion" } },
+          { id: deletingProduct.id, data: { type: "decrease", quantity: stock, reason: "Cleared for deletion" } },
           { onSuccess: () => resolve(), onError: (e: any) => reject(e) }
         )
       );
@@ -220,7 +221,6 @@ export function Products() {
         )
       );
       setDeletingProduct(null);
-      setDeleteError(null);
       toast.success("Stock cleared and product deleted");
     } catch (e: any) {
       toast.error(e?.data?.error ?? e?.message ?? "Failed to clear stock");
@@ -739,68 +739,61 @@ export function Products() {
       <StockAdjustDialog open={!!adjustingProduct} onOpenChange={v => !v && setAdjustingProduct(null)} product={adjustingProduct} />
 
       {/* Single delete */}
-      <AlertDialog open={!!deletingProduct} onOpenChange={open => { if (!open) { setDeletingProduct(null); setDeleteError(null); } }}>
+      <AlertDialog open={!!deletingProduct} onOpenChange={open => { if (!open) setDeletingProduct(null); }}>
         <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete product?</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div>
-                <p className="font-medium text-foreground/80 break-all mb-1">"{deletingProduct?.name}"</p>
-                {!deleteError && <p>This will permanently remove this product from your inventory.</p>}
-              </div>
-            </AlertDialogDescription>
-            {deleteError && (
-              <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm space-y-2">
-                <div className="flex items-start gap-2 text-destructive font-medium">
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>This product has {deleteError.currentStock} unit(s) in stock.</span>
-                </div>
-                <p className="ml-6 text-muted-foreground">
-                  Clear the stock first, then the product will be deleted automatically.
-                </p>
-              </div>
-            )}
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={clearingStock}>{deleteError ? "Cancel" : "Cancel"}</AlertDialogCancel>
-            {!deleteError ? (
-              <Button
-                variant="destructive"
-                disabled={deleteMutation.isPending}
-                onClick={() => {
-                  if (!deletingProduct) return;
-                  deleteMutation.mutate(
-                    { id: deletingProduct.id },
-                    {
-                      onSuccess: () => {
-                        setDeletingProduct(null);
-                        setDeleteError(null);
-                        toast.success("Product deleted");
-                      },
-                      onError: (e: any) => {
-                        const stock = e?.data?.currentStock;
-                        if (e?.status === 409 && stock !== undefined) {
-                          setDeleteError({ message: e.data.error, currentStock: stock });
-                        } else {
-                          toast.error(e?.data?.error ?? e?.message ?? "Failed to delete");
-                        }
-                      },
-                    }
-                  );
-                }}
-              >
-                {deleteMutation.isPending ? "Deleting..." : "Delete"}
-              </Button>
-            ) : (
-              <Button
-                variant="destructive"
-                disabled={clearingStock}
-                onClick={clearStockAndDelete}
-              >
-                {clearingStock ? "Clearing..." : "Clear Stock & Delete"}
-              </Button>
-            )}
-          </AlertDialogFooter>
+          {(() => {
+            const stock = deletingProduct?.currentStock ?? 0;
+            const hasStock = stock > 0;
+            return (
+              <>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete product?</AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <div>
+                      <p className="font-medium text-foreground/80 break-all mb-1">"{deletingProduct?.name}"</p>
+                      {!hasStock && <p>This will permanently remove this product from your inventory.</p>}
+                    </div>
+                  </AlertDialogDescription>
+                  {hasStock && (
+                    <div className="mt-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm space-y-2">
+                      <div className="flex items-start gap-2 text-destructive font-medium">
+                        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                        <span>This product has <strong>{stock}</strong> unit(s) in stock.</span>
+                      </div>
+                      <p className="ml-6 text-muted-foreground">
+                        Clear the stock first, then the product will be deleted automatically.
+                      </p>
+                    </div>
+                  )}
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={clearingStock || deleteMutation.isPending}>Cancel</AlertDialogCancel>
+                  {hasStock ? (
+                    <Button variant="destructive" disabled={clearingStock} onClick={clearStockAndDelete}>
+                      {clearingStock ? "Clearing..." : "Clear Stock & Delete"}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="destructive"
+                      disabled={deleteMutation.isPending}
+                      onClick={() => {
+                        if (!deletingProduct) return;
+                        deleteMutation.mutate(
+                          { id: deletingProduct.id },
+                          {
+                            onSuccess: () => { setDeletingProduct(null); toast.success("Product deleted"); },
+                            onError: (e: any) => toast.error(e?.data?.error ?? e?.message ?? "Failed to delete"),
+                          }
+                        );
+                      }}
+                    >
+                      {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                    </Button>
+                  )}
+                </AlertDialogFooter>
+              </>
+            );
+          })()}
         </AlertDialogContent>
       </AlertDialog>
 

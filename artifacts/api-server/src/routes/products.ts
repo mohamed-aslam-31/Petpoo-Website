@@ -303,6 +303,9 @@ router.delete("/products/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  // Delete related stock movements first (no CASCADE on FK)
+  await db.delete(stockMovementsTable).where(eq(stockMovementsTable.productId, params.data.id));
+
   const [product] = await db.delete(productsTable).where(eq(productsTable.id, params.data.id)).returning();
   if (!product) { res.status(404).json({ error: "Product not found" }); return; }
   res.sendStatus(204);
