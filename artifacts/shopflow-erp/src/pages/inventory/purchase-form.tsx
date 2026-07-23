@@ -309,6 +309,36 @@ export function PurchaseForm() {
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "items" });
   const watchedItems = form.watch("items");
+
+  // ── Checkbox selection ────────────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  const allSelected = fields.length > 0 && fields.every((f) => selectedIds.has(f.id));
+  const someSelected = selectedIds.size > 0;
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(fields.map((f) => f.id)));
+    }
+  };
+
+  const deleteSelected = () => {
+    const indices = fields
+      .map((f, i) => (selectedIds.has(f.id) ? i : -1))
+      .filter((i) => i !== -1)
+      .sort((a, b) => b - a);
+    indices.forEach((i) => remove(i));
+    setSelectedIds(new Set());
+  };
   const watchedCharges = form.watch(["packingCharges", "transportCharges", "loadingCharges", "otherCharges", "discount"]);
 
   const [withGST, setWithGST] = useState(true);
@@ -570,23 +600,48 @@ export function PurchaseForm() {
 
           {/* ── Items table ────────────────────────────────────────────────────── */}
           <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b">
+            <div className="flex items-center justify-between p-4 border-b gap-2">
               <h2 className="font-semibold text-base">Purchase Items</h2>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1"
-                onClick={() => append(emptyItem())}
-              >
-                <Plus className="h-3 w-3" /> Add Product
-              </Button>
+              <div className="flex items-center gap-2">
+                {someSelected && (
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    className="gap-1"
+                    onClick={deleteSelected}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Delete Selected ({selectedIds.size})
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  onClick={() => append(emptyItem())}
+                >
+                  <Plus className="h-3 w-3" /> Add Product
+                </Button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
+              <div
+                className="overflow-y-auto"
+                style={{ maxHeight: "min(calc(100vh - 480px), 420px)" }}
+              >
               <table className="w-full text-sm">
-                <thead className="bg-muted/50">
+                <thead className="bg-muted/50 sticky top-0 z-10">
                   <tr>
+                    <th className="px-3 py-2 w-[36px]">
+                      <Checkbox
+                        checked={allSelected}
+                        onCheckedChange={toggleSelectAll}
+                        aria-label="Select all items"
+                      />
+                    </th>
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[140px]">Brand *</th>
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[140px]">Category *</th>
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[160px]">Product *</th>
@@ -641,7 +696,15 @@ export function PurchaseForm() {
                     const gstAmt = lineTotal * ((Number(item?.gstPercent) || 0) / 100);
 
                     return (
-                      <tr key={field.id} className="hover:bg-muted/20">
+                      <tr key={field.id} className={cn("hover:bg-muted/20", selectedIds.has(field.id) && "bg-muted/30")}>
+                        {/* Checkbox */}
+                        <td className="px-3 py-2">
+                          <Checkbox
+                            checked={selectedIds.has(field.id)}
+                            onCheckedChange={() => toggleSelect(field.id)}
+                            aria-label={`Select item ${index + 1}`}
+                          />
+                        </td>
                         {/* Brand */}
                         <td className="px-2 py-2">
                           <SearchableSelect
@@ -743,7 +806,14 @@ export function PurchaseForm() {
                             variant="ghost"
                             size="icon"
                             className="h-7 w-7 text-destructive hover:text-destructive"
-                            onClick={() => remove(index)}
+                            onClick={() => {
+                              remove(index);
+                              setSelectedIds((prev) => {
+                                const next = new Set(prev);
+                                next.delete(field.id);
+                                return next;
+                              });
+                            }}
                             disabled={fields.length === 1}
                           >
                             <Trash2 className="h-3 w-3" />
@@ -754,6 +824,7 @@ export function PurchaseForm() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
 
             {form.formState.errors.items?.root && (
