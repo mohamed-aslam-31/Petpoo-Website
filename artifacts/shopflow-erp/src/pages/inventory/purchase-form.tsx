@@ -332,7 +332,7 @@ export function PurchaseForm() {
   const otherCharges = Number(watchedCharges[3]) || 0;
   const discount = Number(watchedCharges[4]) || 0;
   const additionalCharges = packingCharges + transportCharges + loadingCharges + otherCharges;
-  const grandTotal = subtotal + gstTotal + additionalCharges - discount;
+  const grandTotal = subtotal + (withGST ? gstTotal : 0) + additionalCharges - discount;
 
   // ── Mutation ──────────────────────────────────────────────────────────────────
 
@@ -799,10 +799,12 @@ export function PurchaseForm() {
                   <span className="text-muted-foreground">Subtotal</span>
                   <span className="font-medium">{fmt(subtotal)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">GST Total</span>
-                  <span className="font-medium">{fmt(gstTotal)}</span>
-                </div>
+                {withGST && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">GST Total</span>
+                    <span className="font-medium">{fmt(gstTotal)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Additional Charges</span>
                   <span className="font-medium">{fmt(additionalCharges)}</span>
