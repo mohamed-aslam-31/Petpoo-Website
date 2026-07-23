@@ -62,7 +62,8 @@ function formatDateTime(iso: string) {
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const NO_BRAND = "__no_brand__";
+const NO_BRAND    = "__no_brand__";
+const NO_CATEGORY = "__no_category__";
 const UNITS_STORAGE_KEY = "shopflow-units";
 const DEFAULT_UNITS = [
   "pc", "pcs", "kg", "g", "mg", "l", "ml",
@@ -518,13 +519,16 @@ export function ProductFormDialog({
         : [];
       setSelectedUnit(units[0] ?? "");
       setSelectedLocation(product.location ?? "");
+      const initCategory = product.categoryId
+        ? String(product.categoryId)
+        : initBrand === NO_BRAND ? NO_CATEGORY : "";
       form.reset({
         name:          product.name,
         sku:           product.sku,
         barcode:       product.barcode ?? "",
         hsnCode:       product.hsnCode ?? "",
         brandId:       initBrand ?? "",
-        categoryId:    product.categoryId ? String(product.categoryId) : "",
+        categoryId:    initCategory,
         gstPercent:    product.gstPercent,
         purchasePrice: product.purchasePrice,
         wholesalePrice:product.wholesalePrice,
@@ -556,10 +560,14 @@ export function ProductFormDialog({
   ];
 
   const categoryOptions = (() => {
-    if (!brandComboValue || brandComboValue === NO_BRAND) {
-      return (categories ?? [])
-        .filter(c => !c.brandId)
-        .map(c => ({ value: String(c.id), label: c.name }));
+    if (!brandComboValue) return [];
+    if (brandComboValue === NO_BRAND) {
+      return [
+        { value: NO_CATEGORY, label: "No Category" },
+        ...(categories ?? [])
+          .filter(c => !c.brandId)
+          .map(c => ({ value: String(c.id), label: c.name })),
+      ];
     }
     const numericId = Number(brandComboValue);
     return (categories ?? [])
@@ -571,7 +579,12 @@ export function ProductFormDialog({
   function handleBrandChange(val: string | undefined) {
     setBrandComboValue(val);
     form.setValue("brandId", val ?? "", { shouldValidate: true });
-    form.setValue("categoryId", "", { shouldValidate: false });
+    // Auto-select No Category when No Brand is chosen; otherwise reset
+    if (val === NO_BRAND) {
+      form.setValue("categoryId", NO_CATEGORY, { shouldValidate: true });
+    } else {
+      form.setValue("categoryId", "", { shouldValidate: false });
+    }
   }
 
   function handleCategoryChange(val: string | undefined) {
@@ -624,8 +637,8 @@ export function ProductFormDialog({
       unit:        selectedUnit,
       location:    selectedLocation || undefined,
       sellingPrice: values.retailPrice,
-      categoryId:  values.categoryId ? Number(values.categoryId) : undefined,
-      brandId:     (values.brandId && values.brandId !== NO_BRAND) ? Number(values.brandId) : undefined,
+      categoryId:  (values.categoryId && values.categoryId !== NO_CATEGORY) ? Number(values.categoryId) : null,
+      brandId:     (values.brandId && values.brandId !== NO_BRAND) ? Number(values.brandId) : null,
     };
     if (isEditing && product) {
       updateMutation.mutate({ id: product.id, data: payload });
@@ -799,7 +812,7 @@ export function ProductFormDialog({
                     }
                     searchPlaceholder="Search categories…"
                     emptyText="No categories found."
-                    disabled={!brandComboValue || categoryOptions.length === 0}
+                    disabled={!brandComboValue || (brandComboValue !== NO_BRAND && categoryOptions.length === 0)}
                   />
                   <FormMessage />
                 </FormItem>
