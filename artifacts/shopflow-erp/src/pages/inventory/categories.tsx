@@ -43,6 +43,7 @@ export function Categories() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [activeSorts, setActiveSorts] = useState<Set<SortKey>>(new Set());
   const [selectedBrandIds, setSelectedBrandIds] = useState<Set<number>>(new Set());
+  const [filterNoBrand, setFilterNoBrand] = useState(false);
   const [brandSearch, setBrandSearch] = useState("");
   const [minProducts, setMinProducts] = useState("");
   const [maxProducts, setMaxProducts] = useState("");
@@ -101,9 +102,10 @@ export function Categories() {
       rows = rows.filter(c => c.name.toLowerCase().includes(q));
     }
 
-    if (selectedBrandIds.size > 0) {
+    if (selectedBrandIds.size > 0 || filterNoBrand) {
       rows = rows.filter(c => {
         const brandId = (c as any).brandId;
+        if (filterNoBrand && brandId == null) return true;
         return brandId != null && selectedBrandIds.has(brandId);
       });
     }
@@ -132,7 +134,7 @@ export function Categories() {
 
   // Reset to first page when filters/sort change
   const prevFilterKey = useRef("");
-  const filterKey = `${search}|${minProducts}|${maxProducts}|${[...selectedBrandIds].sort().join(",")}|${[...activeSorts].sort().join(",")}`;
+  const filterKey = `${search}|${minProducts}|${maxProducts}|${filterNoBrand}|${[...selectedBrandIds].sort().join(",")}|${[...activeSorts].sort().join(",")}`;
   if (filterKey !== prevFilterKey.current) {
     prevFilterKey.current = filterKey;
     if (page !== 0) setPage(0);
@@ -226,7 +228,7 @@ export function Categories() {
     queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
   }
 
-  const brandFilterActive = selectedBrandIds.size > 0;
+  const brandFilterActive = selectedBrandIds.size > 0 || filterNoBrand;
   const productFilterActive = minProducts !== "" || maxProducts !== "";
 
   return (
@@ -317,7 +319,7 @@ export function Categories() {
                 <Filter className="h-3 w-3" />
                 Brand
                 {brandFilterActive && (
-                  <Badge variant="secondary" className="ml-0.5 px-1.5 h-4 text-[10px]">{selectedBrandIds.size}</Badge>
+                  <Badge variant="secondary" className="ml-0.5 px-1.5 h-4 text-[10px]">{selectedBrandIds.size + (filterNoBrand ? 1 : 0)}</Badge>
                 )}
               </Button>
             </PopoverTrigger>
@@ -334,6 +336,14 @@ export function Categories() {
                 </div>
               </div>
               <div className="max-h-48 overflow-y-auto p-1">
+                <button
+                  type="button"
+                  onClick={() => setFilterNoBrand(v => !v)}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted transition-colors"
+                >
+                  <Check className={cn("h-3.5 w-3.5 shrink-0", filterNoBrand ? "opacity-100 text-primary" : "opacity-0")} />
+                  <span className="truncate text-muted-foreground italic">No Brand</span>
+                </button>
                 {filteredBrandOptions.length === 0 ? (
                   <p className="text-xs text-muted-foreground text-center py-3">No brands found</p>
                 ) : filteredBrandOptions.map(brand => (
@@ -349,17 +359,15 @@ export function Categories() {
                 ))}
               </div>
               {brandFilterActive && (
-                <>
-                  <div className="border-t p-1">
-                    <button
-                      type="button"
-                      onClick={() => { setSelectedBrandIds(new Set()); setBrandSearch(""); }}
-                      className="flex w-full items-center px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted rounded transition-colors"
-                    >
-                      Clear filter
-                    </button>
-                  </div>
-                </>
+                <div className="border-t p-1">
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedBrandIds(new Set()); setFilterNoBrand(false); setBrandSearch(""); }}
+                    className="flex w-full items-center px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted rounded transition-colors"
+                  >
+                    Clear filter
+                  </button>
+                </div>
               )}
             </PopoverContent>
           </Popover>

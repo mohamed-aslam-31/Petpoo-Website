@@ -98,6 +98,8 @@ router.get("/products", async (req, res): Promise<void> => {
     : [];
   const minStock = req.query.minStock !== undefined ? Number(req.query.minStock) : undefined;
   const maxStock = req.query.maxStock !== undefined ? Number(req.query.maxStock) : undefined;
+  const noBrand    = req.query.noBrand    === "true";
+  const noCategory = req.query.noCategory === "true";
 
   // Sort
   const sortBy = req.query.sortBy as string | undefined;
@@ -116,8 +118,22 @@ router.get("/products", async (req, res): Promise<void> => {
     ilike(productsTable.hsnCode, `%${search}%`),
     ilike(productsTable.barcode, `%${search}%`),
   ));
-  if (categoryIds.length) conditions.push(inArray(productsTable.categoryId, categoryIds));
-  if (brandIds.length) conditions.push(inArray(productsTable.brandId, brandIds));
+  // Category filter: support "no category" (null) alongside specific IDs
+  if (categoryIds.length && noCategory) {
+    conditions.push(or(isNull(productsTable.categoryId), inArray(productsTable.categoryId, categoryIds)));
+  } else if (categoryIds.length) {
+    conditions.push(inArray(productsTable.categoryId, categoryIds));
+  } else if (noCategory) {
+    conditions.push(isNull(productsTable.categoryId));
+  }
+  // Brand filter: support "no brand" (null) alongside specific IDs
+  if (brandIds.length && noBrand) {
+    conditions.push(or(isNull(productsTable.brandId), inArray(productsTable.brandId, brandIds)));
+  } else if (brandIds.length) {
+    conditions.push(inArray(productsTable.brandId, brandIds));
+  } else if (noBrand) {
+    conditions.push(isNull(productsTable.brandId));
+  }
   if (units.length) conditions.push(inArray(productsTable.unit, units));
   if (locations.length) conditions.push(inArray(productsTable.location, locations));
   if (lowStock) conditions.push(lte(productsTable.currentStock, productsTable.minStock));

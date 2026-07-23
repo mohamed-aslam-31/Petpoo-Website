@@ -54,7 +54,9 @@ function sortKeyToParams(activeSorts: Set<SortKey>) {
 export function Products() {
   const [search, setSearch] = useState("");
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<Set<number>>(new Set());
+  const [filterNoCategory, setFilterNoCategory] = useState(false);
   const [selectedBrandIds, setSelectedBrandIds] = useState<Set<number>>(new Set());
+  const [filterNoBrand, setFilterNoBrand] = useState(false);
   const [selectedUnits, setSelectedUnits] = useState<Set<string>>(new Set());
   const [selectedLocations, setSelectedLocations] = useState<Set<string>>(new Set());
   const [activeSorts, setActiveSorts] = useState<Set<SortKey>>(new Set());
@@ -98,7 +100,9 @@ export function Products() {
     page,
     limit: pageSize,
     ...(selectedCategoryIds.size > 0 && { categoryIds: [...selectedCategoryIds].join(",") }),
+    ...(filterNoCategory && { noCategory: "true" }),
     ...(selectedBrandIds.size > 0 && { brandIds: [...selectedBrandIds].join(",") }),
+    ...(filterNoBrand && { noBrand: "true" }),
     ...(selectedUnits.size > 0 && { units: [...selectedUnits].join(",") }),
     ...(selectedLocations.size > 0 && { locations: [...selectedLocations].join(",") }),
     ...(minStock !== "" && { minStock: Number(minStock) }),
@@ -107,7 +111,7 @@ export function Products() {
   };
 
   // Reset to page 1 when filters change
-  const filterKey = `${search}|${minStock}|${maxStock}|${[...selectedCategoryIds].sort()}|${[...selectedBrandIds].sort()}|${[...selectedUnits].sort()}|${[...selectedLocations].sort()}|${[...activeSorts].sort()}`;
+  const filterKey = `${search}|${minStock}|${maxStock}|${filterNoBrand}|${filterNoCategory}|${[...selectedCategoryIds].sort()}|${[...selectedBrandIds].sort()}|${[...selectedUnits].sort()}|${[...selectedLocations].sort()}|${[...activeSorts].sort()}`;
   const prevFilterKey = useRef("");
   if (filterKey !== prevFilterKey.current) {
     prevFilterKey.current = filterKey;
@@ -223,8 +227,8 @@ export function Products() {
     return q ? all.filter(l => l.toLowerCase().includes(q)) : all;
   }, [productOptions, locSearch]);
 
-  const catFilterActive = selectedCategoryIds.size > 0;
-  const brandFilterActive = selectedBrandIds.size > 0;
+  const catFilterActive = selectedCategoryIds.size > 0 || filterNoCategory;
+  const brandFilterActive = selectedBrandIds.size > 0 || filterNoBrand;
   const unitFilterActive = selectedUnits.size > 0;
   const locFilterActive = selectedLocations.size > 0;
   const stockFilterActive = minStock !== "" || maxStock !== "";
@@ -338,7 +342,7 @@ export function Products() {
               <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
                 <Filter className="h-3 w-3" />
                 Category
-                {catFilterActive && <Badge variant="secondary" className="ml-0.5 px-1.5 h-4 text-[10px]">{selectedCategoryIds.size}</Badge>}
+                {catFilterActive && <Badge variant="secondary" className="ml-0.5 px-1.5 h-4 text-[10px]">{selectedCategoryIds.size + (filterNoCategory ? 1 : 0)}</Badge>}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-60 p-0" align="start">
@@ -349,6 +353,11 @@ export function Products() {
                 </div>
               </div>
               <div className="max-h-48 overflow-y-auto p-1">
+                <button type="button" onClick={() => setFilterNoCategory(v => !v)}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted transition-colors">
+                  <Check className={cn("h-3.5 w-3.5 shrink-0", filterNoCategory ? "opacity-100 text-primary" : "opacity-0")} />
+                  <span className="truncate text-muted-foreground italic">No Category</span>
+                </button>
                 {filteredCategories.length === 0
                   ? <p className="text-xs text-muted-foreground text-center py-3">No categories found</p>
                   : filteredCategories.map(c => (
@@ -362,7 +371,7 @@ export function Products() {
               </div>
               {catFilterActive && (
                 <div className="border-t p-1">
-                  <button type="button" onClick={() => { setSelectedCategoryIds(new Set()); setCatSearch(""); }}
+                  <button type="button" onClick={() => { setSelectedCategoryIds(new Set()); setFilterNoCategory(false); setCatSearch(""); }}
                     className="flex w-full items-center px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted rounded transition-colors">
                     Clear filter
                   </button>
@@ -377,7 +386,7 @@ export function Products() {
               <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
                 <Filter className="h-3 w-3" />
                 Brand
-                {brandFilterActive && <Badge variant="secondary" className="ml-0.5 px-1.5 h-4 text-[10px]">{selectedBrandIds.size}</Badge>}
+                {brandFilterActive && <Badge variant="secondary" className="ml-0.5 px-1.5 h-4 text-[10px]">{selectedBrandIds.size + (filterNoBrand ? 1 : 0)}</Badge>}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-60 p-0" align="start">
@@ -388,6 +397,11 @@ export function Products() {
                 </div>
               </div>
               <div className="max-h-48 overflow-y-auto p-1">
+                <button type="button" onClick={() => setFilterNoBrand(v => !v)}
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted transition-colors">
+                  <Check className={cn("h-3.5 w-3.5 shrink-0", filterNoBrand ? "opacity-100 text-primary" : "opacity-0")} />
+                  <span className="truncate text-muted-foreground italic">No Brand</span>
+                </button>
                 {filteredBrands.length === 0
                   ? <p className="text-xs text-muted-foreground text-center py-3">No brands found</p>
                   : filteredBrands.map(b => (
@@ -401,7 +415,7 @@ export function Products() {
               </div>
               {brandFilterActive && (
                 <div className="border-t p-1">
-                  <button type="button" onClick={() => { setSelectedBrandIds(new Set()); setBrandSearch(""); }}
+                  <button type="button" onClick={() => { setSelectedBrandIds(new Set()); setFilterNoBrand(false); setBrandSearch(""); }}
                     className="flex w-full items-center px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted rounded transition-colors">
                     Clear filter
                   </button>
