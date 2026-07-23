@@ -503,6 +503,10 @@ export function ProductFormDialog({
   const [skuLoading, setSkuLoading] = useState(false);
   const [hasOpeningStock, setHasOpeningStock] = useState(false);
   const openingStockCheckId = useId();
+  // Percentage shown in the label hints.
+  // Edit mode → computed from the product's actual stored prices.
+  // Add mode  → uses global saved margins.
+  const [labelMargins, setLabelMargins] = useState(() => getMargins());
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -539,12 +543,24 @@ export function ProductFormDialog({
         location:      product.location ?? "",
         status:        product.status === "inactive" ? "inactive" : "active",
       });
+      // Show the actual markup % that is baked into this product's prices,
+      // not the current global setting (which may have changed since).
+      const pp = product.purchasePrice;
+      if (pp > 0) {
+        setLabelMargins({
+          wholesale: Math.round((product.wholesalePrice / pp - 1) * 100),
+          retail:    Math.round((product.retailPrice    / pp - 1) * 100),
+        });
+      } else {
+        setLabelMargins(getMargins());
+      }
     } else {
       setBrandComboValue(undefined);
       setSelectedUnit("");
       setSelectedLocation("");
       setHasOpeningStock(false);
       form.reset({ ...emptyValues, sku: "" });
+      setLabelMargins(getMargins());
       setSkuLoading(true);
       fetch("/api/products/next-sku")
         .then(r => r.json())
@@ -905,11 +921,14 @@ export function ProductFormDialog({
                             field.onChange(e);
                             const purchase = parseFloat(e.target.value);
                             if (!isNaN(purchase) && purchase >= 0) {
-                              const { wholesale: wPct, retail: rPct } = getMargins();
+                              const globalMargins = getMargins();
+                              const { wholesale: wPct, retail: rPct } = globalMargins;
                               const wholesale = Math.round(purchase * (1 + wPct / 100) * 100) / 100;
                               const retail    = Math.round(purchase * (1 + rPct / 100) * 100) / 100;
                               form.setValue("wholesalePrice", wholesale, { shouldValidate: true });
                               form.setValue("retailPrice",    retail,    { shouldValidate: true });
+                              // Prices are now computed from global margins, so update hints.
+                              setLabelMargins(globalMargins);
                             }
                           }}
                         />
@@ -923,7 +942,7 @@ export function ProductFormDialog({
                     <FormItem>
                       <FormLabel>
                         Wholesale Price{selectedUnit && <span className="text-muted-foreground font-normal text-xs ml-1">/ {selectedUnit}</span>}
-                        <span className="text-muted-foreground font-normal text-xs ml-1">(+{getMargins().wholesale}%)</span>
+                        <span className="text-muted-foreground font-normal text-xs ml-1">(+{labelMargins.wholesale}%)</span>
                       </FormLabel>
                       <FormControl>
                         <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />
@@ -937,7 +956,7 @@ export function ProductFormDialog({
                     <FormItem>
                       <FormLabel>
                         Retail Price{selectedUnit && <span className="text-muted-foreground font-normal text-xs ml-1">/ {selectedUnit}</span>}
-                        <span className="text-muted-foreground font-normal text-xs ml-1">(+{getMargins().retail}%)</span>
+                        <span className="text-muted-foreground font-normal text-xs ml-1">(+{labelMargins.retail}%)</span>
                       </FormLabel>
                       <FormControl>
                         <Input type="number" step="0.01" min="0" placeholder="0.00" {...field} />
