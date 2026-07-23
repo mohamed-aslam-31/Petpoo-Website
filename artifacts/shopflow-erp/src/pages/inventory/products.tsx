@@ -711,7 +711,14 @@ export function Products() {
                   deleteMutation.mutate(
                     { id: deletingProduct.id },
                     {
-                      onSuccess: () => { setDeletingProduct(null); setDeleteStockError(null); toast.success("Product deleted"); },
+                      onSuccess: () => {
+                        const id = deletingProduct.id;
+                        setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+                        setSelectedProductMap(prev => { const n = new Map(prev); n.delete(id); return n; });
+                        setDeletingProduct(null);
+                        setDeleteStockError(null);
+                        toast.success("Product deleted");
+                      },
                       onError: (e: any) => {
                         const stock = e?.data?.currentStock;
                         if (e?.status === 409 && stock !== undefined) {

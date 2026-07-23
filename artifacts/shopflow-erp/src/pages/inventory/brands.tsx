@@ -512,6 +512,8 @@ export function Brands() {
                     { id: deletingBrand.id },
                     {
                       onSuccess: () => {
+                        const id = deletingBrand.id;
+                        setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
                         setDeletingBrand(null);
                         setDeleteError(null);
                         toast.success("Brand deleted");

@@ -595,6 +595,8 @@ export function Categories() {
                     { id: deletingCategory.id },
                     {
                       onSuccess: () => {
+                        const id = deletingCategory.id;
+                        setSelectedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
                         setDeletingCategory(null);
                         setDeleteError(null);
                         toast.success("Category deleted");
