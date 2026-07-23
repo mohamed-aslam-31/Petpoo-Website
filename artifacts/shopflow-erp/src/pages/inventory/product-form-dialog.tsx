@@ -14,7 +14,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogClose,
   DialogHeader,
   DialogTitle,
   DialogDescription,
@@ -50,7 +49,7 @@ import {
   CommandItem,
   CommandSeparator,
 } from "@/components/ui/command";
-import { Check, ChevronsUpDown, Plus, X } from "lucide-react";
+import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -654,12 +653,6 @@ export function ProductFormDialog({
                 : "Fill in the details to add a new product to your inventory."}
             </DialogDescription>
           </div>
-          <DialogClose asChild>
-            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0 rounded-sm opacity-70 hover:opacity-100">
-              <X className="h-4 w-4" />
-              <span className="sr-only">Close</span>
-            </Button>
-          </DialogClose>
         </div>
 
         {isEditing && product?.createdAt && (
@@ -937,10 +930,10 @@ export function ProductFormDialog({
                 </>
               )}
 
-              {/* 13. Minimum Stock */}
+              {/* 13. Low Stock */}
               <FormField control={form.control} name="minStock" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Minimum Stock</FormLabel>
+                  <FormLabel>Low Stock</FormLabel>
                   <FormControl>
                     <Input type="number" min="0" placeholder="0" {...field} />
                   </FormControl>
