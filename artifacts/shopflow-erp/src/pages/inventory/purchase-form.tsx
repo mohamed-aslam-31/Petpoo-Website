@@ -424,17 +424,30 @@ export function PurchaseForm() {
     createAndPrintMutation.mutate({ data: buildPayload(values) });
   }
 
-  function onInvalid() {
-    // Find the first error element and scroll to it
-    const errorEl =
-      document.querySelector("[data-field-error]") as HTMLElement | null;
-    if (errorEl) {
-      errorEl.scrollIntoView({ behavior: "smooth", block: "center" });
-      // Try to focus the first focusable child inside
-      const focusable = errorEl.querySelector<HTMLElement>(
-        "input, button, select, textarea, [tabindex]"
-      );
-      focusable?.focus();
+  function scrollAndFocus(id: string) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const focusable = el.querySelector<HTMLElement>(
+      "input:not([disabled]), button:not([disabled]), select:not([disabled]), textarea:not([disabled])"
+    );
+    focusable?.focus();
+  }
+
+  function onInvalid(errors: Record<string, any>) {
+    if (errors.supplierId) { scrollAndFocus("field-supplierId"); return; }
+    if (errors.purchaseDate) { form.setFocus("purchaseDate"); return; }
+    if (errors.items) {
+      const itemErrors: any[] = errors.items;
+      for (let i = 0; i < itemErrors.length; i++) {
+        const row = itemErrors[i];
+        if (!row) continue;
+        if (row.brandComboVal || row.categoryComboVal || row.productId) {
+          scrollAndFocus(`item-row-${i}`); return;
+        }
+        if (row.quantity) { form.setFocus(`items.${i}.quantity`); return; }
+        if (row.purchasePrice) { form.setFocus(`items.${i}.purchasePrice`); return; }
+      }
     }
   }
 
@@ -588,7 +601,7 @@ export function PurchaseForm() {
               />
 
               {/* Supplier */}
-              <div className="space-y-2">
+              <div className="space-y-2" id="field-supplierId">
                 <Label>Supplier <span className="text-destructive">*</span></Label>
                 <div className="flex gap-2">
                   <div className="flex-1">
@@ -726,7 +739,7 @@ export function PurchaseForm() {
                     const gstAmt = lineTotal * ((Number(item?.gstPercent) || 0) / 100);
 
                     return (
-                      <tr key={field.id} className={cn("hover:bg-muted/20", selectedIds.has(field.id) && "bg-muted/30")}>
+                      <tr key={field.id} id={`item-row-${index}`} className={cn("hover:bg-muted/20", selectedIds.has(field.id) && "bg-muted/30")}>
                         {/* Checkbox */}
                         <td className="px-3 py-2">
                           <Checkbox
