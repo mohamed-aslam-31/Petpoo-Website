@@ -10,6 +10,7 @@ import {
   getListBrandsQueryKey,
   getListCategoriesQueryKey,
 } from "@workspace/api-client-react";
+import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -90,6 +91,12 @@ export function Products() {
   const [draftWholesale, setDraftWholesale] = useState(String(margins.wholesale));
   const [draftRetail,    setDraftRetail]    = useState(String(margins.retail));
 
+  // Bulk price-update state
+  const [bulkPriceConfirmOpen, setBulkPriceConfirmOpen] = useState(false);
+  const [pendingMargins, setPendingMargins] = useState<PriceMargins | null>(null);
+  const [bulkPriceUpdating, setBulkPriceUpdating] = useState(false);
+  const [bulkPriceProgress, setBulkPriceProgress] = useState({ done: 0, total: 0 });
+
   function openMarginsPanel() {
     const m = getMargins();
     setDraftWholesale(String(m.wholesale));
@@ -105,7 +112,57 @@ export function Products() {
     saveMargins(next);
     setMargins(next);
     setMarginsOpen(false);
-    toast.success("Profit margins saved");
+    setPendingMargins(next);
+    setBulkPriceConfirmOpen(true);
+  }
+
+  async function updateAllProductPrices(next: PriceMargins) {
+    setBulkPriceUpdating(true);
+    setBulkPriceProgress({ done: 0, total: 0 });
+    try {
+      // Fetch all products in one shot (no filters)
+      const res = await fetch("/api/products?limit=9999&page=1");
+      const json = await res.json();
+      const all: any[] = json.data ?? [];
+      const eligible = all.filter(p => (p.purchasePrice ?? 0) > 0);
+      setBulkPriceProgress({ done: 0, total: eligible.length });
+
+      let updated = 0;
+      let failed = 0;
+      for (const product of eligible) {
+        const pp = product.purchasePrice;
+        const newWholesale = Math.round(pp * (1 + next.wholesale / 100) * 100) / 100;
+        const newRetail    = Math.round(pp * (1 + next.retail    / 100) * 100) / 100;
+        try {
+          const r = await fetch(`/api/products/${product.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              wholesalePrice: newWholesale,
+              retailPrice:    newRetail,
+              sellingPrice:   newRetail,
+            }),
+          });
+          if (r.ok) updated++; else failed++;
+        } catch {
+          failed++;
+        }
+        setBulkPriceProgress(p => ({ ...p, done: p.done + 1 }));
+      }
+
+      queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
+      if (failed === 0) {
+        toast.success(`Updated prices for ${updated} product${updated !== 1 ? "s" : ""}`);
+      } else {
+        toast.warning(`${updated} updated, ${failed} failed`);
+      }
+    } catch {
+      toast.error("Failed to fetch products for bulk update");
+    } finally {
+      setBulkPriceUpdating(false);
+      setBulkPriceConfirmOpen(false);
+      setPendingMargins(null);
+    }
   }
 
   const queryClient = useQueryClient();
@@ -939,6 +996,63 @@ export function Products() {
                 {bulkDeleting ? "Deleting..." : "Delete All"}
               </Button>
             )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk price-update confirmation */}
+      <AlertDialog
+        open={bulkPriceConfirmOpen}
+        onOpenChange={open => { if (!open && !bulkPriceUpdating) { setBulkPriceConfirmOpen(false); setPendingMargins(null); } }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apply new margins to all products?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  Wholesale and retail prices for every product will be recalculated
+                  from their purchase price using the new margins:
+                </p>
+                <div className="rounded-md border bg-muted/40 px-4 py-3 text-sm grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-muted-foreground">Wholesale</span>
+                    <p className="font-semibold text-foreground">{pendingMargins?.wholesale ?? 0}% markup</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Retail</span>
+                    <p className="font-semibold text-foreground">{pendingMargins?.retail ?? 0}% markup</p>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Products with a purchase price of ₹0 will be skipped. You can
+                  still edit individual prices manually after this update.
+                </p>
+                {bulkPriceUpdating && (
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Updating prices…</span>
+                      <span>{bulkPriceProgress.done} / {bulkPriceProgress.total}</span>
+                    </div>
+                    <Progress
+                      value={bulkPriceProgress.total > 0 ? (bulkPriceProgress.done / bulkPriceProgress.total) * 100 : 0}
+                      className="h-1.5"
+                    />
+                  </div>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkPriceUpdating}>
+              Skip — settings only
+            </AlertDialogCancel>
+            <Button
+              disabled={bulkPriceUpdating}
+              onClick={() => pendingMargins && updateAllProductPrices(pendingMargins)}
+            >
+              {bulkPriceUpdating ? "Updating…" : "Update all products"}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
