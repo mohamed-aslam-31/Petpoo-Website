@@ -564,7 +564,7 @@ export function PurchaseForm() {
                 name="purchaseDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Purchase Date *</FormLabel>
+                    <FormLabel>Purchase Date <span className="text-destructive">*</span></FormLabel>
                     <FormControl>
                       <Input type="date" {...field} />
                     </FormControl>
@@ -575,7 +575,7 @@ export function PurchaseForm() {
 
               {/* Supplier */}
               <div className="space-y-2">
-                <Label>Supplier *</Label>
+                <Label>Supplier <span className="text-destructive">*</span></Label>
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <FormField
