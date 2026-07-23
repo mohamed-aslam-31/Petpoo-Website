@@ -336,7 +336,10 @@ export function PurchaseForm() {
       .map((f, i) => (selectedIds.has(f.id) ? i : -1))
       .filter((i) => i !== -1)
       .sort((a, b) => b - a);
-    indices.forEach((i) => remove(i));
+    // Always keep at least one row — if all are selected, skip the first (index 0)
+    const allWillBeDeleted = indices.length === fields.length;
+    const toRemove = allWillBeDeleted ? indices.filter((i) => i !== 0) : indices;
+    toRemove.forEach((i) => remove(i));
     setSelectedIds(new Set());
   };
   const watchedCharges = form.watch(["packingCharges", "transportCharges", "loadingCharges", "otherCharges", "discount"]);
