@@ -17,8 +17,8 @@ router.get("/brands", async (req, res): Promise<void> => {
       name: brandsTable.name,
       createdAt: brandsTable.createdAt,
       updatedAt: brandsTable.updatedAt,
-      categoriesCount: sql<number>`(select cast(count(*) as int) from ${categoriesTable} where ${categoriesTable.brandId} = ${brandsTable.id})`,
-      productsCount: sql<number>`(select cast(count(*) as int) from ${productsTable} where ${productsTable.brandId} = ${brandsTable.id})`,
+      categoriesCount: sql<number>`(select cast(count(*) as int) from categories where brand_id = brands.id)`,
+      productsCount: sql<number>`(select cast(count(*) as int) from products where brand_id = brands.id)`,
     })
     .from(brandsTable)
     .orderBy(brandsTable.name);
