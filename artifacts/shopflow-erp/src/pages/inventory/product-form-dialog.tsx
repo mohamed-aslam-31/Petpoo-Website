@@ -930,13 +930,14 @@ export function ProductFormDialog({
                 </>
               )}
 
-              {/* 13. Low Stock */}
+              {/* 13. Low Stock Alert */}
               <FormField control={form.control} name="minStock" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Low Stock</FormLabel>
+                  <FormLabel>Low Stock Alert</FormLabel>
                   <FormControl>
                     <Input type="number" min="0" placeholder="0" {...field} />
                   </FormControl>
+                  <p className="text-xs text-muted-foreground">Warn when stock falls below this qty</p>
                   <FormMessage />
                 </FormItem>
               )} />
