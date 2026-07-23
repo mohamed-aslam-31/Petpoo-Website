@@ -467,6 +467,7 @@ export function PurchaseForm() {
   );
 
   const isSaving = createMutation.isPending || createAndPrintMutation.isPending;
+  const supplierSelected = Number(form.watch("supplierId")) > 0;
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -636,6 +637,7 @@ export function PurchaseForm() {
                             options={brandOptions}
                             placeholder="Select brand…"
                             searchPlaceholder="Search brands…"
+                            disabled={!supplierSelected}
                           />
                         </td>
 
@@ -647,6 +649,7 @@ export function PurchaseForm() {
                             options={categoryOptions}
                             placeholder="Select category…"
                             searchPlaceholder="Search categories…"
+                            disabled={!supplierSelected}
                           />
                         </td>
 
@@ -658,6 +661,7 @@ export function PurchaseForm() {
                             options={productOptions}
                             placeholder="Select product…"
                             searchPlaceholder="Search products…"
+                            disabled={!supplierSelected}
                           />
                         </td>
 
