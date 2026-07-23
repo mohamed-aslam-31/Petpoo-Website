@@ -424,6 +424,20 @@ export function PurchaseForm() {
     createAndPrintMutation.mutate({ data: buildPayload(values) });
   }
 
+  function onInvalid() {
+    // Find the first error element and scroll to it
+    const errorEl =
+      document.querySelector("[data-field-error]") as HTMLElement | null;
+    if (errorEl) {
+      errorEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Try to focus the first focusable child inside
+      const focusable = errorEl.querySelector<HTMLElement>(
+        "input, button, select, textarea, [tabindex]"
+      );
+      focusable?.focus();
+    }
+  }
+
   // ── Per-row cascading logic ───────────────────────────────────────────────────
 
   const handleProductChange = useCallback(
@@ -562,8 +576,8 @@ export function PurchaseForm() {
               <FormField
                 control={form.control}
                 name="purchaseDate"
-                render={({ field }) => (
-                  <FormItem>
+                render={({ field, fieldState }) => (
+                  <FormItem {...(fieldState.error ? { "data-field-error": true } : {})}>
                     <FormLabel>Purchase Date <span className="text-destructive">*</span></FormLabel>
                     <FormControl>
                       <Input type="date" {...field} />
@@ -581,8 +595,8 @@ export function PurchaseForm() {
                     <FormField
                       control={form.control}
                       name="supplierId"
-                      render={({ field }) => (
-                        <FormItem>
+                      render={({ field, fieldState }) => (
+                        <FormItem {...(fieldState.error ? { "data-field-error": true } : {})}>
                           <SearchableSelect
                             value={field.value ? String(field.value) : ""}
                             onValueChange={(v) => field.onChange(Number(v))}
@@ -722,7 +736,8 @@ export function PurchaseForm() {
                           />
                         </td>
                         {/* Brand */}
-                        <td className="px-2 py-2">
+                        <td className="px-2 py-2"
+                          {...(form.formState.errors.items?.[index]?.brandComboVal ? { "data-field-error": true } : {})}>
                           <SearchableSelect
                             value={brandComboVal}
                             onValueChange={(v) => handleBrandChange(index, v)}
@@ -730,11 +745,18 @@ export function PurchaseForm() {
                             placeholder="Select brand…"
                             searchPlaceholder="Search brands…"
                             disabled={!supplierSelected}
+                            buttonClassName={form.formState.errors.items?.[index]?.brandComboVal ? "border-destructive" : ""}
                           />
+                          {form.formState.errors.items?.[index]?.brandComboVal && (
+                            <p className="text-[10px] text-destructive mt-0.5">
+                              {form.formState.errors.items[index].brandComboVal.message}
+                            </p>
+                          )}
                         </td>
 
                         {/* Category */}
-                        <td className="px-2 py-2">
+                        <td className="px-2 py-2"
+                          {...(form.formState.errors.items?.[index]?.categoryComboVal ? { "data-field-error": true } : {})}>
                           <SearchableSelect
                             value={categoryComboVal}
                             onValueChange={(v) => handleCategoryChange(index, v)}
@@ -742,11 +764,18 @@ export function PurchaseForm() {
                             placeholder="Select category…"
                             searchPlaceholder="Search categories…"
                             disabled={!supplierSelected}
+                            buttonClassName={form.formState.errors.items?.[index]?.categoryComboVal ? "border-destructive" : ""}
                           />
+                          {form.formState.errors.items?.[index]?.categoryComboVal && (
+                            <p className="text-[10px] text-destructive mt-0.5">
+                              {form.formState.errors.items[index].categoryComboVal.message}
+                            </p>
+                          )}
                         </td>
 
                         {/* Product */}
-                        <td className="px-2 py-2">
+                        <td className="px-2 py-2"
+                          {...(form.formState.errors.items?.[index]?.productId ? { "data-field-error": true } : {})}>
                           <SearchableSelect
                             value={item?.productId ? String(item.productId) : ""}
                             onValueChange={(v) => handleProductChange(index, v)}
@@ -754,7 +783,13 @@ export function PurchaseForm() {
                             placeholder="Select product…"
                             searchPlaceholder="Search products…"
                             disabled={!supplierSelected}
+                            buttonClassName={form.formState.errors.items?.[index]?.productId ? "border-destructive" : ""}
                           />
+                          {form.formState.errors.items?.[index]?.productId && (
+                            <p className="text-[10px] text-destructive mt-0.5">
+                              {form.formState.errors.items[index].productId.message}
+                            </p>
+                          )}
                         </td>
 
                         {/* Qty */}
@@ -970,7 +1005,7 @@ export function PurchaseForm() {
               type="button"
               variant="outline"
               disabled={isSaving}
-              onClick={form.handleSubmit(onSaveAndPrint)}
+              onClick={form.handleSubmit(onSaveAndPrint, onInvalid)}
               className="gap-2"
             >
               <Printer className="h-4 w-4" />
@@ -979,7 +1014,7 @@ export function PurchaseForm() {
             <Button
               type="button"
               disabled={isSaving}
-              onClick={form.handleSubmit(onSave)}
+              onClick={form.handleSubmit(onSave, onInvalid)}
               className="gap-2"
             >
               <Save className="h-4 w-4" />
