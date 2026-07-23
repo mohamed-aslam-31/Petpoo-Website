@@ -145,6 +145,7 @@ const itemSchema = z.object({
   quantity: z.coerce.number().int().min(1, "Qty must be ≥ 1"),
   unit: z.string().optional(),
   purchasePrice: z.coerce.number().min(0, "Price required"),
+  itemDiscount: z.coerce.number().min(0).optional(),
   gstPercent: z.coerce.number().min(0).optional(),
   lineTotal: z.coerce.number().optional(),
 });
@@ -175,6 +176,7 @@ const emptyItem = (): z.infer<typeof itemSchema> => ({
   quantity: 1,
   unit: "",
   purchasePrice: 0,
+  itemDiscount: 0,
   gstPercent: 0,
   lineTotal: 0,
 });
@@ -354,11 +356,17 @@ export function PurchaseForm() {
     return acc + qty * price;
   }, 0);
 
+  const itemDiscountTotal = watchedItems.reduce((acc, item) => {
+    return acc + (Number(item.itemDiscount) || 0);
+  }, 0);
+
   const gstTotal = watchedItems.reduce((acc, item) => {
     const qty = Number(item.quantity) || 0;
     const price = Number(item.purchasePrice) || 0;
+    const disc = Number(item.itemDiscount) || 0;
     const gst = Number(item.gstPercent) || 0;
-    return acc + qty * price * (gst / 100);
+    const base = qty * price - disc;
+    return acc + base * (gst / 100);
   }, 0);
 
   const packingCharges = Number(watchedCharges[0]) || 0;
@@ -367,7 +375,7 @@ export function PurchaseForm() {
   const otherCharges = Number(watchedCharges[3]) || 0;
   const discount = Number(watchedCharges[4]) || 0;
   const additionalCharges = packingCharges + transportCharges + loadingCharges + otherCharges;
-  const afterDiscount = subtotal - discount;
+  const afterDiscount = subtotal - itemDiscountTotal - discount;
   const afterGST = afterDiscount + (withGST ? gstTotal : 0);
   const grandTotal = afterGST + additionalCharges;
 
@@ -653,6 +661,7 @@ export function PurchaseForm() {
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[80px]">Qty *</th>
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[70px]">Unit</th>
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[110px]">Price *</th>
+                    <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[90px]">Disc</th>
                     {withGST && <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[70px] text-xs">GST %</th>}
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground min-w-[100px]">Total</th>
                     <th className="w-[40px]"></th>
@@ -696,8 +705,10 @@ export function PurchaseForm() {
                       label: p.name,
                     }));
 
-                    const lineTotal =
+                    const lineBase =
                       (Number(item?.quantity) || 0) * (Number(item?.purchasePrice) || 0);
+                    const lineDisc = Number(item?.itemDiscount) || 0;
+                    const lineTotal = lineBase - lineDisc;
                     const gstAmt = lineTotal * ((Number(item?.gstPercent) || 0) / 100);
 
                     return (
@@ -774,6 +785,18 @@ export function PurchaseForm() {
                             step="0.01"
                             className="h-8 text-xs text-right"
                             {...form.register(`items.${index}.purchasePrice`)}
+                          />
+                        </td>
+
+                        {/* Item Discount */}
+                        <td className="px-2 py-2">
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            placeholder="0"
+                            className="h-8 text-xs text-right"
+                            {...form.register(`items.${index}.itemDiscount`)}
                           />
                         </td>
 
