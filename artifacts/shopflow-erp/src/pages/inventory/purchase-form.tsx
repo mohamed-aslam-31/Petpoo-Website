@@ -15,6 +15,7 @@ import {
   getListSuppliersQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigationGuard, useBeforeUnload } from "@/components/navigation-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,6 +48,16 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Form,
   FormField,
@@ -181,6 +192,8 @@ const emptyItem = (): z.infer<typeof itemSchema> => ({
   lineTotal: 0,
 });
 
+const PURCHASE_DRAFT_KEY = "shopflow_purchase_draft";
+
 // ────────────────────────────────────────────────────────────────────────────────
 // Add Supplier mini-modal
 // ────────────────────────────────────────────────────────────────────────────────
@@ -279,9 +292,13 @@ function fmt(v: number) {
 // ────────────────────────────────────────────────────────────────────────────────
 
 export function PurchaseForm() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
+  const { registerNavigationGuard, navigateWithoutGuard } = useNavigationGuard();
   const [addSupplierOpen, setAddSupplierOpen] = useState(false);
+  const [confirmExitOpen, setConfirmExitOpen] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
+  const [pendingNavigate, setPendingNavigate] = useState<(() => void) | null>(null);
 
   // Data sources
   const { data: suppliersData } = useListSuppliers({ limit: 500 });
@@ -311,6 +328,22 @@ export function PurchaseForm() {
 
   const { fields, append, remove } = useFieldArray({ control: form.control, name: "items" });
   const watchedItems = form.watch("items");
+
+  useEffect(() => {
+    const storedDraft = localStorage.getItem(PURCHASE_DRAFT_KEY);
+    if (!storedDraft) return;
+
+    try {
+      const draft = JSON.parse(storedDraft) as { values?: FormValues; withGST?: boolean };
+      if (draft.values) {
+        form.reset(draft.values);
+        setWithGST(draft.withGST !== false);
+        toast.info("Your saved purchase draft has been restored");
+      }
+    } catch {
+      localStorage.removeItem(PURCHASE_DRAFT_KEY);
+    }
+  }, [form]);
 
   // ── Checkbox selection ────────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -347,6 +380,43 @@ export function PurchaseForm() {
   const watchedCharges = form.watch(["packingCharges", "transportCharges", "loadingCharges", "otherCharges", "discount"]);
 
   const [withGST, setWithGST] = useState(true);
+  const isDirty = form.formState.isDirty || withGST !== true;
+  useBeforeUnload(isDirty);
+
+  const finishNavigation = useCallback((path: string, navigate: () => void) => {
+    setConfirmExitOpen(false);
+    setPendingNavigation(null);
+    setPendingNavigate(null);
+    navigate();
+  }, []);
+
+  const requestExit = useCallback((path: string, navigate: () => void) => {
+    if (isDirty) {
+      setPendingNavigation(path);
+      setPendingNavigate(() => navigate);
+      setConfirmExitOpen(true);
+      return;
+    }
+    navigate();
+  }, [isDirty]);
+
+  useEffect(() => {
+    return registerNavigationGuard(requestExit, location);
+  }, [location, registerNavigationGuard, requestExit]);
+
+  const saveDraftAndLeave = () => {
+    localStorage.setItem(
+      PURCHASE_DRAFT_KEY,
+      JSON.stringify({ values: form.getValues(), withGST }),
+    );
+    toast.success("Purchase moved to drafts");
+    if (pendingNavigation && pendingNavigate) finishNavigation(pendingNavigation, pendingNavigate);
+  };
+
+  const discardAndLeave = () => {
+    localStorage.removeItem(PURCHASE_DRAFT_KEY);
+    if (pendingNavigation && pendingNavigate) finishNavigation(pendingNavigation, pendingNavigate);
+  };
 
   // ── Totals ────────────────────────────────────────────────────────────────────
 
@@ -385,8 +455,9 @@ export function PurchaseForm() {
     mutation: {
       onSuccess: () => {
         toast.success("Purchase saved — stock updated");
+        localStorage.removeItem(PURCHASE_DRAFT_KEY);
         queryClient.invalidateQueries({ queryKey: getListPurchasesQueryKey() });
-        setLocation("/inventory/purchases");
+        navigateWithoutGuard(() => setLocation("/inventory/purchases"));
       },
       onError: (e: any) => toast.error(e?.message ?? "Failed to save purchase"),
     },
@@ -396,9 +467,10 @@ export function PurchaseForm() {
     mutation: {
       onSuccess: (data) => {
         toast.success("Purchase saved — stock updated");
+        localStorage.removeItem(PURCHASE_DRAFT_KEY);
         queryClient.invalidateQueries({ queryKey: getListPurchasesQueryKey() });
         // Navigate to purchase detail for printing
-        setLocation(`/inventory/purchases/${data.id}`);
+        navigateWithoutGuard(() => setLocation(`/inventory/purchases/${data.id}`));
         setTimeout(() => window.print(), 600);
       },
       onError: (e: any) => toast.error(e?.message ?? "Failed to save purchase"),
@@ -462,21 +534,21 @@ export function PurchaseForm() {
       const brand = allBrands.find((b: { id: number }) => b.id === product.brandId);
       const category = allCategories.find((c: { id: number }) => c.id === product.categoryId);
 
-      form.setValue(`items.${index}.productId`, pid);
-      form.setValue(`items.${index}.currentStock`, product.currentStock ?? 0);
-      form.setValue(`items.${index}.unit`, product.unit ?? "");
-      form.setValue(`items.${index}.purchasePrice`, parseFloat(String(product.purchasePrice ?? 0)));
-      form.setValue(`items.${index}.gstPercent`, parseFloat(String(product.gstPercent ?? 0)));
+      form.setValue(`items.${index}.productId`, pid, { shouldDirty: true });
+      form.setValue(`items.${index}.currentStock`, product.currentStock ?? 0, { shouldDirty: true });
+      form.setValue(`items.${index}.unit`, product.unit ?? "", { shouldDirty: true });
+      form.setValue(`items.${index}.purchasePrice`, parseFloat(String(product.purchasePrice ?? 0)), { shouldDirty: true });
+      form.setValue(`items.${index}.gstPercent`, parseFloat(String(product.gstPercent ?? 0)), { shouldDirty: true });
       // Auto-fill brand
       const brandCombo = product.brandId ? String(product.brandId) : NO_BRAND;
-      form.setValue(`items.${index}.brandComboVal`, brandCombo, { shouldValidate: true });
-      form.setValue(`items.${index}.brandId`, product.brandId ?? null);
-      form.setValue(`items.${index}.brandName`, brand?.name ?? null);
+      form.setValue(`items.${index}.brandComboVal`, brandCombo, { shouldDirty: true, shouldValidate: true });
+      form.setValue(`items.${index}.brandId`, product.brandId ?? null, { shouldDirty: true });
+      form.setValue(`items.${index}.brandName`, brand?.name ?? null, { shouldDirty: true });
       // Auto-fill category
       const catCombo = product.categoryId ? String(product.categoryId) : NO_CATEGORY;
-      form.setValue(`items.${index}.categoryComboVal`, catCombo, { shouldValidate: true });
-      form.setValue(`items.${index}.categoryId`, product.categoryId ?? null);
-      form.setValue(`items.${index}.categoryName`, category?.name ?? null);
+      form.setValue(`items.${index}.categoryComboVal`, catCombo, { shouldDirty: true, shouldValidate: true });
+      form.setValue(`items.${index}.categoryId`, product.categoryId ?? null, { shouldDirty: true });
+      form.setValue(`items.${index}.categoryName`, category?.name ?? null, { shouldDirty: true });
     },
     [allProducts, allBrands, allCategories, form]
   );
@@ -485,9 +557,9 @@ export function PurchaseForm() {
     (index: number, comboVal: string) => {
       const bid = comboVal === NO_BRAND ? null : Number(comboVal) || null;
       const brand = allBrands.find((b: { id: number }) => b.id === bid);
-      form.setValue(`items.${index}.brandComboVal`, comboVal, { shouldValidate: true });
-      form.setValue(`items.${index}.brandId`, bid);
-      form.setValue(`items.${index}.brandName`, brand?.name ?? null);
+      form.setValue(`items.${index}.brandComboVal`, comboVal, { shouldDirty: true, shouldValidate: true });
+      form.setValue(`items.${index}.brandId`, bid, { shouldDirty: true });
+      form.setValue(`items.${index}.brandName`, brand?.name ?? null, { shouldDirty: true });
       // Check if the current category is still valid for the new brand
       const currentCatCombo = form.getValues(`items.${index}.categoryComboVal`);
       const currentCatId = form.getValues(`items.${index}.categoryId`);
@@ -500,16 +572,16 @@ export function PurchaseForm() {
         return cat.brandId === bid;
       })();
       if (!catStillValid) {
-        form.setValue(`items.${index}.categoryComboVal`, "");
-        form.setValue(`items.${index}.categoryId`, null);
-        form.setValue(`items.${index}.categoryName`, null);
+        form.setValue(`items.${index}.categoryComboVal`, "", { shouldDirty: true });
+        form.setValue(`items.${index}.categoryId`, null, { shouldDirty: true });
+        form.setValue(`items.${index}.categoryName`, null, { shouldDirty: true });
       }
       // Clear product so user re-selects
-      form.setValue(`items.${index}.productId`, 0);
-      form.setValue(`items.${index}.currentStock`, 0);
-      form.setValue(`items.${index}.unit`, "");
-      form.setValue(`items.${index}.purchasePrice`, 0);
-      form.setValue(`items.${index}.gstPercent`, 0);
+      form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
+      form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
+      form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
+      form.setValue(`items.${index}.purchasePrice`, 0, { shouldDirty: true });
+      form.setValue(`items.${index}.gstPercent`, 0, { shouldDirty: true });
     },
     [allBrands, allCategories, form]
   );
@@ -518,23 +590,23 @@ export function PurchaseForm() {
     (index: number, comboVal: string) => {
       const cid = comboVal === NO_CATEGORY ? null : Number(comboVal) || null;
       const category = allCategories.find((c: { id: number }) => c.id === cid);
-      form.setValue(`items.${index}.categoryComboVal`, comboVal, { shouldValidate: true });
-      form.setValue(`items.${index}.categoryId`, cid);
-      form.setValue(`items.${index}.categoryName`, category?.name ?? null);
+      form.setValue(`items.${index}.categoryComboVal`, comboVal, { shouldDirty: true, shouldValidate: true });
+      form.setValue(`items.${index}.categoryId`, cid, { shouldDirty: true });
+      form.setValue(`items.${index}.categoryName`, category?.name ?? null, { shouldDirty: true });
       // Auto-set brand based on category's brandId
       if (comboVal !== NO_CATEGORY && category) {
         const brandCombo = category.brandId ? String(category.brandId) : NO_BRAND;
         const brand = allBrands.find((b: { id: number }) => b.id === category.brandId);
-        form.setValue(`items.${index}.brandComboVal`, brandCombo, { shouldValidate: true });
-        form.setValue(`items.${index}.brandId`, category.brandId ?? null);
-        form.setValue(`items.${index}.brandName`, brand?.name ?? null);
+        form.setValue(`items.${index}.brandComboVal`, brandCombo, { shouldDirty: true, shouldValidate: true });
+        form.setValue(`items.${index}.brandId`, category.brandId ?? null, { shouldDirty: true });
+        form.setValue(`items.${index}.brandName`, brand?.name ?? null, { shouldDirty: true });
       }
       // Clear product so user re-selects
-      form.setValue(`items.${index}.productId`, 0);
-      form.setValue(`items.${index}.currentStock`, 0);
-      form.setValue(`items.${index}.unit`, "");
-      form.setValue(`items.${index}.purchasePrice`, 0);
-      form.setValue(`items.${index}.gstPercent`, 0);
+      form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
+      form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
+      form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
+      form.setValue(`items.${index}.purchasePrice`, 0, { shouldDirty: true });
+      form.setValue(`items.${index}.gstPercent`, 0, { shouldDirty: true });
     },
     [allCategories, allBrands, form]
   );
@@ -551,7 +623,7 @@ export function PurchaseForm() {
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setLocation("/inventory/purchases")}
+           onClick={() => setLocation("/inventory/purchases")}
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -1041,8 +1113,40 @@ export function PurchaseForm() {
       <AddSupplierDialog
         open={addSupplierOpen}
         onOpenChange={setAddSupplierOpen}
-        onCreated={(id) => form.setValue("supplierId", id)}
+        onCreated={(id) => form.setValue("supplierId", id, { shouldDirty: true, shouldValidate: true })}
       />
+
+      <AlertDialog
+        open={confirmExitOpen}
+        onOpenChange={(open) => {
+          setConfirmExitOpen(open);
+          if (!open) setPendingNavigation(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Leave this purchase?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have entered purchase details that have not been saved. Would you like to move this bill to drafts or cancel the purchase?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:space-x-0">
+            <AlertDialogCancel>Continue Editing</AlertDialogCancel>
+            <AlertDialogAction
+              className="border bg-background text-foreground hover:bg-muted"
+              onClick={saveDraftAndLeave}
+            >
+              Move to Draft
+            </AlertDialogAction>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={discardAndLeave}
+            >
+              Cancel Purchase
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

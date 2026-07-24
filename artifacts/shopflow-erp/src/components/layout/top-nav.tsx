@@ -4,9 +4,11 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useLocation } from "wouter";
 import { getAuthData } from "@/lib/auth";
+import { useNavigationGuard } from "@/components/navigation-guard";
 
 export function TopNav() {
   const [, setLocation] = useLocation();
+  const { requestNavigation, navigateWithoutGuard } = useNavigationGuard();
   const auth = getAuthData();
   const email = auth?.email || "Guest";
   const isAdminUser = auth?.role === "admin";
@@ -16,8 +18,10 @@ export function TopNav() {
     .toUpperCase() || "?";
 
   const handleLogout = () => {
-    localStorage.removeItem("shopflow_auth");
-    setLocation("/");
+    requestNavigation("/", () => {
+      localStorage.removeItem("shopflow_auth");
+      navigateWithoutGuard(() => setLocation("/"));
+    });
   };
 
   return (

@@ -3,8 +3,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppLayout } from "./components/layout/app-layout";
+import { HISTORY_INDEX_KEY, NavigationGuardProvider, useNavigationGuard } from "./components/navigation-guard";
 
 // Pages
 import { Login } from "./pages/login";
@@ -92,13 +93,43 @@ function Router() {
   );
 }
 
+function GuardedRouter() {
+  const { requestNavigation } = useNavigationGuard();
+  const historyIndexRef = useRef<number>(
+    Number.isInteger(window.history.state?.[HISTORY_INDEX_KEY])
+      ? window.history.state[HISTORY_INDEX_KEY]
+      : 0,
+  );
+
+  return (
+    <WouterRouter
+      base={import.meta.env.BASE_URL.replace(/\/$/, "")}
+      aroundNav={(navigate, path, options) =>
+        requestNavigation(path, () => {
+          const nextIndex = options?.replace
+            ? historyIndexRef.current
+            : historyIndexRef.current + 1;
+          const state = {
+            ...(typeof options?.state === "object" && options.state ? options.state : {}),
+            [HISTORY_INDEX_KEY]: nextIndex,
+          };
+          historyIndexRef.current = nextIndex;
+          navigate(path, { ...options, state });
+        })
+      }
+    >
+      <Router />
+    </WouterRouter>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
-        </WouterRouter>
+        <NavigationGuardProvider>
+          <GuardedRouter />
+        </NavigationGuardProvider>
         <Toaster position="top-right" richColors />
       </TooltipProvider>
     </QueryClientProvider>

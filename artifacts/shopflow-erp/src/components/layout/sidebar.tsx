@@ -74,7 +74,7 @@ export function Sidebar() {
                   </h3>
                   {item.items.map((subItem) => {
                     const isActive = location === subItem.href;
-                    return (
+                      return (
                       <Link key={subItem.name} href={subItem.href} className="block">
                         <div
                           className={cn(
