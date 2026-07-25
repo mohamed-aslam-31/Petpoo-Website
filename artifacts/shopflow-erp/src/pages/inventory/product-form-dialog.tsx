@@ -736,41 +736,18 @@ export function ProductFormDialog({
                 );
               }} />
 
-              {/* 2. SKU */}
+              {/* 2. SKU — auto-generated on create, read-only always */}
               <FormField control={form.control} name="sku" render={({ field }) => (
                 <FormItem>
-                  <div className="flex items-center justify-between">
-                    <FormLabel>SKU <Req /></FormLabel>
-                    {!isEditing && (
-                      <button
-                        type="button"
-                        className="text-xs text-primary hover:underline disabled:opacity-40"
-                        disabled={skuLoading}
-                        onClick={() => {
-                          setSkuLoading(true);
-                          fetch("/api/products/next-sku")
-                            .then(r => r.json())
-                            .then(({ sku }) => form.setValue("sku", sku, { shouldValidate: true }))
-                            .catch(() => {})
-                            .finally(() => setSkuLoading(false));
-                        }}
-                      >
-                        {skuLoading ? "Generating…" : "↺ Regenerate"}
-                      </button>
-                    )}
-                  </div>
+                  <FormLabel>SKU</FormLabel>
                   <FormControl>
                     <Input
-                      placeholder={skuLoading ? "Generating…" : "e.g. ACT-1"}
-                      disabled={skuLoading}
                       {...field}
-                      onChange={e => {
-                        field.onChange(e.target.value.toUpperCase());
-                        form.trigger("sku");
-                      }}
+                      readOnly
+                      placeholder={skuLoading ? "Generating…" : ""}
+                      className="bg-muted/50 text-muted-foreground cursor-default select-all"
                     />
                   </FormControl>
-                  <FormMessage />
                 </FormItem>
               )} />
 
