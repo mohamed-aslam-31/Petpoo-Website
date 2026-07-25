@@ -44,7 +44,7 @@ router.get("/products/next-sku", async (req, res): Promise<void> => {
   const [row] = await db
     .select({ sku: productsTable.sku })
     .from(productsTable)
-    .where(sql`${productsTable.sku} ~ '^SKU-[0-9]+$'`)
+    .where(sql`${productsTable.sku} ~ '^ACT-[0-9]+$'`)
     .orderBy(sql`cast(substring(${productsTable.sku} from 5) as integer) desc`)
     .limit(1);
 
@@ -54,7 +54,7 @@ router.get("/products/next-sku", async (req, res): Promise<void> => {
     if (!isNaN(num)) next = num + 1;
   }
 
-  const sku = `SKU-${String(next).padStart(3, "0")}`;
+  const sku = `ACT-${next}`;
   res.json({ sku });
 });
 

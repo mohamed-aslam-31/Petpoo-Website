@@ -736,6 +736,44 @@ export function ProductFormDialog({
                 );
               }} />
 
+              {/* 2. SKU */}
+              <FormField control={form.control} name="sku" render={({ field }) => (
+                <FormItem>
+                  <div className="flex items-center justify-between">
+                    <FormLabel>SKU <Req /></FormLabel>
+                    {!isEditing && (
+                      <button
+                        type="button"
+                        className="text-xs text-primary hover:underline disabled:opacity-40"
+                        disabled={skuLoading}
+                        onClick={() => {
+                          setSkuLoading(true);
+                          fetch("/api/products/next-sku")
+                            .then(r => r.json())
+                            .then(({ sku }) => form.setValue("sku", sku, { shouldValidate: true }))
+                            .catch(() => {})
+                            .finally(() => setSkuLoading(false));
+                        }}
+                      >
+                        {skuLoading ? "Generating…" : "↺ Regenerate"}
+                      </button>
+                    )}
+                  </div>
+                  <FormControl>
+                    <Input
+                      placeholder={skuLoading ? "Generating…" : "e.g. ACT-1"}
+                      disabled={skuLoading}
+                      {...field}
+                      onChange={e => {
+                        field.onChange(e.target.value.toUpperCase());
+                        form.trigger("sku");
+                      }}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
               {/* 3. Barcode */}
               <FormField control={form.control} name="barcode" render={({ field }) => (
                 <FormItem>
