@@ -1146,6 +1146,10 @@ export function PurchaseForm() {
       // Use the first item that references this product for its details
       const srcItem = items.find(i => i.productComboVal === pKey)!;
       const purchasePrice = Number(srcItem.purchasePrice) || 0;
+      const { wholesale: wPct, retail: rPct } = getMargins();
+      const round2 = (n: number) => Math.round(n * 100) / 100;
+      const wholesalePrice = round2(purchasePrice * (1 + wPct / 100));
+      const retailPrice    = round2(purchasePrice * (1 + rPct / 100));
       try {
         const res = await fetch("/api/products", {
           method: "POST",
@@ -1155,9 +1159,9 @@ export function PurchaseForm() {
             sku,
             unit: srcItem.unit,
             purchasePrice,
-            sellingPrice: purchasePrice,
-            wholesalePrice: purchasePrice,
-            retailPrice: purchasePrice,
+            sellingPrice:   retailPrice,
+            wholesalePrice,
+            retailPrice,
             gstPercent: Number(srcItem.gstPercent) || 0,
             currentStock: 0, // purchase save will add the quantity to stock
             minStock: 0,
