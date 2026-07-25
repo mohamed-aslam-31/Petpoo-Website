@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,8 +11,6 @@ import {
   useListProducts,
   useListBrands,
   useListCategories,
-  useCreateBrand,
-  useCreateCategory,
   useCreateProduct,
   useUpdateProduct,
   getListPurchasesQueryKey,
@@ -85,6 +83,8 @@ import { cn } from "@/lib/utils";
 
 const NO_BRAND = "no-brand";
 const NO_CATEGORY = "no-category";
+/** Prefix for brand/category values that are pending creation (deferred until Save Purchase) */
+const NEW_ITEM_PREFIX = "__new__:";
 
 // ── Units (stored in localStorage, same list as product-form-dialog) ──────────
 const UNITS_STORAGE_KEY = "shopflow-units";
@@ -101,7 +101,10 @@ function getStoredUnits(): string[] {
   return DEFAULT_UNITS;
 }
 
-// ── Searchable select for table cells (supports optional inline "Add new") ────
+// ── Searchable select for table cells ─────────────────────────────────────────
+// Supports deferred "Add new" for brand/category (stores __new__:name in form,
+// actual API creation is deferred until Save Purchase).
+// Supports staticAddLabel for products (opens a dialog immediately).
 
 function SearchableSelect({
   value,
@@ -112,8 +115,7 @@ function SearchableSelect({
   disabled,
   buttonClassName,
   popoverWidth = "w-48",
-  onCreate,
-  isCreating,
+  allowCreate = false,
   staticAddLabel,
   onStaticAdd,
 }: {
@@ -125,20 +127,31 @@ function SearchableSelect({
   disabled?: boolean;
   buttonClassName?: string;
   popoverWidth?: string;
-  /** Called with the typed text to create a new item inline (brand / category) */
-  onCreate?: (name: string) => void;
-  isCreating?: boolean;
-  /** Always-visible "Add new …" button (for product) */
+  /** When true, typing an unknown name shows "Add 'X'" — stores __new__:X (deferred creation) */
+  allowCreate?: boolean;
+  /** Always-visible "Add new …" button (opens a dialog, e.g. for products) */
   staticAddLabel?: string;
   onStaticAdd?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const selected = options.find((o) => o.value === value);
+
+  const isPendingNew = value.startsWith(NEW_ITEM_PREFIX);
+  const pendingNewName = isPendingNew ? value.slice(NEW_ITEM_PREFIX.length) : null;
+
+  // Include any pending-new item in the options list so it shows as "selected"
+  const allOptions: { value: string; label: string }[] = isPendingNew
+    ? [{ value, label: pendingNewName! }, ...options]
+    : options;
+
+  const selected = allOptions.find((o) => o.value === value);
 
   const trimmed = search.trim();
-  const notExists = !options.some((o) => o.label.toLowerCase() === trimmed.toLowerCase());
-  const canCreate = !!onCreate && trimmed.length >= 1 && notExists;
+  const notExists =
+    trimmed.length >= 1 &&
+    !options.some((o) => o.label.toLowerCase() === trimmed.toLowerCase()) &&
+    !(`${NEW_ITEM_PREFIX}${trimmed}` === value); // already selected as pending-new
+  const canCreate = allowCreate && notExists;
 
   function handleSelect(val: string) {
     onValueChange(val);
@@ -159,6 +172,11 @@ function SearchableSelect({
           <span className={cn("truncate min-w-0 flex-1 text-left", !selected && "text-muted-foreground")}>
             {selected ? selected.label : placeholder}
           </span>
+          {isPendingNew && (
+            <span className="ml-1 shrink-0 rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+              New
+            </span>
+          )}
           <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -171,7 +189,7 @@ function SearchableSelect({
             onValueChange={setSearch}
           />
           <CommandList className="max-h-48 overflow-y-auto">
-            {/* Static "Add new product" button — always visible */}
+            {/* Static "Add new" button for products (opens dialog immediately) */}
             {staticAddLabel && onStaticAdd && (
               <>
                 <CommandGroup>
@@ -187,30 +205,33 @@ function SearchableSelect({
                 <CommandSeparator />
               </>
             )}
-            {/* Inline "Add 'X'" for brand / category */}
+            {/* Deferred "Add 'X'" for brand / category — stores __new__:X */}
             {canCreate && (
               <>
                 <CommandGroup>
                   <CommandItem
-                    value={`__create__${trimmed}`}
-                    onSelect={() => { setOpen(false); setSearch(""); onCreate!(trimmed); }}
+                    value={`${NEW_ITEM_PREFIX}${trimmed}`}
+                    onSelect={() => {
+                      setOpen(false);
+                      setSearch("");
+                      onValueChange(`${NEW_ITEM_PREFIX}${trimmed}`);
+                    }}
                     className="text-xs text-primary font-medium"
-                    disabled={isCreating}
                   >
                     <Plus className="mr-2 h-3 w-3" />
-                    {isCreating ? "Adding…" : `Add "${trimmed}"`}
+                    Add "{trimmed}" <span className="ml-1 text-[9px] text-muted-foreground">(saved on submit)</span>
                   </CommandItem>
                 </CommandGroup>
                 <CommandSeparator />
               </>
             )}
-            {options.filter((o) =>
+            {allOptions.filter((o) =>
               !search || o.label.toLowerCase().includes(search.toLowerCase())
             ).length === 0 && !canCreate ? (
               <div className="py-2 text-xs text-center text-muted-foreground">No results.</div>
             ) : (
               <CommandGroup>
-                {options
+                {allOptions
                   .filter((o) => !search || o.label.toLowerCase().includes(search.toLowerCase()))
                   .map((opt) => (
                     <CommandItem
@@ -653,8 +674,6 @@ export function PurchaseForm() {
   const [confirmExitOpen, setConfirmExitOpen] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [pendingNavigate, setPendingNavigate] = useState<(() => void) | null>(null);
-  // Inline brand/category creation
-  const pendingRowRef = useRef<number>(-1);
   // New product dialog
   const [newProductOpen, setNewProductOpen] = useState(false);
   const [newProductRowIndex, setNewProductRowIndex] = useState(-1);
@@ -894,12 +913,26 @@ export function PurchaseForm() {
     } as any;
   }
 
-  function onSave(values: FormValues) {
-    createMutation.mutate({ data: buildPayload(values) });
+  async function onSave(values: FormValues) {
+    setIsResolving(true);
+    try {
+      const resolved = await resolveNewItemsAndGetPayload(values);
+      if (!resolved) return;
+      createMutation.mutate({ data: buildPayload(resolved) });
+    } finally {
+      setIsResolving(false);
+    }
   }
 
-  function onSaveAndPrint(values: FormValues) {
-    createAndPrintMutation.mutate({ data: buildPayload(values) });
+  async function onSaveAndPrint(values: FormValues) {
+    setIsResolving(true);
+    try {
+      const resolved = await resolveNewItemsAndGetPayload(values);
+      if (!resolved) return;
+      createAndPrintMutation.mutate({ data: buildPayload(resolved) });
+    } finally {
+      setIsResolving(false);
+    }
   }
 
   function scrollAndFocus(id: string) {
@@ -964,13 +997,20 @@ export function PurchaseForm() {
 
   const handleBrandChange = useCallback(
     (index: number, comboVal: string) => {
-      const bid = comboVal === NO_BRAND ? null : Number(comboVal) || null;
-      const brand = allBrands.find((b: { id: number }) => b.id === bid);
-      form.setValue(`items.${index}.brandComboVal`, comboVal, { shouldDirty: true, shouldValidate: true });
-      form.setValue(`items.${index}.brandId`, bid, { shouldDirty: true });
-      form.setValue(`items.${index}.brandName`, brand?.name ?? null, { shouldDirty: true });
-      // Category selection is independent — leave it untouched.
-      // Only clear the product so user re-selects under the new brand.
+      if (comboVal.startsWith(NEW_ITEM_PREFIX)) {
+        // Pending-new brand: store the name, leave brandId null (resolved on save)
+        const name = comboVal.slice(NEW_ITEM_PREFIX.length);
+        form.setValue(`items.${index}.brandComboVal`, comboVal, { shouldDirty: true, shouldValidate: true });
+        form.setValue(`items.${index}.brandId`, null, { shouldDirty: true });
+        form.setValue(`items.${index}.brandName`, name, { shouldDirty: true });
+      } else {
+        const bid = comboVal === NO_BRAND ? null : Number(comboVal) || null;
+        const brand = allBrands.find((b: { id: number }) => b.id === bid);
+        form.setValue(`items.${index}.brandComboVal`, comboVal, { shouldDirty: true, shouldValidate: true });
+        form.setValue(`items.${index}.brandId`, bid, { shouldDirty: true });
+        form.setValue(`items.${index}.brandName`, brand?.name ?? null, { shouldDirty: true });
+      }
+      // Category stays untouched. Only clear product so user re-selects.
       form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
       form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
       form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
@@ -982,14 +1022,18 @@ export function PurchaseForm() {
 
   const handleCategoryChange = useCallback(
     (index: number, comboVal: string) => {
-      // comboVal is the category NAME (deduplication key), or NO_CATEGORY
       form.setValue(`items.${index}.categoryComboVal`, comboVal, { shouldDirty: true, shouldValidate: true });
-      if (comboVal === NO_CATEGORY) {
+      if (comboVal.startsWith(NEW_ITEM_PREFIX)) {
+        // Pending-new category: store the name, leave categoryId null (resolved on save)
+        const name = comboVal.slice(NEW_ITEM_PREFIX.length);
+        form.setValue(`items.${index}.categoryId`, null, { shouldDirty: true });
+        form.setValue(`items.${index}.categoryName`, name, { shouldDirty: true });
+      } else if (comboVal === NO_CATEGORY) {
         form.setValue(`items.${index}.categoryId`, null, { shouldDirty: true });
         form.setValue(`items.${index}.categoryName`, null, { shouldDirty: true });
       } else {
+        // Existing category selected by name — resolve its ID
         form.setValue(`items.${index}.categoryName`, comboVal, { shouldDirty: true });
-        // Resolve categoryId: prefer one matching the currently selected brand, else first match
         const currentBrandId = form.getValues(`items.${index}.brandId`);
         const catsWithName = allCategories.filter((c: { name: string }) => c.name === comboVal);
         const resolvedCat =
@@ -997,8 +1041,7 @@ export function PurchaseForm() {
           catsWithName[0];
         form.setValue(`items.${index}.categoryId`, resolvedCat?.id ?? null, { shouldDirty: true });
       }
-      // Brand selection is independent — leave it untouched.
-      // Only clear the product so user re-selects under the new category.
+      // Brand stays untouched. Only clear product so user re-selects.
       form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
       form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
       form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
@@ -1008,48 +1051,118 @@ export function PurchaseForm() {
     [allCategories, form]
   );
 
-  // ── Inline brand/category creation ───────────────────────────────────────────
+  // ── Deferred brand/category creation (runs on Save Purchase, not inline) ─────
+  //
+  // Brand/category values prefixed with NEW_ITEM_PREFIX are "pending new" — they
+  // live only in form state while the user is filling in the purchase. When the
+  // user clicks Save Purchase the function below creates them in order:
+  //   1. Create all pending brands → get real IDs.
+  //   2. Create all pending categories with the *resolved* brand IDs → get real IDs.
+  //   3. Patch any products in the items whose brand/category may have changed.
+  // Draft saves skip this entirely — nothing is created until Save Purchase.
 
-  const createBrandMutation = useCreateBrand({
-    mutation: {
-      onSuccess: (brand) => {
-        const idx = pendingRowRef.current;
-        pendingRowRef.current = -1;
-        toast.success(`Brand "${brand.name}" created`);
-        queryClient.invalidateQueries({ queryKey: getListBrandsQueryKey() });
-        if (idx >= 0) handleBrandChange(idx, String(brand.id));
-      },
-      onError: (e: any) => { pendingRowRef.current = -1; toast.error(e?.message ?? "Failed to create brand"); },
-    },
-  });
+  const [isResolving, setIsResolving] = useState(false);
 
-  const createCategoryMutation = useCreateCategory({
-    mutation: {
-      onSuccess: (cat) => {
-        const idx = pendingRowRef.current;
-        pendingRowRef.current = -1;
-        toast.success(`Category "${cat.name}" created`);
-        queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
-        if (idx >= 0) {
-          // Set values directly from the fresh mutation response — don't go through
-          // handleCategoryChange, which reads allCategories from the React Query cache
-          // that hasn't refreshed yet (new entry missing → brand gets wrongly cleared).
-          form.setValue(`items.${idx}.categoryComboVal`, cat.name, { shouldDirty: true, shouldValidate: true });
-          form.setValue(`items.${idx}.categoryId`, cat.id, { shouldDirty: true });
-          form.setValue(`items.${idx}.categoryName`, cat.name, { shouldDirty: true });
-          // Clear product so user re-selects; brand stays untouched.
-          form.setValue(`items.${idx}.productId`, 0, { shouldDirty: true });
-          form.setValue(`items.${idx}.currentStock`, 0, { shouldDirty: true });
-          form.setValue(`items.${idx}.unit`, "", { shouldDirty: true });
-          form.setValue(`items.${idx}.purchasePrice`, 0, { shouldDirty: true });
-          form.setValue(`items.${idx}.gstPercent`, 0, { shouldDirty: true });
+  async function resolveNewItemsAndGetPayload(values: FormValues): Promise<FormValues | null> {
+    const NP = NEW_ITEM_PREFIX;
+    let items = [...values.items];
+
+    // ── 1. Create pending brands (deduplicated by comboVal key) ───────────────
+    const brandKeyToId = new Map<string, number>(); // "__new__:X" → realId
+    const pendingBrandKeys = [...new Set(items.filter(i => i.brandComboVal.startsWith(NP)).map(i => i.brandComboVal))];
+    for (const bKey of pendingBrandKeys) {
+      const name = bKey.slice(NP.length);
+      try {
+        const res = await fetch("/api/brands", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error((await res.json())?.message ?? res.statusText);
+        const brand = await res.json();
+        brandKeyToId.set(bKey, brand.id);
+        toast.success(`Brand "${name}" created`);
+      } catch (e: any) {
+        toast.error(`Failed to create brand "${name}": ${e?.message ?? ""}`);
+        return null;
+      }
+    }
+
+    // ── 2. Resolve brandId in each item ──────────────────────────────────────
+    items = items.map(item =>
+      item.brandComboVal.startsWith(NP)
+        ? { ...item, brandId: brandKeyToId.get(item.brandComboVal) ?? null }
+        : item
+    );
+
+    // ── 3. Create pending categories (deduplicated by name+resolvedBrandId) ──
+    const catKeyToId = new Map<string, number>(); // "name::brandId" → realId
+    const seenCats = new Set<string>();
+    const pendingCats: { comboVal: string; name: string; brandId: number | null }[] = [];
+    for (const item of items) {
+      if (item.categoryComboVal.startsWith(NP)) {
+        const name = item.categoryComboVal.slice(NP.length);
+        const brandId = item.brandId ?? null;
+        const dedupeKey = `${name}::${brandId}`;
+        if (!seenCats.has(dedupeKey)) {
+          seenCats.add(dedupeKey);
+          pendingCats.push({ comboVal: item.categoryComboVal, name, brandId });
         }
-      },
-      onError: (e: any) => { pendingRowRef.current = -1; toast.error(e?.message ?? "Failed to create category"); },
-    },
-  });
+      }
+    }
+    for (const { name, brandId } of pendingCats) {
+      try {
+        const res = await fetch("/api/categories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, brandId }),
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error((await res.json())?.message ?? res.statusText);
+        const cat = await res.json();
+        catKeyToId.set(`${name}::${brandId}`, cat.id);
+        toast.success(`Category "${name}" created`);
+      } catch (e: any) {
+        toast.error(`Failed to create category "${name}": ${e?.message ?? ""}`);
+        return null;
+      }
+    }
 
-  const isSaving = createMutation.isPending || createAndPrintMutation.isPending;
+    // ── 4. Resolve categoryId in each item ────────────────────────────────────
+    items = items.map(item => {
+      if (item.categoryComboVal.startsWith(NP)) {
+        const name = item.categoryComboVal.slice(NP.length);
+        const brandId = item.brandId ?? null;
+        return { ...item, categoryId: catKeyToId.get(`${name}::${brandId}`) ?? null };
+      }
+      return item;
+    });
+
+    // ── 5. Patch products whose brand/category changed (best-effort) ──────────
+    if (brandKeyToId.size > 0 || catKeyToId.size > 0) {
+      await Promise.allSettled(
+        items
+          .filter(item => item.productId > 0)
+          .map(item =>
+            fetch(`/api/products/${item.productId}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ brandId: item.brandId ?? null, categoryId: item.categoryId ?? null }),
+              credentials: "include",
+            }).catch(() => {})
+          )
+      );
+      queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
+    }
+
+    if (brandKeyToId.size > 0) queryClient.invalidateQueries({ queryKey: getListBrandsQueryKey() });
+    if (catKeyToId.size > 0) queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
+
+    return { ...values, items };
+  }
+
+  const isSaving = isResolving || createMutation.isPending || createAndPrintMutation.isPending;
   const supplierSelected = Number(form.watch("supplierId")) > 0;
 
   // ── Render ────────────────────────────────────────────────────────────────────
@@ -1210,14 +1323,17 @@ export function PurchaseForm() {
                     const brandComboVal = item?.brandComboVal ?? "";
                     const categoryComboVal = item?.categoryComboVal ?? "";
 
-                    // Brand options — show ALL brands regardless of category selection.
-                    // Cross-filtering was removed: selecting a brand/category only filters products.
+                    const isPendingNewBrand = brandComboVal.startsWith(NEW_ITEM_PREFIX);
+                    const isPendingNewCat = categoryComboVal.startsWith(NEW_ITEM_PREFIX);
+
+                    // Brand options — ALL brands; append pending-new entry if one is queued
                     const brandOptions = [
                       { value: NO_BRAND, label: "No Brand" },
                       ...allBrands.map((b) => ({ value: String(b.id), label: b.name })),
+                      ...(isPendingNewBrand ? [{ value: brandComboVal, label: brandComboVal.slice(NEW_ITEM_PREFIX.length) }] : []),
                     ];
 
-                    // Category options — show ALL categories (deduplicated by name), regardless of brand.
+                    // Category options — ALL categories (deduplicated by name); append pending-new entry
                     const categoryOptions = (() => {
                       const seen = new Set<string>();
                       const deduped = allCategories.filter((c) => {
@@ -1225,20 +1341,22 @@ export function PurchaseForm() {
                         seen.add(c.name);
                         return true;
                       });
-                      return [
+                      const opts = [
                         { value: NO_CATEGORY, label: "No Category" },
                         ...deduped.map((c) => ({ value: c.name, label: c.name })),
                       ];
+                      if (isPendingNewCat) {
+                        opts.push({ value: categoryComboVal, label: categoryComboVal.slice(NEW_ITEM_PREFIX.length) });
+                      }
+                      return opts;
                     })();
 
-                    // Product options — filter by brand and/or category
-                    // categoryComboVal is now a name; use resolved categoryId when available,
-                    // otherwise match any category record sharing that name.
+                    // Product options — filter by brand/category; pending-new brand/category → no filter on that axis
                     const filteredProducts = allProducts.filter((p) => {
-                      const brandOk = !brandComboVal || (
+                      const brandOk = isPendingNewBrand || !brandComboVal || (
                         brandComboVal === NO_BRAND ? !p.brandId : p.brandId === Number(brandComboVal)
                       );
-                      const catOk = !categoryComboVal || (
+                      const catOk = isPendingNewCat || !categoryComboVal || (
                         categoryComboVal === NO_CATEGORY
                           ? !p.categoryId
                           : item?.categoryId
@@ -1281,11 +1399,7 @@ export function PurchaseForm() {
                             searchPlaceholder="Search or add brand…"
                             disabled={!supplierSelected}
                             buttonClassName={form.formState.errors.items?.[index]?.brandComboVal ? "border-destructive" : ""}
-                            onCreate={(name) => {
-                              pendingRowRef.current = index;
-                              createBrandMutation.mutate({ data: { name } });
-                            }}
-                            isCreating={createBrandMutation.isPending && pendingRowRef.current === index}
+                            allowCreate
                           />
                           {form.formState.errors.items?.[index]?.brandComboVal && (
                             <p className="text-[10px] text-destructive mt-0.5">
@@ -1305,12 +1419,7 @@ export function PurchaseForm() {
                             searchPlaceholder="Search or add category…"
                             disabled={!supplierSelected}
                             buttonClassName={form.formState.errors.items?.[index]?.categoryComboVal ? "border-destructive" : ""}
-                            onCreate={(name) => {
-                              const brandId = form.getValues(`items.${index}.brandId`);
-                              pendingRowRef.current = index;
-                              createCategoryMutation.mutate({ data: { name, brandId: brandId ?? null } });
-                            }}
-                            isCreating={createCategoryMutation.isPending && pendingRowRef.current === index}
+                            allowCreate
                           />
                           {form.formState.errors.items?.[index]?.categoryComboVal && (
                             <p className="text-[10px] text-destructive mt-0.5">
