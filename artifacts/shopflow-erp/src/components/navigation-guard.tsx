@@ -1,5 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useRef } from "react";
 
+export const HISTORY_INDEX_KEY = "__shopflow_history_index__";
+
 type NavigationGuard = (path: string, navigate: Navigate) => void;
 type Navigate = () => void;
 
