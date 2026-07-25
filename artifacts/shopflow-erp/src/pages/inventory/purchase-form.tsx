@@ -621,13 +621,27 @@ export function PurchaseForm() {
       form.setValue(`items.${index}.categoryComboVal`, comboVal, { shouldDirty: true, shouldValidate: true });
       form.setValue(`items.${index}.categoryId`, cid, { shouldDirty: true });
       form.setValue(`items.${index}.categoryName`, category?.name ?? null, { shouldDirty: true });
-      // Auto-set brand based on category's brandId
-      if (comboVal !== NO_CATEGORY && category) {
-        const brandCombo = category.brandId ? String(category.brandId) : NO_BRAND;
-        const brand = allBrands.find((b: { id: number }) => b.id === category.brandId);
-        form.setValue(`items.${index}.brandComboVal`, brandCombo, { shouldDirty: true, shouldValidate: true });
-        form.setValue(`items.${index}.brandId`, category.brandId ?? null, { shouldDirty: true });
-        form.setValue(`items.${index}.brandName`, brand?.name ?? null, { shouldDirty: true });
+      // Derive brands from products in this category
+      if (comboVal !== NO_CATEGORY && cid !== null) {
+        const productsInCat = allProducts.filter((p: { categoryId: number | null }) => p.categoryId === cid);
+        const brandIdsInCat = [...new Set(
+          productsInCat
+            .map((p: { brandId: number | null }) => p.brandId)
+            .filter((id): id is number => id !== null && id !== undefined)
+        )];
+        if (brandIdsInCat.length === 1) {
+          // Exactly one brand — auto-select it
+          const bid = brandIdsInCat[0];
+          const brand = allBrands.find((b: { id: number }) => b.id === bid);
+          form.setValue(`items.${index}.brandComboVal`, String(bid), { shouldDirty: true, shouldValidate: true });
+          form.setValue(`items.${index}.brandId`, bid, { shouldDirty: true });
+          form.setValue(`items.${index}.brandName`, brand?.name ?? null, { shouldDirty: true });
+        } else {
+          // Multiple brands (or none) — clear so user picks
+          form.setValue(`items.${index}.brandComboVal`, "", { shouldDirty: true, shouldValidate: true });
+          form.setValue(`items.${index}.brandId`, null, { shouldDirty: true });
+          form.setValue(`items.${index}.brandName`, null, { shouldDirty: true });
+        }
       }
       // Clear product so user re-selects
       form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
@@ -636,7 +650,7 @@ export function PurchaseForm() {
       form.setValue(`items.${index}.purchasePrice`, 0, { shouldDirty: true });
       form.setValue(`items.${index}.gstPercent`, 0, { shouldDirty: true });
     },
-    [allCategories, allBrands, form]
+    [allCategories, allBrands, allProducts, form]
   );
 
   const isSaving = createMutation.isPending || createAndPrintMutation.isPending;
@@ -800,10 +814,22 @@ export function PurchaseForm() {
                     const brandComboVal = item?.brandComboVal ?? "";
                     const categoryComboVal = item?.categoryComboVal ?? "";
 
-                    // Brand options: No Brand + all brands (unfiltered)
+                    // Brand options: when a category is selected, show only brands
+                    // that have products in that category; otherwise show all brands.
+                    const brandsForCategory = (() => {
+                      if (!categoryComboVal || categoryComboVal === NO_CATEGORY) return allBrands;
+                      const cid = Number(categoryComboVal);
+                      const brandIdsInCat = new Set(
+                        allProducts
+                          .filter((p: { categoryId: number | null }) => p.categoryId === cid)
+                          .map((p: { brandId: number | null }) => p.brandId)
+                          .filter((id): id is number => id !== null && id !== undefined)
+                      );
+                      return allBrands.filter((b: { id: number }) => brandIdsInCat.has(b.id));
+                    })();
                     const brandOptions = [
                       { value: NO_BRAND, label: "No Brand" },
-                      ...allBrands.map((b) => ({ value: String(b.id), label: b.name })),
+                      ...brandsForCategory.map((b) => ({ value: String(b.id), label: b.name })),
                     ];
 
                     // Category options — filtered by brand if brand is selected, otherwise show all
