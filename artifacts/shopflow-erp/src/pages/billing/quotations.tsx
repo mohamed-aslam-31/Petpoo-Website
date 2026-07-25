@@ -505,7 +505,7 @@ function QuotationFormDialog({ open, onOpenChange, quotation }: { open: boolean;
                 <span>₹{rawSubtotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               {totalDiscountAmount > 0 && (
-                <div className="flex justify-between text-orange-600 dark:text-orange-400">
+                <div className="flex justify-between text-green-600 dark:text-green-400">
                   <span>Total Discount ({totalDiscountPct.toFixed(1)}%)</span>
                   <span>−₹{totalDiscountAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                 </div>

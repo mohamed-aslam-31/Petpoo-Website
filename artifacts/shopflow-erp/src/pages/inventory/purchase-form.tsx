@@ -1670,7 +1670,7 @@ export function PurchaseForm() {
 
                 {/* Total Discount — read-only, derived from item discounts */}
                 {itemDiscountTotal > 0 && (
-                  <div className="flex justify-between text-orange-600 dark:text-orange-400">
+                  <div className="flex justify-between text-green-600 dark:text-green-400">
                     <span>Total Discount ({itemDiscountPct.toFixed(1)}%)</span>
                     <span>− {fmt(itemDiscountTotal)}</span>
                   </div>
