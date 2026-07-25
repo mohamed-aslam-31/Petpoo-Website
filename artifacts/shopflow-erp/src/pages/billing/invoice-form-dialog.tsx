@@ -103,7 +103,7 @@ export function InvoiceFormDialog({
           customerId: invoice.customerId,
           type: normaliseType(invoice.type),
           status: invoice.status ?? "completed",
-          discount: invoice.discount,
+          discount: 0,
           transport: invoice.transport,
           packageCharge: invoice.packageCharge ?? 0,
           otherCharge: invoice.otherCharge ?? 0,
@@ -168,23 +168,22 @@ export function InvoiceFormDialog({
   const [creditError, setCreditError] = useState<string | null>(null);
 
   const watchedItems = form.watch("items");
-  const itemsTotal = watchedItems.reduce((sum, item) => {
-    const qty = Number(item.quantity) || 0;
-    const price = Number(item.unitPrice) || 0;
-    const disc = Number(item.discount) || 0;
-    const gst = isGst ? (Number(item.gstPercent) || 0) : 0;
-    return sum + qty * price * (1 - disc / 100) * (1 + gst / 100);
-  }, 0);
+  const rawSubtotal = watchedItems.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0), 0);
+  const totalDiscountAmount = watchedItems.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0) * ((Number(item.discount) || 0) / 100), 0);
+  const totalDiscountPct = rawSubtotal > 0 ? (totalDiscountAmount / rawSubtotal) * 100 : 0;
+  const gstAmount = isGst ? watchedItems.reduce((sum, item) => {
+    const base = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0) * (1 - (Number(item.discount) || 0) / 100);
+    return sum + base * ((Number(item.gstPercent) || 0) / 100);
+  }, 0) : 0;
   const transport = Number(form.watch("transport")) || 0;
   const packageCharge = Number(form.watch("packageCharge")) || 0;
   const otherCharge = Number(form.watch("otherCharge")) || 0;
-  const discountTotal = Number(form.watch("discount")) || 0;
-  const grandTotal = itemsTotal + transport + packageCharge + otherCharge - discountTotal;
+  const grandTotal = rawSubtotal - totalDiscountAmount + gstAmount + transport + packageCharge + otherCharge;
 
   const isOrderLinked = !!invoice?.orderId;
 
   function onSubmit(values: FormValues) {
-    const payload = { ...values, dueDate: values.dueDate || undefined };
+    const payload = { ...values, dueDate: values.dueDate || undefined, discount: 0 };
     // Zero out GST for non-GST invoices
     if (values.type === "non_gst") {
       payload.items = payload.items.map((item) => ({ ...item, gstPercent: 0 }));
@@ -332,9 +331,47 @@ export function InvoiceFormDialog({
               {form.formState.errors.items?.root && <p className="text-sm text-destructive">{form.formState.errors.items.root.message}</p>}
             </div>
 
-            <div className="flex justify-between items-center text-sm font-medium pt-2 border-t">
-              <span className="text-muted-foreground">Grand Total</span>
-              <span className="text-lg font-bold">₹{grandTotal.toFixed(2)}</span>
+            {/* Summary */}
+            <div className="rounded-md border bg-muted/20 p-3 space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span>₹{rawSubtotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+              {totalDiscountAmount > 0 && (
+                <div className="flex justify-between text-orange-600 dark:text-orange-400">
+                  <span>Total Discount ({totalDiscountPct.toFixed(1)}%)</span>
+                  <span>−₹{totalDiscountAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              {isGst && gstAmount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">GST Amount</span>
+                  <span>₹{gstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              {transport > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Transport</span>
+                  <span>₹{transport.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              {packageCharge > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Packaging</span>
+                  <span>₹{packageCharge.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              {otherCharge > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Other Charges</span>
+                  <span>₹{otherCharge.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              <Separator />
+              <div className="flex justify-between font-bold text-base">
+                <span>Grand Total</span>
+                <span>₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
             </div>
 
             {/* Credit status preview (only for new invoices with a customer selected) */}

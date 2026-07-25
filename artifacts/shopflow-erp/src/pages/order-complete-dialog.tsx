@@ -150,18 +150,19 @@ export function OrderCompleteDialog({
   });
 
   const watchedItems = form.watch("items");
-  const itemsTotal = watchedItems.reduce((sum, item) => {
-    const qty = Number(item.quantity) || 0;
-    const price = Number(item.unitPrice) || 0;
-    const disc = Number(item.discount) || 0;
-    const gst = Number(item.gstPercent) || 0;
-    return sum + qty * price * (1 - disc / 100) * (1 + gst / 100);
-  }, 0);
+  const invoiceType = form.watch("invoiceType");
+  const isGst = invoiceType === "gst";
+  const rawSubtotal = watchedItems.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0), 0);
+  const totalDiscountAmount = watchedItems.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0) * ((Number(item.discount) || 0) / 100), 0);
+  const totalDiscountPct = rawSubtotal > 0 ? (totalDiscountAmount / rawSubtotal) * 100 : 0;
+  const gstAmount = isGst ? watchedItems.reduce((sum, item) => {
+    const base = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0) * (1 - (Number(item.discount) || 0) / 100);
+    return sum + base * ((Number(item.gstPercent) || 0) / 100);
+  }, 0) : 0;
   const transport = Number(form.watch("transportCharge")) || 0;
   const pkg = Number(form.watch("packageCharge")) || 0;
   const other = Number(form.watch("otherCharge")) || 0;
-  const discountTotal = Number(form.watch("discount")) || 0;
-  const grandTotal = itemsTotal + transport + pkg + other - discountTotal;
+  const grandTotal = rawSubtotal - totalDiscountAmount + gstAmount + transport + pkg + other;
 
   function onSubmit(values: FormValues) {
     if (!order) return;
@@ -279,9 +280,47 @@ export function OrderCompleteDialog({
               ))}
             </div>
 
-            <div className="flex justify-between items-center text-sm font-medium pt-2 border-t">
-              <span className="text-muted-foreground">Grand Total</span>
-              <span className="text-lg font-bold">₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            {/* Summary */}
+            <div className="rounded-md border bg-muted/20 p-3 space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span>₹{rawSubtotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+              {totalDiscountAmount > 0 && (
+                <div className="flex justify-between text-orange-600 dark:text-orange-400">
+                  <span>Total Discount ({totalDiscountPct.toFixed(1)}%)</span>
+                  <span>−₹{totalDiscountAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              {isGst && gstAmount > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">GST Amount</span>
+                  <span>₹{gstAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              {transport > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Transport</span>
+                  <span>₹{transport.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              {pkg > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Packaging</span>
+                  <span>₹{pkg.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              {other > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Other Charges</span>
+                  <span>₹{other.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              )}
+              <Separator />
+              <div className="flex justify-between font-bold text-base">
+                <span>Grand Total</span>
+                <span>₹{grandTotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
             </div>
 
             {/* Credit status preview */}
