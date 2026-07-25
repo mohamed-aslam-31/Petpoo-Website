@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useLocation } from "wouter";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,8 +11,15 @@ import {
   useListProducts,
   useListBrands,
   useListCategories,
+  useCreateBrand,
+  useCreateCategory,
+  useCreateProduct,
+  useUpdateProduct,
   getListPurchasesQueryKey,
   getListSuppliersQueryKey,
+  getListBrandsQueryKey,
+  getListCategoriesQueryKey,
+  getListProductsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigationGuard, useBeforeUnload } from "@/components/navigation-guard";
@@ -40,6 +47,7 @@ import {
   CommandEmpty,
   CommandGroup,
   CommandItem,
+  CommandSeparator,
 } from "@/components/ui/command";
 import {
   Dialog,
@@ -78,6 +86,23 @@ import { cn } from "@/lib/utils";
 const NO_BRAND = "no-brand";
 const NO_CATEGORY = "no-category";
 
+// ── Units (stored in localStorage, same list as product-form-dialog) ──────────
+const UNITS_STORAGE_KEY = "shopflow-units";
+const DEFAULT_UNITS = [
+  "pc", "pcs", "kg", "g", "mg", "l", "ml",
+  "box", "dozen", "pair", "set", "roll", "sheet", "bag", "bottle",
+];
+function getStoredUnits(): string[] {
+  try {
+    const stored = localStorage.getItem(UNITS_STORAGE_KEY);
+    const parsed = stored ? JSON.parse(stored) : null;
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  } catch {}
+  return DEFAULT_UNITS;
+}
+
+// ── Searchable select for table cells (supports optional inline "Add new") ────
+
 function SearchableSelect({
   value,
   onValueChange,
@@ -87,6 +112,10 @@ function SearchableSelect({
   disabled,
   buttonClassName,
   popoverWidth = "w-48",
+  onCreate,
+  isCreating,
+  staticAddLabel,
+  onStaticAdd,
 }: {
   value: string;
   onValueChange: (val: string) => void;
@@ -96,12 +125,29 @@ function SearchableSelect({
   disabled?: boolean;
   buttonClassName?: string;
   popoverWidth?: string;
+  /** Called with the typed text to create a new item inline (brand / category) */
+  onCreate?: (name: string) => void;
+  isCreating?: boolean;
+  /** Always-visible "Add new …" button (for product) */
+  staticAddLabel?: string;
+  onStaticAdd?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const selected = options.find((o) => o.value === value);
 
+  const trimmed = search.trim();
+  const notExists = !options.some((o) => o.label.toLowerCase() === trimmed.toLowerCase());
+  const canCreate = !!onCreate && trimmed.length >= 1 && notExists;
+
+  function handleSelect(val: string) {
+    onValueChange(val);
+    setOpen(false);
+    setSearch("");
+  }
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSearch(""); }}>
       <PopoverTrigger asChild>
         <Button
           type="button"
@@ -117,27 +163,329 @@ function SearchableSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent className={cn("p-0", popoverWidth)} align="start" sideOffset={4}>
-        <Command>
-          <CommandInput placeholder={searchPlaceholder} className="h-8 text-xs" />
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder={searchPlaceholder}
+            className="h-8 text-xs"
+            value={search}
+            onValueChange={setSearch}
+          />
           <CommandList className="max-h-48 overflow-y-auto">
-            <CommandEmpty className="py-2 text-xs text-center text-muted-foreground">No results.</CommandEmpty>
-            <CommandGroup>
-              {options.map((opt) => (
-                <CommandItem
-                  key={opt.value}
-                  value={opt.label}
-                  onSelect={() => { onValueChange(opt.value); setOpen(false); }}
-                  className="text-xs"
-                >
-                  <Check className={cn("mr-2 h-3 w-3", value === opt.value ? "opacity-100" : "opacity-0")} />
-                  {opt.label}
-                </CommandItem>
-              ))}
-            </CommandGroup>
+            {/* Static "Add new product" button — always visible */}
+            {staticAddLabel && onStaticAdd && (
+              <>
+                <CommandGroup>
+                  <CommandItem
+                    value="__static_add__"
+                    onSelect={() => { setOpen(false); setSearch(""); onStaticAdd(); }}
+                    className="text-xs text-primary font-medium"
+                  >
+                    <Plus className="mr-2 h-3 w-3" />
+                    {staticAddLabel}
+                  </CommandItem>
+                </CommandGroup>
+                <CommandSeparator />
+              </>
+            )}
+            {/* Inline "Add 'X'" for brand / category */}
+            {canCreate && (
+              <>
+                <CommandGroup>
+                  <CommandItem
+                    value={`__create__${trimmed}`}
+                    onSelect={() => { setOpen(false); setSearch(""); onCreate!(trimmed); }}
+                    className="text-xs text-primary font-medium"
+                    disabled={isCreating}
+                  >
+                    <Plus className="mr-2 h-3 w-3" />
+                    {isCreating ? "Adding…" : `Add "${trimmed}"`}
+                  </CommandItem>
+                </CommandGroup>
+                <CommandSeparator />
+              </>
+            )}
+            {options.filter((o) =>
+              !search || o.label.toLowerCase().includes(search.toLowerCase())
+            ).length === 0 && !canCreate ? (
+              <div className="py-2 text-xs text-center text-muted-foreground">No results.</div>
+            ) : (
+              <CommandGroup>
+                {options
+                  .filter((o) => !search || o.label.toLowerCase().includes(search.toLowerCase()))
+                  .map((opt) => (
+                    <CommandItem
+                      key={opt.value}
+                      value={opt.label}
+                      onSelect={() => handleSelect(opt.value)}
+                      className="text-xs"
+                    >
+                      <Check className={cn("mr-2 h-3 w-3", value === opt.value ? "opacity-100" : "opacity-0")} />
+                      {opt.label}
+                    </CommandItem>
+                  ))}
+              </CommandGroup>
+            )}
           </CommandList>
         </Command>
       </PopoverContent>
     </Popover>
+  );
+}
+
+// ── Unit select (searchable, can add new) ─────────────────────────────────────
+
+function UnitSelect({
+  value,
+  onChange,
+  error,
+  compact = false,
+}: {
+  value: string;
+  onChange: (unit: string) => void;
+  error?: string;
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [availableUnits, setAvailableUnits] = useState<string[]>(getStoredUnits);
+
+  const filtered = availableUnits.filter(u =>
+    u.toLowerCase().includes(search.toLowerCase())
+  );
+  const trimmed = search.trim();
+  const hasWhitespace = /\s/.test(trimmed);
+  const tooLong = trimmed.length > 10;
+  const notExists = !availableUnits.some(u => u.toLowerCase() === trimmed.toLowerCase());
+  const canAdd = trimmed.length >= 1 && !hasWhitespace && !tooLong && notExists;
+
+  function select(unit: string) {
+    onChange(unit);
+    setOpen(false);
+    setSearch("");
+  }
+
+  function addUnit() {
+    if (!trimmed || hasWhitespace || tooLong) return;
+    const updated = [...availableUnits, trimmed];
+    setAvailableUnits(updated);
+    try { localStorage.setItem(UNITS_STORAGE_KEY, JSON.stringify(updated)); } catch {}
+    select(trimmed);
+  }
+
+  return (
+    <div>
+      <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSearch(""); }}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            className={cn(
+              "w-full justify-between font-normal text-left overflow-hidden",
+              compact ? "h-8 px-2 text-xs" : "h-9 text-sm",
+              error && "border-destructive"
+            )}
+          >
+            <span className={cn("truncate", !value && "text-muted-foreground")}>
+              {value || "Select unit…"}
+            </span>
+            <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="p-0 w-44" align="start" sideOffset={4}>
+          <Command shouldFilter={false}>
+            <CommandInput
+              placeholder="Search or add…"
+              value={search}
+              onValueChange={setSearch}
+              className="h-8 text-xs"
+            />
+            <CommandList className="max-h-44 overflow-y-auto">
+              {canAdd && (
+                <>
+                  <CommandGroup>
+                    <CommandItem value={`__add__${trimmed}`} onSelect={addUnit} className="text-xs text-primary font-medium">
+                      <Plus className="mr-2 h-3 w-3" />
+                      Add "{trimmed}"
+                    </CommandItem>
+                  </CommandGroup>
+                  <CommandSeparator />
+                </>
+              )}
+              {!canAdd && trimmed.length > 0 && (hasWhitespace || tooLong) && (
+                <div className="px-3 py-2 text-xs text-destructive">
+                  {hasWhitespace ? "No spaces allowed" : "Max 10 chars"}
+                </div>
+              )}
+              {filtered.length > 0 ? (
+                <CommandGroup>
+                  {filtered.map(unit => (
+                    <CommandItem key={unit} value={unit} onSelect={() => select(unit)} className="text-xs">
+                      <Check className={cn("mr-2 h-3 w-3", value === unit ? "opacity-100" : "opacity-0")} />
+                      {unit}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ) : trimmed.length === 0 ? (
+                <div className="py-4 text-center text-xs text-muted-foreground">No units.</div>
+              ) : null}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      {error && <p className="text-[10px] text-destructive mt-0.5">{error}</p>}
+    </div>
+  );
+}
+
+// ── New Product mini-dialog ───────────────────────────────────────────────────
+
+const newProductSchema = z.object({
+  name: z.string().min(2, "At least 2 characters").max(80),
+  purchasePrice: z.coerce.number().min(0, "Required"),
+  sellingPrice: z.coerce.number().min(0),
+  wholesalePrice: z.coerce.number().min(0),
+  gstPercent: z.coerce.number().min(0).max(100),
+});
+type NewProductValues = z.infer<typeof newProductSchema>;
+
+function NewProductDialog({
+  open,
+  onOpenChange,
+  defaultBrandId,
+  defaultCategoryId,
+  defaultPurchasePrice,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  defaultBrandId?: number | null;
+  defaultCategoryId?: number | null;
+  defaultPurchasePrice?: number;
+  onCreated: (product: { id: number; name: string; purchasePrice: number; unit: string; gstPercent: number }) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [unit, setUnit] = useState("");
+  const [unitError, setUnitError] = useState<string | undefined>();
+  const [skuLoading, setSkuLoading] = useState(false);
+  const [sku, setSku] = useState("");
+
+  const form = useForm<NewProductValues>({
+    resolver: zodResolver(newProductSchema),
+    defaultValues: { name: "", purchasePrice: defaultPurchasePrice ?? 0, sellingPrice: 0, wholesalePrice: 0, gstPercent: 0 },
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    setUnit("");
+    setUnitError(undefined);
+    form.reset({ name: "", purchasePrice: defaultPurchasePrice ?? 0, sellingPrice: 0, wholesalePrice: 0, gstPercent: 0 });
+    setSkuLoading(true);
+    fetch("/api/products/next-sku")
+      .then(r => r.json())
+      .then(({ sku: s }) => setSku(s))
+      .catch(() => setSku("SKU-001"))
+      .finally(() => setSkuLoading(false));
+  }, [open, defaultPurchasePrice, form]);
+
+  const createMutation = useCreateProduct({
+    mutation: {
+      onSuccess: (product) => {
+        toast.success(`Product "${product.name}" created`);
+        queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
+        onCreated({ id: product.id, name: product.name, purchasePrice: product.purchasePrice, unit: product.unit, gstPercent: product.gstPercent });
+        onOpenChange(false);
+      },
+      onError: (e: any) => toast.error(e?.message ?? "Failed to create product"),
+    },
+  });
+
+  function onSubmit(values: NewProductValues) {
+    if (!unit) { setUnitError("Unit is required"); return; }
+    setUnitError(undefined);
+    createMutation.mutate({
+      data: {
+        ...values,
+        sku,
+        unit,
+        sellingPrice: values.sellingPrice || values.purchasePrice,
+        wholesalePrice: values.wholesalePrice || values.purchasePrice,
+        retailPrice: values.sellingPrice || values.purchasePrice,
+        currentStock: 0,
+        minStock: 0,
+        brandId: defaultBrandId ?? null,
+        categoryId: defaultCategoryId ?? null,
+        status: "active",
+      } as any,
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>New Product</DialogTitle>
+          <DialogDescription>Create a new product. You can edit full details later in Inventory.</DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+            <FormField control={form.control} name="name" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Product Name <span className="text-destructive">*</span></FormLabel>
+                <FormControl><Input placeholder="e.g. HDPE Rope 10mm" maxLength={80} {...field} /></FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-sm">SKU</Label>
+                <Input value={skuLoading ? "Generating…" : sku} readOnly className="bg-muted/50 text-muted-foreground text-sm" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-sm">Unit <span className="text-destructive">*</span></Label>
+                <UnitSelect value={unit} onChange={setUnit} error={unitError} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <FormField control={form.control} name="purchasePrice" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Purchase Price <span className="text-destructive">*</span></FormLabel>
+                  <FormControl><Input type="number" min={0} step="0.01" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="sellingPrice" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Selling Price</FormLabel>
+                  <FormControl><Input type="number" min={0} step="0.01" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="wholesalePrice" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Wholesale Price</FormLabel>
+                  <FormControl><Input type="number" min={0} step="0.01" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="gstPercent" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>GST %</FormLabel>
+                  <FormControl><Input type="number" min={0} max={100} step="0.01" {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+              <Button type="submit" disabled={createMutation.isPending}>
+                {createMutation.isPending ? "Creating…" : "Create Product"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -160,6 +508,10 @@ const itemSchema = z.object({
   itemDiscount: z.coerce.number().min(0).optional(),
   gstPercent: z.coerce.number().min(0).optional(),
   lineTotal: z.coerce.number().optional(),
+  /** Stored purchase price at the time the product was selected (for comparison UI) */
+  prevPurchasePrice: z.coerce.number().nullable().optional(),
+  /** When true, update the product's stored purchase price on save */
+  updatePrice: z.boolean().optional(),
 });
 
 const schema = z.object({
@@ -191,6 +543,8 @@ const emptyItem = (): z.infer<typeof itemSchema> => ({
   itemDiscount: 0,
   gstPercent: 0,
   lineTotal: 0,
+  prevPurchasePrice: null,
+  updatePrice: false,
 });
 
 
@@ -299,6 +653,11 @@ export function PurchaseForm() {
   const [confirmExitOpen, setConfirmExitOpen] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [pendingNavigate, setPendingNavigate] = useState<(() => void) | null>(null);
+  // Inline brand/category creation
+  const pendingRowRef = useRef<number>(-1);
+  // New product dialog
+  const [newProductOpen, setNewProductOpen] = useState(false);
+  const [newProductRowIndex, setNewProductRowIndex] = useState(-1);
   // ID of the draft currently being edited (null = new, unsaved draft)
   const [draftId, setDraftId] = useState<string | null>(() =>
     new URLSearchParams(window.location.search).get("draft")
@@ -480,9 +839,27 @@ export function PurchaseForm() {
 
   // ── Mutation ──────────────────────────────────────────────────────────────────
 
+  // Flush any "update price" requests for items where checkbox is ticked
+  async function flushPriceUpdates() {
+    const items = form.getValues("items");
+    const toUpdate = items.filter((i) => i.updatePrice && Number(i.productId) > 0);
+    if (toUpdate.length === 0) return;
+    await Promise.allSettled(
+      toUpdate.map((i) =>
+        fetch(`/api/products/${i.productId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ purchasePrice: Number(i.purchasePrice) }),
+        })
+      )
+    );
+    queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
+  }
+
   const createMutation = useCreatePurchase({
     mutation: {
-      onSuccess: () => {
+      onSuccess: async () => {
+        await flushPriceUpdates();
         toast.success("Purchase saved — stock updated");
         if (draftId) removeDraft(draftId);
         queryClient.invalidateQueries({ queryKey: getListPurchasesQueryKey() });
@@ -494,7 +871,8 @@ export function PurchaseForm() {
 
   const createAndPrintMutation = useCreatePurchase({
     mutation: {
-      onSuccess: (data) => {
+      onSuccess: async (data) => {
+        await flushPriceUpdates();
         toast.success("Purchase saved — stock updated");
         if (draftId) removeDraft(draftId);
         queryClient.invalidateQueries({ queryKey: getListPurchasesQueryKey() });
@@ -562,11 +940,14 @@ export function PurchaseForm() {
       const brand = allBrands.find((b: { id: number }) => b.id === product.brandId);
       const category = allCategories.find((c: { id: number }) => c.id === product.categoryId);
 
+      const prevPrice = parseFloat(String(product.purchasePrice ?? 0));
       form.setValue(`items.${index}.productId`, pid, { shouldDirty: true });
       form.setValue(`items.${index}.currentStock`, product.currentStock ?? 0, { shouldDirty: true });
       form.setValue(`items.${index}.unit`, product.unit ?? "", { shouldDirty: true });
-      form.setValue(`items.${index}.purchasePrice`, parseFloat(String(product.purchasePrice ?? 0)), { shouldDirty: true });
+      form.setValue(`items.${index}.purchasePrice`, prevPrice, { shouldDirty: true });
       form.setValue(`items.${index}.gstPercent`, parseFloat(String(product.gstPercent ?? 0)), { shouldDirty: true });
+      form.setValue(`items.${index}.prevPurchasePrice`, prevPrice, { shouldDirty: true });
+      form.setValue(`items.${index}.updatePrice`, false, { shouldDirty: true });
       // Auto-fill brand
       const brandCombo = product.brandId ? String(product.brandId) : NO_BRAND;
       form.setValue(`items.${index}.brandComboVal`, brandCombo, { shouldDirty: true, shouldValidate: true });
@@ -666,6 +1047,34 @@ export function PurchaseForm() {
     },
     [allCategories, allBrands, form]
   );
+
+  // ── Inline brand/category creation ───────────────────────────────────────────
+
+  const createBrandMutation = useCreateBrand({
+    mutation: {
+      onSuccess: (brand) => {
+        const idx = pendingRowRef.current;
+        pendingRowRef.current = -1;
+        toast.success(`Brand "${brand.name}" created`);
+        queryClient.invalidateQueries({ queryKey: getListBrandsQueryKey() });
+        if (idx >= 0) handleBrandChange(idx, String(brand.id));
+      },
+      onError: (e: any) => { pendingRowRef.current = -1; toast.error(e?.message ?? "Failed to create brand"); },
+    },
+  });
+
+  const createCategoryMutation = useCreateCategory({
+    mutation: {
+      onSuccess: (cat) => {
+        const idx = pendingRowRef.current;
+        pendingRowRef.current = -1;
+        toast.success(`Category "${cat.name}" created`);
+        queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
+        if (idx >= 0) handleCategoryChange(idx, cat.name);
+      },
+      onError: (e: any) => { pendingRowRef.current = -1; toast.error(e?.message ?? "Failed to create category"); },
+    },
+  });
 
   const isSaving = createMutation.isPending || createAndPrintMutation.isPending;
   const supplierSelected = Number(form.watch("supplierId")) > 0;
@@ -910,9 +1319,14 @@ export function PurchaseForm() {
                             onValueChange={(v) => handleBrandChange(index, v)}
                             options={brandOptions}
                             placeholder="Select brand…"
-                            searchPlaceholder="Search brands…"
+                            searchPlaceholder="Search or add brand…"
                             disabled={!supplierSelected}
                             buttonClassName={form.formState.errors.items?.[index]?.brandComboVal ? "border-destructive" : ""}
+                            onCreate={(name) => {
+                              pendingRowRef.current = index;
+                              createBrandMutation.mutate({ data: { name } });
+                            }}
+                            isCreating={createBrandMutation.isPending && pendingRowRef.current === index}
                           />
                           {form.formState.errors.items?.[index]?.brandComboVal && (
                             <p className="text-[10px] text-destructive mt-0.5">
@@ -929,9 +1343,15 @@ export function PurchaseForm() {
                             onValueChange={(v) => handleCategoryChange(index, v)}
                             options={categoryOptions}
                             placeholder="Select category…"
-                            searchPlaceholder="Search categories…"
+                            searchPlaceholder="Search or add category…"
                             disabled={!supplierSelected}
                             buttonClassName={form.formState.errors.items?.[index]?.categoryComboVal ? "border-destructive" : ""}
+                            onCreate={(name) => {
+                              const brandId = form.getValues(`items.${index}.brandId`);
+                              pendingRowRef.current = index;
+                              createCategoryMutation.mutate({ data: { name, brandId: brandId ?? null } });
+                            }}
+                            isCreating={createCategoryMutation.isPending && pendingRowRef.current === index}
                           />
                           {form.formState.errors.items?.[index]?.categoryComboVal && (
                             <p className="text-[10px] text-destructive mt-0.5">
@@ -951,6 +1371,8 @@ export function PurchaseForm() {
                             searchPlaceholder="Search products…"
                             disabled={!supplierSelected}
                             buttonClassName={form.formState.errors.items?.[index]?.productId ? "border-destructive" : ""}
+                            staticAddLabel="+ New Product"
+                            onStaticAdd={() => { setNewProductRowIndex(index); setNewProductOpen(true); }}
                           />
                           {form.formState.errors.items?.[index]?.productId && (
                             <p className="text-[10px] text-destructive mt-0.5">
@@ -970,7 +1392,7 @@ export function PurchaseForm() {
                           />
                         </td>
 
-                        {/* Unit */}
+                        {/* Unit — read-only; auto-filled from selected product */}
                         <td className="px-2 py-2">
                           <Input
                             value={item?.unit ?? ""}
@@ -980,7 +1402,7 @@ export function PurchaseForm() {
                           />
                         </td>
 
-                        {/* Purchase Price */}
+                        {/* Purchase Price + prev-price indicator + update-price checkbox */}
                         <td className="px-2 py-2">
                           <Input
                             type="number"
@@ -990,6 +1412,29 @@ export function PurchaseForm() {
                             disabled={!supplierSelected}
                             {...form.register(`items.${index}.purchasePrice`)}
                           />
+                          {item?.prevPurchasePrice != null && (
+                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                              <span className="text-[10px] text-muted-foreground leading-none">
+                                Prev: {fmt(item.prevPurchasePrice)}
+                              </span>
+                              <div className="flex items-center gap-0.5">
+                                <Checkbox
+                                  id={`updatePrice-${index}`}
+                                  checked={!!item.updatePrice}
+                                  onCheckedChange={(v) =>
+                                    form.setValue(`items.${index}.updatePrice`, Boolean(v), { shouldDirty: true })
+                                  }
+                                  className="h-3 w-3"
+                                />
+                                <label
+                                  htmlFor={`updatePrice-${index}`}
+                                  className="text-[10px] cursor-pointer text-muted-foreground whitespace-nowrap leading-none"
+                                >
+                                  Update
+                                </label>
+                              </div>
+                            </div>
+                          )}
                         </td>
 
                         {/* Item Discount */}
@@ -1208,6 +1653,26 @@ export function PurchaseForm() {
         open={addSupplierOpen}
         onOpenChange={setAddSupplierOpen}
         onCreated={(id) => form.setValue("supplierId", id, { shouldDirty: true, shouldValidate: true })}
+      />
+
+      {/* New product dialog */}
+      <NewProductDialog
+        open={newProductOpen}
+        onOpenChange={setNewProductOpen}
+        defaultBrandId={newProductRowIndex >= 0 ? form.getValues(`items.${newProductRowIndex}.brandId`) : null}
+        defaultCategoryId={newProductRowIndex >= 0 ? form.getValues(`items.${newProductRowIndex}.categoryId`) : null}
+        defaultPurchasePrice={newProductRowIndex >= 0 ? Number(form.getValues(`items.${newProductRowIndex}.purchasePrice`)) || 0 : 0}
+        onCreated={(product) => {
+          const idx = newProductRowIndex;
+          if (idx < 0) return;
+          form.setValue(`items.${idx}.productId`, product.id, { shouldDirty: true, shouldValidate: true });
+          form.setValue(`items.${idx}.purchasePrice`, product.purchasePrice, { shouldDirty: true });
+          form.setValue(`items.${idx}.gstPercent`, product.gstPercent, { shouldDirty: true });
+          form.setValue(`items.${idx}.unit`, product.unit, { shouldDirty: true });
+          form.setValue(`items.${idx}.prevPurchasePrice`, null, { shouldDirty: true });
+          form.setValue(`items.${idx}.updatePrice`, false, { shouldDirty: true });
+          setNewProductRowIndex(-1);
+        }}
       />
 
       <AlertDialog
