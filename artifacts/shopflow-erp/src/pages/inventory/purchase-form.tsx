@@ -1270,11 +1270,11 @@ export function PurchaseForm() {
                     const isPendingNewBrand = brandComboVal.startsWith(NEW_ITEM_PREFIX);
                     const isPendingNewCat = categoryComboVal.startsWith(NEW_ITEM_PREFIX);
 
-                    // Brand options — ALL brands; append pending-new entry if one is queued
+                    // Brand options — ALL brands. SearchableSelect auto-prepends the pending-new
+                    // entry itself, so do NOT add it here (would cause a duplicate with two ticks).
                     const brandOptions = [
                       { value: NO_BRAND, label: "No Brand" },
                       ...allBrands.map((b) => ({ value: String(b.id), label: b.name })),
-                      ...(isPendingNewBrand ? [{ value: brandComboVal, label: brandComboVal.slice(NEW_ITEM_PREFIX.length) }] : []),
                     ];
 
                     // Category options — ALL categories (deduplicated by name); append pending-new entry
@@ -1289,9 +1289,7 @@ export function PurchaseForm() {
                         { value: NO_CATEGORY, label: "No Category" },
                         ...deduped.map((c) => ({ value: c.name, label: c.name })),
                       ];
-                      if (isPendingNewCat) {
-                        opts.push({ value: categoryComboVal, label: categoryComboVal.slice(NEW_ITEM_PREFIX.length) });
-                      }
+                      // SearchableSelect auto-prepends the pending-new entry itself — don't add it here.
                       return opts;
                     })();
 
