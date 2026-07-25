@@ -158,9 +158,10 @@ function SearchableSelect({
     !options.some((o) => o.label.toLowerCase() === trimmed.toLowerCase()) &&
     !(`${NEW_ITEM_PREFIX}${trimmed}` === value); // already selected as pending-new
 
-  // Validate the typed search when in create mode
+  // Validate the typed search when in create mode — test each character individually
+  // so a single-char pattern like /^[a-z]$/ correctly validates multi-char strings.
   const searchHasInvalidChars = allowedCharsPattern && search.length > 0
-    ? !allowedCharsPattern.test(search)
+    ? search.split("").some((ch) => !allowedCharsPattern.test(ch))
     : false;
   const searchExceedsMax = maxLength !== undefined && trimmed.length > maxLength;
   const canCreate = allowCreate && notExists && !searchHasInvalidChars && !searchExceedsMax;
