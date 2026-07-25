@@ -807,6 +807,8 @@ export function PurchaseForm() {
   const afterDiscount = subtotal - itemDiscountTotal;
   const afterGST = afterDiscount + (withGST ? gstTotal : 0);
   const grandTotal = afterGST + additionalCharges;
+  const totalQty = watchedItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+  const chargePerUnit = totalQty > 0 ? additionalCharges / totalQty : 0;
 
   // ── Mutation ──────────────────────────────────────────────────────────────────
 
@@ -814,13 +816,23 @@ export function PurchaseForm() {
   // Also recalculates wholesale and retail prices using the global profit margins
   // (same formula as the product form's purchase-price onChange handler).
   async function flushPriceUpdates() {
-    const items = form.getValues("items");
+    const values = form.getValues();
+    const items = values.items;
     const toUpdate = items.filter((i) => i.updatePrice && Number(i.productId) > 0);
     if (toUpdate.length === 0) return;
+    // Compute prorated additional charge per unit so the effective purchase price
+    // (base price + share of packing/transport/loading/other) is saved to the product.
+    const allQty = items.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+    const addCharges =
+      (Number(values.packingCharges) || 0) +
+      (Number(values.transportCharges) || 0) +
+      (Number(values.loadingCharges) || 0) +
+      (Number(values.otherCharges) || 0);
+    const unitCharge = allQty > 0 ? addCharges / allQty : 0;
     const { wholesale: wPct, retail: rPct } = getMargins();
     await Promise.allSettled(
       toUpdate.map((i) => {
-        const purchasePrice = Number(i.purchasePrice);
+        const purchasePrice = Math.round((Number(i.purchasePrice) + unitCharge) * 100) / 100;
         const wholesalePrice = Math.round(purchasePrice * (1 + wPct / 100) * 100) / 100;
         const retailPrice    = Math.round(purchasePrice * (1 + rPct / 100) * 100) / 100;
         return fetch(`/api/products/${i.productId}`, {
@@ -1146,7 +1158,15 @@ export function PurchaseForm() {
       } catch {}
       // Use the first item that references this product for its details
       const srcItem = items.find(i => i.productComboVal === pKey)!;
-      const purchasePrice = Number(srcItem.purchasePrice) || 0;
+      // Effective purchase price = base price + prorated share of additional charges
+      const allQty = items.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+      const addCharges =
+        (Number(values.packingCharges) || 0) +
+        (Number(values.transportCharges) || 0) +
+        (Number(values.loadingCharges) || 0) +
+        (Number(values.otherCharges) || 0);
+      const unitCharge = allQty > 0 ? addCharges / allQty : 0;
+      const purchasePrice = Math.round(((Number(srcItem.purchasePrice) || 0) + unitCharge) * 100) / 100;
       const { wholesale: wPct, retail: rPct } = getMargins();
       const round2 = (n: number) => Math.round(n * 100) / 100;
       const wholesalePrice = round2(purchasePrice * (1 + wPct / 100));
@@ -1363,6 +1383,7 @@ export function PurchaseForm() {
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[80px]">Qty <span className="text-destructive">*</span></th>
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[90px]">Unit <span className="text-destructive">*</span></th>
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[110px]">Price <span className="text-destructive">*</span></th>
+                    <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[110px] text-xs">Net Unit Cost</th>
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[90px]">Disc %</th>
                     {withGST && <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[70px] text-xs">GST %</th>}
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground min-w-[100px]">Total</th>
@@ -1546,6 +1567,26 @@ export function PurchaseForm() {
                               </div>
                             </div>
                           )}
+                        </td>
+
+                        {/* Net Unit Cost = purchase price + prorated additional charges per unit */}
+                        <td className="px-2 py-2 text-right">
+                          {(() => {
+                            const basePrice = Number(item?.purchasePrice) || 0;
+                            const netCost = basePrice + chargePerUnit;
+                            return (
+                              <div>
+                                <div className="text-xs font-semibold text-primary pr-1">
+                                  {fmt(netCost)}
+                                </div>
+                                {chargePerUnit > 0 && (
+                                  <div className="text-[10px] text-muted-foreground pr-1 leading-tight">
+                                    +{fmt(chargePerUnit)}/unit
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
 
                         {/* Item Discount Percentage */}
