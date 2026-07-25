@@ -71,10 +71,8 @@ export function Purchases() {
   }, []);
 
   const handleNewPurchase = () => {
-    // Always open a blank form — clear any existing draft first
-    localStorage.removeItem(PURCHASE_DRAFT_KEY);
-    setDraft(null);
-    setLocation("/inventory/purchases/new");
+    // Open a blank form without touching the draft
+    setLocation("/inventory/purchases/new?new=1");
   };
 
   const confirmDiscardDraft = () => {

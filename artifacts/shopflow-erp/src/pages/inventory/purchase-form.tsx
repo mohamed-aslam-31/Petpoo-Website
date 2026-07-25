@@ -330,6 +330,9 @@ export function PurchaseForm() {
   const watchedItems = form.watch("items");
 
   useEffect(() => {
+    // Skip draft restore when opened as a fresh form (?new=1)
+    if (window.location.search.includes("new=1")) return;
+
     const storedDraft = localStorage.getItem(PURCHASE_DRAFT_KEY);
     if (!storedDraft) return;
 
