@@ -11,8 +11,6 @@ import {
   useListProducts,
   useListBrands,
   useListCategories,
-  useCreateProduct,
-  useUpdateProduct,
   getListPurchasesQueryKey,
   getListSuppliersQueryKey,
   getListBrandsQueryKey,
@@ -260,11 +258,13 @@ function UnitSelect({
   onChange,
   error,
   compact = false,
+  disabled = false,
 }: {
   value: string;
   onChange: (unit: string) => void;
   error?: string;
   compact?: boolean;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -301,10 +301,12 @@ function UnitSelect({
             type="button"
             variant="outline"
             role="combobox"
+            disabled={disabled}
             className={cn(
               "w-full justify-between font-normal text-left overflow-hidden",
               compact ? "h-8 px-2 text-xs" : "h-9 text-sm",
-              error && "border-destructive"
+              error && "border-destructive",
+              disabled && "opacity-60 cursor-not-allowed"
             )}
           >
             <span className={cn("truncate", !value && "text-muted-foreground")}>
@@ -359,163 +361,17 @@ function UnitSelect({
   );
 }
 
-// ── New Product mini-dialog ───────────────────────────────────────────────────
-
-const newProductSchema = z.object({
-  name: z.string().min(2, "At least 2 characters").max(80),
-  purchasePrice: z.coerce.number().min(0, "Required"),
-  sellingPrice: z.coerce.number().min(0),
-  wholesalePrice: z.coerce.number().min(0),
-  gstPercent: z.coerce.number().min(0).max(100),
-});
-type NewProductValues = z.infer<typeof newProductSchema>;
-
-function NewProductDialog({
-  open,
-  onOpenChange,
-  defaultBrandId,
-  defaultCategoryId,
-  defaultPurchasePrice,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  defaultBrandId?: number | null;
-  defaultCategoryId?: number | null;
-  defaultPurchasePrice?: number;
-  onCreated: (product: { id: number; name: string; purchasePrice: number; unit: string; gstPercent: number }) => void;
-}) {
-  const queryClient = useQueryClient();
-  const [unit, setUnit] = useState("");
-  const [unitError, setUnitError] = useState<string | undefined>();
-  const [skuLoading, setSkuLoading] = useState(false);
-  const [sku, setSku] = useState("");
-
-  const form = useForm<NewProductValues>({
-    resolver: zodResolver(newProductSchema),
-    defaultValues: { name: "", purchasePrice: defaultPurchasePrice ?? 0, sellingPrice: 0, wholesalePrice: 0, gstPercent: 0 },
-  });
-
-  useEffect(() => {
-    if (!open) return;
-    setUnit("");
-    setUnitError(undefined);
-    form.reset({ name: "", purchasePrice: defaultPurchasePrice ?? 0, sellingPrice: 0, wholesalePrice: 0, gstPercent: 0 });
-    setSkuLoading(true);
-    fetch("/api/products/next-sku")
-      .then(r => r.json())
-      .then(({ sku: s }) => setSku(s))
-      .catch(() => setSku("SKU-001"))
-      .finally(() => setSkuLoading(false));
-  }, [open, defaultPurchasePrice, form]);
-
-  const createMutation = useCreateProduct({
-    mutation: {
-      onSuccess: (product) => {
-        toast.success(`Product "${product.name}" created`);
-        queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
-        onCreated({ id: product.id, name: product.name, purchasePrice: product.purchasePrice, unit: product.unit, gstPercent: product.gstPercent });
-        onOpenChange(false);
-      },
-      onError: (e: any) => toast.error(e?.message ?? "Failed to create product"),
-    },
-  });
-
-  function onSubmit(values: NewProductValues) {
-    if (!unit) { setUnitError("Unit is required"); return; }
-    setUnitError(undefined);
-    createMutation.mutate({
-      data: {
-        ...values,
-        sku,
-        unit,
-        sellingPrice: values.sellingPrice || values.purchasePrice,
-        wholesalePrice: values.wholesalePrice || values.purchasePrice,
-        retailPrice: values.sellingPrice || values.purchasePrice,
-        currentStock: 0,
-        minStock: 0,
-        brandId: defaultBrandId ?? null,
-        categoryId: defaultCategoryId ?? null,
-        status: "active",
-      } as any,
-    });
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>New Product</DialogTitle>
-          <DialogDescription>Create a new product. You can edit full details later in Inventory.</DialogDescription>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
-            <FormField control={form.control} name="name" render={({ field }) => (
-              <FormItem>
-                <FormLabel>Product Name <span className="text-destructive">*</span></FormLabel>
-                <FormControl><Input placeholder="e.g. HDPE Rope 10mm" maxLength={80} {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )} />
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-sm">SKU</Label>
-                <Input value={skuLoading ? "Generating…" : sku} readOnly className="bg-muted/50 text-muted-foreground text-sm" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-sm">Unit <span className="text-destructive">*</span></Label>
-                <UnitSelect value={unit} onChange={setUnit} error={unitError} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <FormField control={form.control} name="purchasePrice" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Purchase Price <span className="text-destructive">*</span></FormLabel>
-                  <FormControl><Input type="number" min={0} step="0.01" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="sellingPrice" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Selling Price</FormLabel>
-                  <FormControl><Input type="number" min={0} step="0.01" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="wholesalePrice" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Wholesale Price</FormLabel>
-                  <FormControl><Input type="number" min={0} step="0.01" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="gstPercent" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>GST %</FormLabel>
-                  <FormControl><Input type="number" min={0} max={100} step="0.01" {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? "Creating…" : "Create Product"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// NewProductDialog removed — new products are now created inline via the
+// same deferred __new__: pattern as brands and categories.
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Form schema
 // ────────────────────────────────────────────────────────────────────────────────
 
 const itemSchema = z.object({
-  productId: z.coerce.number().min(1, "Product required"),
+  /** Tracks the selected product: "" = none, "123" = existing id, "__new__:Name" = pending creation */
+  productComboVal: z.string().min(1, "Product required"),
+  productId: z.coerce.number().optional(),
   brandComboVal: z.string().min(1, "Brand required"),
   brandId: z.coerce.number().nullable().optional(),
   brandName: z.string().nullable().optional(),
@@ -550,6 +406,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 const emptyItem = (): z.infer<typeof itemSchema> => ({
+  productComboVal: "",
   productId: 0,
   brandComboVal: "",
   brandId: null,
@@ -674,9 +531,6 @@ export function PurchaseForm() {
   const [confirmExitOpen, setConfirmExitOpen] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [pendingNavigate, setPendingNavigate] = useState<(() => void) | null>(null);
-  // New product dialog
-  const [newProductOpen, setNewProductOpen] = useState(false);
-  const [newProductRowIndex, setNewProductRowIndex] = useState(-1);
   // ID of the draft currently being edited (null = new, unsaved draft)
   const [draftId, setDraftId] = useState<string | null>(() =>
     new URLSearchParams(window.location.search).get("draft")
@@ -953,7 +807,7 @@ export function PurchaseForm() {
       for (let i = 0; i < itemErrors.length; i++) {
         const row = itemErrors[i];
         if (!row) continue;
-        if (row.brandComboVal || row.categoryComboVal || row.productId) {
+        if (row.brandComboVal || row.categoryComboVal || row.productComboVal) {
           scrollAndFocus(`item-row-${i}`); return;
         }
         if (row.quantity) { form.setFocus(`items.${i}.quantity`); return; }
@@ -965,8 +819,22 @@ export function PurchaseForm() {
   // ── Per-row cascading logic ───────────────────────────────────────────────────
 
   const handleProductChange = useCallback(
-    (index: number, productId: string) => {
-      const pid = Number(productId);
+    (index: number, comboVal: string) => {
+      if (comboVal.startsWith(NEW_ITEM_PREFIX)) {
+        // ── Pending-new product: store name, clear auto-fills so user enters them ──
+        form.setValue(`items.${index}.productComboVal`, comboVal, { shouldDirty: true, shouldValidate: true });
+        form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
+        form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
+        form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
+        form.setValue(`items.${index}.purchasePrice`, 0, { shouldDirty: true });
+        form.setValue(`items.${index}.gstPercent`, 0, { shouldDirty: true });
+        form.setValue(`items.${index}.prevPurchasePrice`, null, { shouldDirty: true });
+        form.setValue(`items.${index}.updatePrice`, false, { shouldDirty: true });
+        return;
+      }
+
+      // ── Existing product ──────────────────────────────────────────────────────
+      const pid = Number(comboVal);
       const product = allProducts.find((p: { id: number }) => p.id === pid);
       if (!product) return;
 
@@ -974,6 +842,7 @@ export function PurchaseForm() {
       const category = allCategories.find((c: { id: number }) => c.id === product.categoryId);
 
       const prevPrice = parseFloat(String(product.purchasePrice ?? 0));
+      form.setValue(`items.${index}.productComboVal`, comboVal, { shouldDirty: true, shouldValidate: true });
       form.setValue(`items.${index}.productId`, pid, { shouldDirty: true });
       form.setValue(`items.${index}.currentStock`, product.currentStock ?? 0, { shouldDirty: true });
       form.setValue(`items.${index}.unit`, product.unit ?? "", { shouldDirty: true });
@@ -1011,6 +880,7 @@ export function PurchaseForm() {
         form.setValue(`items.${index}.brandName`, brand?.name ?? null, { shouldDirty: true });
       }
       // Category stays untouched. Only clear product so user re-selects.
+      form.setValue(`items.${index}.productComboVal`, "", { shouldDirty: true, shouldValidate: true });
       form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
       form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
       form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
@@ -1037,11 +907,12 @@ export function PurchaseForm() {
         const currentBrandId = form.getValues(`items.${index}.brandId`);
         const catsWithName = allCategories.filter((c: { name: string }) => c.name === comboVal);
         const resolvedCat =
-          catsWithName.find((c: { brandId: number | null }) => c.brandId === currentBrandId) ??
+          catsWithName.find((c: { brandId?: number | null }) => (c.brandId ?? null) === currentBrandId) ??
           catsWithName[0];
         form.setValue(`items.${index}.categoryId`, resolvedCat?.id ?? null, { shouldDirty: true });
       }
       // Brand stays untouched. Only clear product so user re-selects.
+      form.setValue(`items.${index}.productComboVal`, "", { shouldDirty: true, shouldValidate: true });
       form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
       form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
       form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
@@ -1139,11 +1010,65 @@ export function PurchaseForm() {
       return item;
     });
 
-    // ── 5. Patch products whose brand/category changed (best-effort) ──────────
+    // ── 5. Create pending products (deferred, sequential to avoid SKU collisions) ─
+    const productKeyToId = new Map<string, number>(); // "__new__:X" → realId
+    const pendingProductKeys = [...new Set(items.filter(i => i.productComboVal?.startsWith(NP)).map(i => i.productComboVal!))];
+    for (const pKey of pendingProductKeys) {
+      const name = pKey.slice(NP.length);
+      // Fetch next SKU right before each creation so sequential creates don't collide
+      let sku = "PROD-001";
+      try {
+        const skuRes = await fetch("/api/products/next-sku", { credentials: "include" });
+        if (skuRes.ok) { const { sku: s } = await skuRes.json(); sku = s; }
+      } catch {}
+      // Use the first item that references this product for its details
+      const srcItem = items.find(i => i.productComboVal === pKey)!;
+      const purchasePrice = Number(srcItem.purchasePrice) || 0;
+      try {
+        const res = await fetch("/api/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name,
+            sku,
+            unit: srcItem.unit,
+            purchasePrice,
+            sellingPrice: purchasePrice,
+            wholesalePrice: purchasePrice,
+            retailPrice: purchasePrice,
+            gstPercent: Number(srcItem.gstPercent) || 0,
+            currentStock: 0, // purchase save will add the quantity to stock
+            minStock: 0,
+            brandId: srcItem.brandId ?? null,
+            categoryId: srcItem.categoryId ?? null,
+            status: "active",
+          }),
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error((await res.json())?.message ?? res.statusText);
+        const product = await res.json();
+        productKeyToId.set(pKey, product.id);
+        toast.success(`Product "${name}" created`);
+      } catch (e: any) {
+        toast.error(`Failed to create product "${name}": ${e?.message ?? ""}`);
+        return null;
+      }
+    }
+
+    // ── 6. Resolve productId in each item ─────────────────────────────────────
+    items = items.map(item =>
+      item.productComboVal?.startsWith(NP)
+        ? { ...item, productId: productKeyToId.get(item.productComboVal!) ?? 0 }
+        : item
+    );
+
+    if (productKeyToId.size > 0) queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
+
+    // ── 7. Patch existing products whose brand/category changed (best-effort) ──
     if (brandKeyToId.size > 0 || catKeyToId.size > 0) {
       await Promise.allSettled(
         items
-          .filter(item => item.productId > 0)
+          .filter(item => (item.productId ?? 0) > 0 && !productKeyToId.has(item.productComboVal ?? ""))
           .map(item =>
             fetch(`/api/products/${item.productId}`, {
               method: "PATCH",
@@ -1153,7 +1078,6 @@ export function PurchaseForm() {
             }).catch(() => {})
           )
       );
-      queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
     }
 
     if (brandKeyToId.size > 0) queryClient.invalidateQueries({ queryKey: getListBrandsQueryKey() });
@@ -1352,6 +1276,8 @@ export function PurchaseForm() {
                     })();
 
                     // Product options — filter by brand/category; pending-new brand/category → no filter on that axis
+                    const productComboVal = item?.productComboVal ?? "";
+                    const isPendingNewProduct = productComboVal.startsWith(NEW_ITEM_PREFIX);
                     const filteredProducts = allProducts.filter((p) => {
                       const brandOk = isPendingNewBrand || !brandComboVal || (
                         brandComboVal === NO_BRAND ? !p.brandId : p.brandId === Number(brandComboVal)
@@ -1367,6 +1293,8 @@ export function PurchaseForm() {
                       );
                       return brandOk && catOk;
                     });
+                    // SearchableSelect auto-prepends the pending-new entry when value starts with __new__:
+                    // so we only pass existing products here (no duplication)
                     const productOptions = filteredProducts.map((p) => ({
                       value: String(p.id),
                       label: p.name,
@@ -1430,21 +1358,20 @@ export function PurchaseForm() {
 
                         {/* Product */}
                         <td className="px-2 py-2"
-                          {...(form.formState.errors.items?.[index]?.productId ? { "data-field-error": true } : {})}>
+                          {...(form.formState.errors.items?.[index]?.productComboVal ? { "data-field-error": true } : {})}>
                           <SearchableSelect
-                            value={item?.productId ? String(item.productId) : ""}
+                            value={productComboVal}
                             onValueChange={(v) => handleProductChange(index, v)}
                             options={productOptions}
                             placeholder="Select product…"
-                            searchPlaceholder="Search products…"
+                            searchPlaceholder="Search or add product…"
                             disabled={!supplierSelected}
-                            buttonClassName={form.formState.errors.items?.[index]?.productId ? "border-destructive" : ""}
-                            staticAddLabel="+ New Product"
-                            onStaticAdd={() => { setNewProductRowIndex(index); setNewProductOpen(true); }}
+                            buttonClassName={form.formState.errors.items?.[index]?.productComboVal ? "border-destructive" : ""}
+                            allowCreate
                           />
-                          {form.formState.errors.items?.[index]?.productId && (
+                          {form.formState.errors.items?.[index]?.productComboVal && (
                             <p className="text-[10px] text-destructive mt-0.5">
-                              {form.formState.errors.items[index].productId.message}
+                              {(form.formState.errors.items[index] as any).productComboVal?.message}
                             </p>
                           )}
                         </td>
@@ -1460,13 +1387,14 @@ export function PurchaseForm() {
                           />
                         </td>
 
-                        {/* Unit — editable combobox; auto-filled from product, user can override */}
+                        {/* Unit — auto-filled from existing product (read-only); editable for new products */}
                         <td className="px-2 py-2">
                           <UnitSelect
                             value={item?.unit ?? ""}
                             onChange={(u) => form.setValue(`items.${index}.unit`, u, { shouldDirty: true, shouldValidate: true })}
                             error={form.formState.errors.items?.[index]?.unit?.message}
                             compact
+                            disabled={!supplierSelected || (!isPendingNewProduct && productComboVal !== "")}
                           />
                         </td>
 
@@ -1721,26 +1649,6 @@ export function PurchaseForm() {
         open={addSupplierOpen}
         onOpenChange={setAddSupplierOpen}
         onCreated={(id) => form.setValue("supplierId", id, { shouldDirty: true, shouldValidate: true })}
-      />
-
-      {/* New product dialog */}
-      <NewProductDialog
-        open={newProductOpen}
-        onOpenChange={setNewProductOpen}
-        defaultBrandId={newProductRowIndex >= 0 ? form.getValues(`items.${newProductRowIndex}.brandId`) : null}
-        defaultCategoryId={newProductRowIndex >= 0 ? form.getValues(`items.${newProductRowIndex}.categoryId`) : null}
-        defaultPurchasePrice={newProductRowIndex >= 0 ? Number(form.getValues(`items.${newProductRowIndex}.purchasePrice`)) || 0 : 0}
-        onCreated={(product) => {
-          const idx = newProductRowIndex;
-          if (idx < 0) return;
-          form.setValue(`items.${idx}.productId`, product.id, { shouldDirty: true, shouldValidate: true });
-          form.setValue(`items.${idx}.purchasePrice`, product.purchasePrice, { shouldDirty: true });
-          form.setValue(`items.${idx}.gstPercent`, product.gstPercent, { shouldDirty: true });
-          form.setValue(`items.${idx}.unit`, product.unit, { shouldDirty: true });
-          form.setValue(`items.${idx}.prevPurchasePrice`, null, { shouldDirty: true });
-          form.setValue(`items.${idx}.updatePrice`, false, { shouldDirty: true });
-          setNewProductRowIndex(-1);
-        }}
       />
 
       <AlertDialog
