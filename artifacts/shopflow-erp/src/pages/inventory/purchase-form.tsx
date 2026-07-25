@@ -1073,7 +1073,7 @@ export function PurchaseForm() {
           body: JSON.stringify({ name }),
           credentials: "include",
         });
-        if (!res.ok) throw new Error((await res.json())?.message ?? res.statusText);
+        if (!res.ok) { const e = await res.json(); throw new Error(e?.error ?? e?.message ?? res.statusText); }
         const brand = await res.json();
         brandKeyToId.set(bKey, brand.id);
         toast.success(`Brand "${name}" created`);
@@ -1113,7 +1113,7 @@ export function PurchaseForm() {
           body: JSON.stringify({ name, brandId }),
           credentials: "include",
         });
-        if (!res.ok) throw new Error((await res.json())?.message ?? res.statusText);
+        if (!res.ok) { const e = await res.json(); throw new Error(e?.error ?? e?.message ?? res.statusText); }
         const cat = await res.json();
         catKeyToId.set(`${name}::${brandId}`, cat.id);
         toast.success(`Category "${name}" created`);
@@ -1166,13 +1166,14 @@ export function PurchaseForm() {
             gstPercent: Number(srcItem.gstPercent) || 0,
             currentStock: 0, // purchase save will add the quantity to stock
             minStock: 0,
-            brandId: srcItem.brandId ?? null,
-            categoryId: srcItem.categoryId ?? null,
+            // omit null — API schema uses .optional() which accepts undefined, not null
+            ...(srcItem.brandId    != null ? { brandId:    srcItem.brandId    } : {}),
+            ...(srcItem.categoryId != null ? { categoryId: srcItem.categoryId } : {}),
             status: "active",
           }),
           credentials: "include",
         });
-        if (!res.ok) throw new Error((await res.json())?.message ?? res.statusText);
+        if (!res.ok) { const e = await res.json(); throw new Error(e?.error ?? e?.message ?? res.statusText); }
         const product = await res.json();
         productKeyToId.set(pKey, product.id);
         toast.success(`Product "${name}" created`);
