@@ -891,13 +891,17 @@ export function PurchaseForm() {
         form.setValue(`items.${index}.brandId`, bid, { shouldDirty: true });
         form.setValue(`items.${index}.brandName`, brand?.name ?? null, { shouldDirty: true });
       }
-      // Category stays untouched. Only clear product so user re-selects.
-      form.setValue(`items.${index}.productComboVal`, "", { shouldDirty: true, shouldValidate: true });
-      form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
-      form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
-      form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
-      form.setValue(`items.${index}.purchasePrice`, 0, { shouldDirty: true });
-      form.setValue(`items.${index}.gstPercent`, 0, { shouldDirty: true });
+      // Category stays untouched. Only clear product if it's an existing selection
+      // (a pending-new product is being described by the brand the user just set, so keep it).
+      const currentProductVal = form.getValues(`items.${index}.productComboVal`);
+      if (!currentProductVal.startsWith(NEW_ITEM_PREFIX)) {
+        form.setValue(`items.${index}.productComboVal`, "", { shouldDirty: true, shouldValidate: true });
+        form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
+        form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
+        form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
+        form.setValue(`items.${index}.purchasePrice`, 0, { shouldDirty: true });
+        form.setValue(`items.${index}.gstPercent`, 0, { shouldDirty: true });
+      }
     },
     [allBrands, form]
   );
@@ -923,13 +927,17 @@ export function PurchaseForm() {
           catsWithName[0];
         form.setValue(`items.${index}.categoryId`, resolvedCat?.id ?? null, { shouldDirty: true });
       }
-      // Brand stays untouched. Only clear product so user re-selects.
-      form.setValue(`items.${index}.productComboVal`, "", { shouldDirty: true, shouldValidate: true });
-      form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
-      form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
-      form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
-      form.setValue(`items.${index}.purchasePrice`, 0, { shouldDirty: true });
-      form.setValue(`items.${index}.gstPercent`, 0, { shouldDirty: true });
+      // Brand stays untouched. Only clear product if it's an existing selection
+      // (a pending-new product is being described by the category the user just set, so keep it).
+      const currentProductVal = form.getValues(`items.${index}.productComboVal`);
+      if (!currentProductVal.startsWith(NEW_ITEM_PREFIX)) {
+        form.setValue(`items.${index}.productComboVal`, "", { shouldDirty: true, shouldValidate: true });
+        form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
+        form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
+        form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
+        form.setValue(`items.${index}.purchasePrice`, 0, { shouldDirty: true });
+        form.setValue(`items.${index}.gstPercent`, 0, { shouldDirty: true });
+      }
     },
     [allCategories, form]
   );
