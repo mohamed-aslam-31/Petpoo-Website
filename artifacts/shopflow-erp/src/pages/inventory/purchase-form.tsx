@@ -20,6 +20,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigationGuard, useBeforeUnload } from "@/components/navigation-guard";
 import { readDrafts, upsertDraft, removeDraft, type PurchaseDraft } from "@/lib/purchase-drafts";
+import { getMargins } from "@/lib/price-margins";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -712,19 +713,30 @@ export function PurchaseForm() {
 
   // ── Mutation ──────────────────────────────────────────────────────────────────
 
-  // Flush any "update price" requests for items where checkbox is ticked
+  // Flush any "update price" requests for items where checkbox is ticked.
+  // Also recalculates wholesale and retail prices using the global profit margins
+  // (same formula as the product form's purchase-price onChange handler).
   async function flushPriceUpdates() {
     const items = form.getValues("items");
     const toUpdate = items.filter((i) => i.updatePrice && Number(i.productId) > 0);
     if (toUpdate.length === 0) return;
+    const { wholesale: wPct, retail: rPct } = getMargins();
     await Promise.allSettled(
-      toUpdate.map((i) =>
-        fetch(`/api/products/${i.productId}`, {
+      toUpdate.map((i) => {
+        const purchasePrice = Number(i.purchasePrice);
+        const wholesalePrice = Math.round(purchasePrice * (1 + wPct / 100) * 100) / 100;
+        const retailPrice    = Math.round(purchasePrice * (1 + rPct / 100) * 100) / 100;
+        return fetch(`/api/products/${i.productId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ purchasePrice: Number(i.purchasePrice) }),
-        })
-      )
+          body: JSON.stringify({
+            purchasePrice,
+            wholesalePrice,
+            retailPrice,
+            sellingPrice: retailPrice,
+          }),
+        });
+      })
     );
     queryClient.invalidateQueries({ queryKey: getListProductsQueryKey() });
   }
