@@ -29,29 +29,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Plus, Search, Trash2, Eye, ShoppingBag, Pencil } from "lucide-react";
-
-export const PURCHASE_DRAFT_KEY = "shopflow_purchase_draft";
-
-type DraftMeta = {
-  date: string;
-  supplierName: string;
-  itemCount: number;
-};
-
-function readDraftMeta(): DraftMeta | null {
-  try {
-    const raw = localStorage.getItem(PURCHASE_DRAFT_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { values?: { purchaseDate?: string; items?: unknown[]; supplierName?: string } };
-    return {
-      date: parsed.values?.purchaseDate ?? "—",
-      supplierName: parsed.values?.supplierName ?? "—",
-      itemCount: parsed.values?.items?.length ?? 0,
-    };
-  } catch {
-    return null;
-  }
-}
+import { readDrafts, removeDraft, type PurchaseDraft } from "@/lib/purchase-drafts";
 
 function formatCurrency(v: number) {
   return `₹${v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -63,22 +41,22 @@ export function Purchases() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [discardDraftOpen, setDiscardDraftOpen] = useState(false);
-  const [draft, setDraft] = useState<DraftMeta | null>(null);
+  const [draftIdToDiscard, setDraftIdToDiscard] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<PurchaseDraft[]>([]);
 
   useEffect(() => {
-    setDraft(readDraftMeta());
+    setDrafts(readDrafts());
   }, []);
 
   const handleNewPurchase = () => {
-    // Open a blank form without touching the draft
     setLocation("/inventory/purchases/new?new=1");
   };
 
   const confirmDiscardDraft = () => {
-    localStorage.removeItem(PURCHASE_DRAFT_KEY);
-    setDraft(null);
-    setDiscardDraftOpen(false);
+    if (!draftIdToDiscard) return;
+    removeDraft(draftIdToDiscard);
+    setDrafts((prev) => prev.filter((d) => d.id !== draftIdToDiscard));
+    setDraftIdToDiscard(null);
     toast.success("Draft discarded");
   };
 
@@ -99,7 +77,7 @@ export function Purchases() {
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / 20);
 
-  const showEmptyState = !isLoading && purchases.length === 0 && !draft;
+  const showEmptyState = !isLoading && purchases.length === 0 && drafts.length === 0;
 
   return (
     <div className="space-y-6">
@@ -152,18 +130,18 @@ export function Purchases() {
               </TableRow>
             ) : (
               <>
-                {/* Draft row — always first */}
-                {draft && (
-                  <TableRow className="bg-amber-50/60 dark:bg-amber-950/20 hover:bg-amber-50 dark:hover:bg-amber-950/30">
+                {/* Draft rows — always first */}
+                {drafts.map((d) => (
+                  <TableRow key={d.id} className="bg-amber-50/60 dark:bg-amber-950/20 hover:bg-amber-50 dark:hover:bg-amber-950/30">
                     <TableCell>
                       <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-400 font-mono">
                         DRAFT
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{draft.date}</TableCell>
-                    <TableCell className="text-muted-foreground">{draft.supplierName}</TableCell>
+                    <TableCell className="text-muted-foreground">{d.purchaseDate}</TableCell>
+                    <TableCell className="text-muted-foreground">{d.supplierName}</TableCell>
                     <TableCell className="text-center">
-                      <Badge variant="secondary">{draft.itemCount}</Badge>
+                      <Badge variant="secondary">{d.itemCount}</Badge>
                     </TableCell>
                     <TableCell className="text-right text-muted-foreground">—</TableCell>
                     <TableCell className="text-right text-muted-foreground">—</TableCell>
@@ -174,7 +152,7 @@ export function Purchases() {
                           variant="outline"
                           size="sm"
                           className="gap-1.5 h-7 text-xs border-amber-300 text-amber-700 hover:bg-amber-100 dark:text-amber-400 dark:border-amber-700"
-                          onClick={() => setLocation("/inventory/purchases/new")}
+                          onClick={() => setLocation(`/inventory/purchases/new?draft=${d.id}`)}
                         >
                           <Pencil className="h-3 w-3" />
                           Continue
@@ -183,7 +161,7 @@ export function Purchases() {
                           variant="ghost"
                           size="icon"
                           className="h-7 w-7 text-destructive hover:text-destructive"
-                          onClick={() => setDiscardDraftOpen(true)}
+                          onClick={() => setDraftIdToDiscard(d.id)}
                           title="Discard draft"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -191,7 +169,7 @@ export function Purchases() {
                       </div>
                     </TableCell>
                   </TableRow>
-                )}
+                ))}
 
                 {/* Saved purchases */}
                 {purchases.map((p) => (
@@ -295,12 +273,12 @@ export function Purchases() {
       </AlertDialog>
 
       {/* Discard draft confirm */}
-      <AlertDialog open={discardDraftOpen} onOpenChange={setDiscardDraftOpen}>
+      <AlertDialog open={draftIdToDiscard !== null} onOpenChange={(o) => !o && setDraftIdToDiscard(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Discard Draft?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete your unsaved purchase draft. This cannot be undone.
+              This will permanently delete this purchase draft. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

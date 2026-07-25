@@ -4,10 +4,12 @@ description: Why unsaved purchase bills use a browser draft until persistent pur
 ---
 
 ## Rule
-Unsaved New Purchase data is stored as one browser-local draft (`shopflow_purchase_draft`) via three paths: "Move to Draft" exit dialog, "Save as Draft" toolbar button, or on-form navigation guard. The draft object shape is `{ values: FormValues & { supplierName: string }, withGST: boolean }`.
+Multiple purchase drafts are stored in `localStorage` under `shopflow_purchase_drafts` (an array of `PurchaseDraft`). Shared utility lives at `lib/purchase-drafts.ts` — use `readDrafts`, `upsertDraft`, `removeDraft` from there; do not read/write the key directly in components.
 
-The Purchases list reads the draft from localStorage on mount and renders it as the first row in the table (amber-tinted, DRAFT badge). "Continue" resumes it; the trash icon confirms-then-discards it. "New Purchase" always clears the draft first so the form opens blank.
+Each `PurchaseDraft` has `{ id, supplierName, purchaseDate, itemCount, savedAt, values, withGST }`. The `id` is a `Date.now()` timestamp string generated on first save.
 
-**Why:** The purchases table has no status/draft endpoint, so saving through the live create endpoint would incorrectly update stock. Supplier name is embedded in the draft object so the list row can display it without an extra API call.
+The form detects its draft via `?draft=<id>` in the URL. `?new=1` skips restoration entirely (used by "New Purchase" button). Drafts appear as amber-tinted rows at the top of the Purchases table; "Continue" links to `?draft=<id>`; trash triggers a confirm dialog per-draft.
 
-**How to apply:** If persistent draft management is added later, introduce an explicit purchase draft status and separate draft create/update flow before replacing the browser-local fallback. `PURCHASE_DRAFT_KEY` is exported from `purchases.tsx` (imported by nothing else currently).
+**Why:** Multiple users can start separate purchases and save each as a draft without overwriting others. No DB draft endpoint exists, so browser-local storage is the only safe option (avoids incorrect stock updates).
+
+**How to apply:** If a persistent draft API is added later, map `PurchaseDraft.id` to a server-side draft id and replace the localStorage calls in `lib/purchase-drafts.ts` — the component interfaces stay unchanged.

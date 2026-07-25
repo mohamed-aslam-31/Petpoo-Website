@@ -16,6 +16,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigationGuard, useBeforeUnload } from "@/components/navigation-guard";
+import { readDrafts, upsertDraft, removeDraft, type PurchaseDraft } from "@/lib/purchase-drafts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -192,7 +193,6 @@ const emptyItem = (): z.infer<typeof itemSchema> => ({
   lineTotal: 0,
 });
 
-const PURCHASE_DRAFT_KEY = "shopflow_purchase_draft";
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Add Supplier mini-modal
@@ -299,6 +299,10 @@ export function PurchaseForm() {
   const [confirmExitOpen, setConfirmExitOpen] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [pendingNavigate, setPendingNavigate] = useState<(() => void) | null>(null);
+  // ID of the draft currently being edited (null = new, unsaved draft)
+  const [draftId, setDraftId] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get("draft")
+  );
 
   // Data sources
   const { data: suppliersData } = useListSuppliers({ limit: 500 });
@@ -333,18 +337,18 @@ export function PurchaseForm() {
     // Skip draft restore when opened as a fresh form (?new=1)
     if (window.location.search.includes("new=1")) return;
 
-    const storedDraft = localStorage.getItem(PURCHASE_DRAFT_KEY);
-    if (!storedDraft) return;
+    const id = new URLSearchParams(window.location.search).get("draft");
+    if (!id) return;
+
+    const found = readDrafts().find((d) => d.id === id);
+    if (!found) return;
 
     try {
-      const draft = JSON.parse(storedDraft) as { values?: FormValues; withGST?: boolean };
-      if (draft.values) {
-        form.reset(draft.values);
-        setWithGST(draft.withGST !== false);
-        toast.info("Your saved purchase draft has been restored");
-      }
+      form.reset(found.values as unknown as FormValues);
+      setWithGST(found.withGST !== false);
+      toast.info("Draft restored");
     } catch {
-      localStorage.removeItem(PURCHASE_DRAFT_KEY);
+      removeDraft(id);
     }
   }, [form]);
 
@@ -407,25 +411,38 @@ export function PurchaseForm() {
     return registerNavigationGuard(requestExit, location);
   }, [location, registerNavigationGuard, requestExit]);
 
-  const buildDraftPayload = () => {
+  const buildDraftEntry = (): PurchaseDraft => {
     const values = form.getValues();
     const supplierName = suppliers.find((s) => s.id === Number(values.supplierId))?.name ?? "—";
-    return JSON.stringify({ values: { ...values, supplierName }, withGST });
+    const id = draftId ?? Date.now().toString();
+    return {
+      id,
+      supplierName,
+      purchaseDate: values.purchaseDate ?? "",
+      itemCount: values.items?.length ?? 0,
+      savedAt: new Date().toISOString(),
+      values: { ...values, supplierName } as Record<string, unknown>,
+      withGST,
+    };
   };
 
   const saveDraftAndLeave = () => {
-    localStorage.setItem(PURCHASE_DRAFT_KEY, buildDraftPayload());
+    const entry = buildDraftEntry();
+    upsertDraft(entry);
+    if (!draftId) setDraftId(entry.id);
     toast.success("Purchase moved to drafts");
     if (pendingNavigation && pendingNavigate) finishNavigation(pendingNavigation, pendingNavigate);
   };
 
   const discardAndLeave = () => {
-    localStorage.removeItem(PURCHASE_DRAFT_KEY);
+    if (draftId) removeDraft(draftId);
     if (pendingNavigation && pendingNavigate) finishNavigation(pendingNavigation, pendingNavigate);
   };
 
   const saveDraft = () => {
-    localStorage.setItem(PURCHASE_DRAFT_KEY, buildDraftPayload());
+    const entry = buildDraftEntry();
+    upsertDraft(entry);
+    if (!draftId) setDraftId(entry.id);
     toast.success("Purchase saved as draft");
     navigateWithoutGuard(() => setLocation("/inventory/purchases"));
   };
@@ -467,7 +484,7 @@ export function PurchaseForm() {
     mutation: {
       onSuccess: () => {
         toast.success("Purchase saved — stock updated");
-        localStorage.removeItem(PURCHASE_DRAFT_KEY);
+        if (draftId) removeDraft(draftId);
         queryClient.invalidateQueries({ queryKey: getListPurchasesQueryKey() });
         navigateWithoutGuard(() => setLocation("/inventory/purchases"));
       },
@@ -479,9 +496,8 @@ export function PurchaseForm() {
     mutation: {
       onSuccess: (data) => {
         toast.success("Purchase saved — stock updated");
-        localStorage.removeItem(PURCHASE_DRAFT_KEY);
+        if (draftId) removeDraft(draftId);
         queryClient.invalidateQueries({ queryKey: getListPurchasesQueryKey() });
-        // Navigate to purchase detail for printing
         navigateWithoutGuard(() => setLocation(`/inventory/purchases/${data.id}`));
         setTimeout(() => window.print(), 600);
       },
