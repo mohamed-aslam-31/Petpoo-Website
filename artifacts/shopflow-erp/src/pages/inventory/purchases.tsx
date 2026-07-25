@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -28,7 +28,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Search, Trash2, Eye, ShoppingBag } from "lucide-react";
+import { Plus, Search, Trash2, Eye, ShoppingBag, FileText, Pencil, X } from "lucide-react";
+
+const PURCHASE_DRAFT_KEY = "shopflow_purchase_draft";
 
 function formatCurrency(v: number) {
   return `₹${v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -40,6 +42,17 @@ export function Purchases() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [hasDraft, setHasDraft] = useState(false);
+
+  useEffect(() => {
+    setHasDraft(!!localStorage.getItem(PURCHASE_DRAFT_KEY));
+  }, []);
+
+  const discardDraft = () => {
+    localStorage.removeItem(PURCHASE_DRAFT_KEY);
+    setHasDraft(false);
+    toast.success("Draft discarded");
+  };
 
   const { data, isLoading } = useListPurchases({ search: search || undefined, page, limit: 20 });
 
@@ -73,6 +86,37 @@ export function Purchases() {
           New Purchase
         </Button>
       </div>
+
+      {/* Draft banner */}
+      {hasDraft && (
+        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-950/40">
+          <div className="flex items-center gap-3">
+            <FileText className="h-4 w-4 text-amber-600 shrink-0" />
+            <span className="text-amber-800 dark:text-amber-200 font-medium">
+              You have an unsaved purchase draft
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 border-amber-300 bg-white text-amber-800 hover:bg-amber-100 dark:bg-transparent dark:text-amber-200 dark:border-amber-700"
+              onClick={() => setLocation("/inventory/purchases/new")}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Resume Draft
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-amber-700 hover:text-amber-900 hover:bg-amber-100 dark:text-amber-400"
+              onClick={discardDraft}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative max-w-sm">

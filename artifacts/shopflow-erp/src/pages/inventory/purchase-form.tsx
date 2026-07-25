@@ -66,7 +66,7 @@ import {
   FormControl,
   FormMessage,
 } from "@/components/ui/form";
-import { Trash2, Plus, ArrowLeft, Printer, Save, Check, ChevronsUpDown } from "lucide-react";
+import { Trash2, Plus, ArrowLeft, Printer, Save, Check, ChevronsUpDown, FileText } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
@@ -416,6 +416,15 @@ export function PurchaseForm() {
   const discardAndLeave = () => {
     localStorage.removeItem(PURCHASE_DRAFT_KEY);
     if (pendingNavigation && pendingNavigate) finishNavigation(pendingNavigation, pendingNavigate);
+  };
+
+  const saveDraft = () => {
+    localStorage.setItem(
+      PURCHASE_DRAFT_KEY,
+      JSON.stringify({ values: form.getValues(), withGST }),
+    );
+    toast.success("Purchase saved as draft");
+    navigateWithoutGuard(() => setLocation("/inventory/purchases"));
   };
 
   // ── Totals ────────────────────────────────────────────────────────────────────
@@ -1077,34 +1086,46 @@ export function PurchaseForm() {
           </div>
 
           {/* ── Action buttons ─────────────────────────────────────────────────── */}
-          <div className="flex items-center justify-end gap-3 pb-6">
+          <div className="flex items-center justify-between pb-6">
             <Button
               type="button"
               variant="outline"
-              onClick={() => setLocation("/inventory/purchases")}
+              onClick={saveDraft}
               disabled={isSaving}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isSaving}
-              onClick={form.handleSubmit(onSaveAndPrint, onInvalid)}
               className="gap-2"
             >
-              <Printer className="h-4 w-4" />
-              {isSaving ? "Saving…" : "Save & Print"}
+              <FileText className="h-4 w-4" />
+              Save as Draft
             </Button>
-            <Button
-              type="button"
-              disabled={isSaving}
-              onClick={form.handleSubmit(onSave, onInvalid)}
-              className="gap-2"
-            >
-              <Save className="h-4 w-4" />
-              {isSaving ? "Saving…" : "Save Purchase"}
-            </Button>
+            <div className="flex items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setLocation("/inventory/purchases")}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSaving}
+                onClick={form.handleSubmit(onSaveAndPrint, onInvalid)}
+                className="gap-2"
+              >
+                <Printer className="h-4 w-4" />
+                {isSaving ? "Saving…" : "Save & Print"}
+              </Button>
+              <Button
+                type="button"
+                disabled={isSaving}
+                onClick={form.handleSubmit(onSave, onInvalid)}
+                className="gap-2"
+              >
+                <Save className="h-4 w-4" />
+                {isSaving ? "Saving…" : "Save Purchase"}
+              </Button>
+            </div>
           </div>
         </form>
       </Form>
