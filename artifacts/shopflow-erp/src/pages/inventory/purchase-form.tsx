@@ -347,6 +347,13 @@ function UnitSelect({
   const tooLong = trimmed.length > 10;
   const notExists = !availableUnits.some(u => u.toLowerCase() === trimmed.toLowerCase());
   const canAdd = trimmed.length >= 1 && !hasWhitespace && !tooLong && notExists;
+  const atLimit = search.length >= 10;
+
+  function handleSearchChange(val: string) {
+    // Strip spaces and hard-cap at 10 characters
+    const noSpaces = val.replace(/\s/g, "");
+    setSearch(noSpaces.slice(0, 10));
+  }
 
   function select(unit: string) {
     onChange(unit);
@@ -404,9 +411,16 @@ function UnitSelect({
             <CommandInput
               placeholder="Search or add…"
               value={search}
-              onValueChange={setSearch}
+              onValueChange={handleSearchChange}
               className="h-8 text-xs"
             />
+            {search.length > 0 && (
+              <div className="flex items-center justify-end px-2 pb-1">
+                <span className={cn("text-[10px]", atLimit ? "text-destructive font-medium" : "text-muted-foreground")}>
+                  {search.length}/10
+                </span>
+              </div>
+            )}
             <CommandList className="max-h-44 overflow-y-auto">
               {canAdd && (
                 <>
@@ -418,11 +432,6 @@ function UnitSelect({
                   </CommandGroup>
                   <CommandSeparator />
                 </>
-              )}
-              {!canAdd && trimmed.length > 0 && (hasWhitespace || tooLong) && (
-                <div className="px-3 py-2 text-xs text-destructive">
-                  {hasWhitespace ? "No spaces allowed" : "Max 10 chars"}
-                </div>
               )}
               {filtered.length > 0 ? (
                 <CommandGroup>

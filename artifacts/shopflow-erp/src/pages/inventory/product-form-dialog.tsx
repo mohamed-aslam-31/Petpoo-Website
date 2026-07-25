@@ -196,6 +196,13 @@ function UnitSelect({
     : tooLong ? "Max 10 characters"
     : null
     : null;
+  const atLimit = search.length >= 10;
+
+  function handleSearchChange(val: string) {
+    // Strip spaces and hard-cap at 10 characters
+    const noSpaces = val.replace(/\s/g, "");
+    setSearch(noSpaces.slice(0, 10));
+  }
 
   function select(unit: string) {
     onChange(unit);
@@ -241,8 +248,15 @@ function UnitSelect({
             <CommandInput
               placeholder="Search or add unit…"
               value={search}
-              onValueChange={setSearch}
+              onValueChange={handleSearchChange}
             />
+            {search.length > 0 && (
+              <div className="flex items-center justify-end px-2 pb-1">
+                <span className={cn("text-xs", atLimit ? "text-destructive font-medium" : "text-muted-foreground")}>
+                  {search.length}/10
+                </span>
+              </div>
+            )}
             <CommandList>
               {trimmed.length > 0 && (
                 <>
