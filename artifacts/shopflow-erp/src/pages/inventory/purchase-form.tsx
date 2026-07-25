@@ -1240,7 +1240,7 @@ export function PurchaseForm() {
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 px-0">
       {/* Page header */}
       <div className="flex items-center gap-4">
         <Button
@@ -1362,12 +1362,11 @@ export function PurchaseForm() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <div
-                className="overflow-y-auto"
-                style={{ maxHeight: "min(calc(100vh - 480px), 420px)" }}
-              >
-              <table className="w-full text-sm">
+            <div
+              className="overflow-auto"
+              style={{ maxHeight: "min(calc(100vh - 420px), 480px)" }}
+            >
+              <table className="w-full text-sm" style={{ minWidth: "1180px" }}>
                 <thead className="bg-muted sticky top-0 z-10">
                   <tr>
                     <th className="px-3 py-2 w-[36px]">
@@ -1664,7 +1663,6 @@ export function PurchaseForm() {
                   })}
                 </tbody>
               </table>
-              </div>
             </div>
 
             {form.formState.errors.items?.root && (
@@ -1679,7 +1677,7 @@ export function PurchaseForm() {
             {/* Additional Charges */}
             <div className="rounded-lg border bg-card shadow-sm p-6 space-y-3">
               <h2 className="font-semibold text-base">Additional Charges</h2>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <Label className="text-sm">Packing Charges</Label>
                   <Input type="number" min={0} step="0.01" placeholder="0.00" className="text-right" disabled={!supplierSelected} {...form.register("packingCharges")} />
@@ -1761,23 +1759,24 @@ export function PurchaseForm() {
           </div>
 
           {/* ── Action buttons ─────────────────────────────────────────────────── */}
-          <div className="flex items-center justify-between pb-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-6">
             <Button
               type="button"
               variant="outline"
               onClick={saveDraft}
               disabled={isSaving}
-              className="gap-2"
+              className="gap-2 w-full sm:w-auto"
             >
               <FileText className="h-4 w-4" />
               Save as Draft
             </Button>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setLocation("/inventory/purchases")}
                 disabled={isSaving}
+                className="flex-1 sm:flex-none"
               >
                 Cancel
               </Button>
@@ -1786,7 +1785,7 @@ export function PurchaseForm() {
                 variant="outline"
                 disabled={isSaving}
                 onClick={form.handleSubmit(onSaveAndPrint, onInvalid)}
-                className="gap-2"
+                className="gap-2 flex-1 sm:flex-none"
               >
                 <Printer className="h-4 w-4" />
                 {isSaving ? "Saving…" : "Save & Print"}
@@ -1795,7 +1794,7 @@ export function PurchaseForm() {
                 type="button"
                 disabled={isSaving}
                 onClick={form.handleSubmit(onSave, onInvalid)}
-                className="gap-2"
+                className="gap-2 flex-1 sm:flex-none"
               >
                 <Save className="h-4 w-4" />
                 {isSaving ? "Saving…" : "Save Purchase"}
