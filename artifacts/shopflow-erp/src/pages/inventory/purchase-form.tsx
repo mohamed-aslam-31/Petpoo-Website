@@ -117,6 +117,8 @@ function SearchableSelect({
   allowCreate = false,
   staticAddLabel,
   onStaticAdd,
+  maxLength,
+  allowedCharsPattern,
 }: {
   value: string;
   onValueChange: (val: string) => void;
@@ -131,9 +133,14 @@ function SearchableSelect({
   /** Always-visible "Add new …" button (opens a dialog, e.g. for products) */
   staticAddLabel?: string;
   onStaticAdd?: () => void;
+  /** Max characters allowed when typing a new entry (e.g. 70 for brand/category, 80 for product) */
+  maxLength?: number;
+  /** Regex that each character must match; invalid chars are silently dropped */
+  allowedCharsPattern?: RegExp;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [charError, setCharError] = useState<string | null>(null);
 
   const isPendingNew = value.startsWith(NEW_ITEM_PREFIX);
   const pendingNewName = isPendingNew ? value.slice(NEW_ITEM_PREFIX.length) : null;
@@ -150,16 +157,46 @@ function SearchableSelect({
     trimmed.length >= 1 &&
     !options.some((o) => o.label.toLowerCase() === trimmed.toLowerCase()) &&
     !(`${NEW_ITEM_PREFIX}${trimmed}` === value); // already selected as pending-new
-  const canCreate = allowCreate && notExists;
+
+  // Validate the typed search when in create mode
+  const searchHasInvalidChars = allowedCharsPattern && search.length > 0
+    ? !allowedCharsPattern.test(search)
+    : false;
+  const searchExceedsMax = maxLength !== undefined && trimmed.length > maxLength;
+  const canCreate = allowCreate && notExists && !searchHasInvalidChars && !searchExceedsMax;
+
+  function handleSearchChange(val: string) {
+    // Strip disallowed characters if a pattern is provided
+    let filtered = val;
+    if (allowedCharsPattern) {
+      filtered = val.split("").filter((ch) => allowedCharsPattern.test(ch)).join("");
+      if (filtered !== val) {
+        setCharError("Only letters, numbers, spaces, and - / & ( ) . ' + are allowed");
+      } else {
+        setCharError(null);
+      }
+    } else {
+      setCharError(null);
+    }
+    // Cap at maxLength
+    if (maxLength !== undefined && filtered.length > maxLength) {
+      filtered = filtered.slice(0, maxLength);
+    }
+    setSearch(filtered);
+  }
 
   function handleSelect(val: string) {
     onValueChange(val);
     setOpen(false);
     setSearch("");
+    setCharError(null);
   }
 
+  const showCounter = allowCreate && maxLength !== undefined && search.length > 0;
+  const atLimit = maxLength !== undefined && search.length >= maxLength;
+
   return (
-    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSearch(""); }}>
+    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setSearch(""); setCharError(null); } }}>
       <div className="flex items-center gap-1">
         <PopoverTrigger asChild>
           <Button
@@ -200,8 +237,23 @@ function SearchableSelect({
             placeholder={searchPlaceholder}
             className="h-8 text-xs"
             value={search}
-            onValueChange={setSearch}
+            onValueChange={handleSearchChange}
           />
+          {/* Char counter + error shown when typing a new entry */}
+          {allowCreate && search.length > 0 && (
+            <div className="px-2 pb-1 flex flex-col gap-0.5">
+              {showCounter && (
+                <div className="flex justify-end">
+                  <span className={cn("text-[10px]", atLimit ? "text-destructive font-medium" : "text-muted-foreground")}>
+                    {search.length}/{maxLength}
+                  </span>
+                </div>
+              )}
+              {charError && (
+                <p className="text-[10px] text-destructive leading-tight">{charError}</p>
+              )}
+            </div>
+          )}
           <CommandList className="max-h-48 overflow-y-auto">
             {/* Static "Add new" button for products (opens dialog immediately) */}
             {staticAddLabel && onStaticAdd && (
@@ -209,7 +261,7 @@ function SearchableSelect({
                 <CommandGroup>
                   <CommandItem
                     value="__static_add__"
-                    onSelect={() => { setOpen(false); setSearch(""); onStaticAdd(); }}
+                    onSelect={() => { setOpen(false); setSearch(""); setCharError(null); onStaticAdd(); }}
                     className="text-xs text-primary font-medium"
                   >
                     <Plus className="mr-2 h-3 w-3" />
@@ -228,6 +280,7 @@ function SearchableSelect({
                     onSelect={() => {
                       setOpen(false);
                       setSearch("");
+                      setCharError(null);
                       onValueChange(`${NEW_ITEM_PREFIX}${trimmed}`);
                     }}
                     className="text-xs text-primary font-medium"
@@ -1371,6 +1424,7 @@ export function PurchaseForm() {
                             disabled={!supplierSelected}
                             buttonClassName={rowErrors?.brandComboVal ? "border-destructive" : ""}
                             allowCreate
+                            maxLength={70}
                           />
                           {rowErrors?.brandComboVal && (
                             <p className="text-[10px] text-destructive mt-0.5">
@@ -1391,6 +1445,7 @@ export function PurchaseForm() {
                             disabled={!supplierSelected}
                             buttonClassName={rowErrors?.categoryComboVal ? "border-destructive" : ""}
                             allowCreate
+                            maxLength={70}
                           />
                           {rowErrors?.categoryComboVal && (
                             <p className="text-[10px] text-destructive mt-0.5">
@@ -1411,6 +1466,8 @@ export function PurchaseForm() {
                             disabled={!supplierSelected}
                             buttonClassName={rowErrors?.productComboVal ? "border-destructive" : ""}
                             allowCreate
+                            maxLength={80}
+                            allowedCharsPattern={/^[a-zA-Z0-9 \-\/&().'+ ]$/}
                           />
                           {rowErrors?.productComboVal && (
                             <p className="text-[10px] text-destructive mt-0.5">
