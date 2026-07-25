@@ -1,0 +1,188 @@
+## Prompt: Purchase Items – Smart Brand, Category, Product & Unit Selection Logic
+
+Implement the following behavior for the **Purchase Items** section.
+
+### Fields
+
+* Brand
+* Category
+* Product
+* Unit
+
+All four fields must be **searchable combo boxes** with:
+
+* Search functionality
+* Clear (✕) selection button
+* Ability to create a new record if it doesn't exist
+
+---
+
+# 1. Brand, Category & Product Relationship
+
+These three fields are linked and should behave intelligently.
+
+## Scenario A – Brand selected first
+
+When the user selects a **Brand**:
+
+* Do **not** automatically select a Category or Product.
+* Category dropdown should display **all categories**.
+* Product dropdown should display **all products**.
+* The user can then choose any Category and Product.
+
+---
+
+## Scenario B – Category selected first
+
+When the user selects a **Category**:
+
+* Do **not** automatically select a Brand or Product.
+* Brand dropdown should display **all brands**.
+* Product dropdown should display **all products**.
+
+---
+
+## Scenario C – Product selected first
+
+When the user selects an **existing Product**:
+
+* Automatically fetch and select the linked **Brand**.
+* Automatically fetch and select the linked **Category**.
+* This should happen instantly without user interaction.
+
+---
+
+# 2. Clearing Selections
+
+Each combo box should have its own **Clear Selection (✕)** button.
+
+## Brand
+
+When Brand is cleared:
+
+* Only Brand becomes empty.
+* Category and Product should remain unchanged.
+
+## Category
+
+When Category is cleared:
+
+* Only Category becomes empty.
+* Brand and Product should remain unchanged.
+
+## Product
+
+When Product is cleared:
+
+* If the selected product was an **existing product** (linked to Brand and Category), then:
+
+  * Clear Product.
+  * Also clear the auto-filled Brand.
+  * Also clear the auto-filled Category.
+* If Brand or Category was entered manually (for creating a new product), do **not** clear them automatically.
+
+---
+
+# 3. Creating New Records
+
+Each combo box should allow adding new records.
+
+## Brand
+
+If the brand does not exist:
+
+* Show **➕ Add New Brand**.
+* After saving:
+
+  * Select the new Brand automatically.
+  * Category dropdown should still show all categories.
+  * Product dropdown should still show all products.
+
+## Category
+
+If the category does not exist:
+
+* Show **➕ Add New Category**.
+* After saving:
+
+  * Select the new Category automatically.
+  * Brand dropdown should still show all brands.
+  * Product dropdown should still show all products.
+
+## Product
+
+If the product does not exist:
+
+* Show **➕ Add New Product**.
+* Save it to the Product Master.
+* Automatically select the newly created product.
+* **Unit is mandatory** when creating a new product.
+
+---
+
+# 4. Unit
+
+Unit must be a searchable combo box.
+
+Features:
+
+* Search
+* Clear selection
+* **➕ Add New Unit**
+
+When creating a new product:
+
+* Unit is **required**.
+* If the unit does not exist, users can create it without leaving the Purchase page.
+
+---
+
+# 5. Existing Product Information
+
+When an existing product is selected:
+
+* Display the previous/default purchase price for that product.
+* Show a checkbox:
+
+☐ **Update Product Purchase Price**
+
+If checked:
+
+* Update the Product Master's purchase price with the new purchase price after saving the purchase.
+
+If unchecked:
+
+* Record the purchase normally without changing the Product Master's purchase price.
+
+---
+
+# 6. Validation
+
+Validation should only occur when the user clicks **Save**.
+
+Required fields should display validation messages only after Save is attempted.
+
+Required fields:
+
+* Brand
+* Category
+* Product
+* Unit
+* Purchase Price
+* Quantity
+* Any other mandatory fields
+
+The validation system should not show errors while the user is still entering data.
+
+---
+
+# 7. Expected User Experience
+
+* All combo boxes are searchable.
+* Each combo box has a Clear Selection button.
+* Users can create Brand, Category, Product, and Unit without leaving the Purchase page.
+* Selecting an existing Product automatically fills its Brand and Category.
+* Clearing Brand or Category only clears that field.
+* Clearing an existing Product also clears the Brand and Category that were auto-filled by that product.
+* Validation appears only after clicking Save.
+* The workflow should be fast, intuitive, and prevent unnecessary page navigation.

@@ -4,3 +4,4 @@
 - [OpenAPI code generation](openapi-codegen-path.md) — Orval needs an absolute config-relative OpenAPI target in this workspace.
 - [Brands/Categories API shape](brands-categories-shape.md) — useListBrands/useListCategories return T[] directly (no pagination wrapper); useListProducts/useListSuppliers return paginated Page objects with .data.
 - [Purchase exit drafts](purchase-exit-drafts.md) — unsaved New Purchase data is preserved in browser storage until saved or explicitly cancelled.
+- [Purchase item selection rules](purchase-item-selection-rules.md) — purchase combo boxes stay independent; product auto-fill provenance controls what clears.

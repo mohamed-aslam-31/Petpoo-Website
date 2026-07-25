@@ -72,7 +72,7 @@ import {
   FormControl,
   FormMessage,
 } from "@/components/ui/form";
-import { Trash2, Plus, ArrowLeft, Printer, Save, Check, ChevronsUpDown, FileText } from "lucide-react";
+import { Trash2, Plus, ArrowLeft, Printer, Save, Check, ChevronsUpDown, FileText, X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
@@ -160,25 +160,40 @@ function SearchableSelect({
 
   return (
     <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSearch(""); }}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          role="combobox"
-          disabled={disabled}
-          className={cn("h-8 w-full justify-between px-2 text-xs font-normal overflow-hidden", buttonClassName)}
-        >
-          <span className={cn("truncate min-w-0 flex-1 text-left", !selected && "text-muted-foreground")}>
-            {selected ? selected.label : placeholder}
-          </span>
-          {isPendingNew && (
-            <span className="ml-1 shrink-0 rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
-              New
+      <div className="flex items-center gap-1">
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            disabled={disabled}
+            className={cn("h-8 min-w-0 flex-1 justify-between px-2 text-xs font-normal overflow-hidden", buttonClassName)}
+          >
+            <span className={cn("truncate min-w-0 flex-1 text-left", !selected && "text-muted-foreground")}>
+              {selected ? selected.label : placeholder}
             </span>
-          )}
-          <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
+            {isPendingNew && (
+              <span className="ml-1 shrink-0 rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+                New
+              </span>
+            )}
+            <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        {value && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={disabled}
+            aria-label={`Clear ${placeholder.replace("Select ", "").replace("Search ", "")}`}
+            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+            onClick={() => onValueChange("")}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
       <PopoverContent className={cn("p-0", popoverWidth)} align="start" sideOffset={4}>
         <Command shouldFilter={false}>
           <CommandInput
@@ -297,6 +312,7 @@ function UnitSelect({
   return (
     <div>
       <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSearch(""); }}>
+        <div className="flex items-center gap-1">
         <PopoverTrigger asChild>
           <Button
             type="button"
@@ -304,7 +320,7 @@ function UnitSelect({
             role="combobox"
             disabled={disabled}
             className={cn(
-              "w-full justify-between font-normal text-left overflow-hidden",
+              "min-w-0 flex-1 justify-between font-normal text-left overflow-hidden",
               compact ? "h-8 px-2 text-xs" : "h-9 text-sm",
               error && "border-destructive",
               disabled && "opacity-60 cursor-not-allowed"
@@ -316,6 +332,20 @@ function UnitSelect({
             <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
+        {value && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={disabled}
+            aria-label="Clear unit"
+            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+            onClick={() => onChange("")}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        )}
+      </div>
         <PopoverContent className="p-0 w-44" align="start" sideOffset={4}>
           <Command shouldFilter={false}>
             <CommandInput
@@ -390,6 +420,9 @@ const itemSchema = z.object({
   prevPurchasePrice: z.coerce.number().nullable().optional(),
   /** When true, update the product's stored purchase price on save */
   updatePrice: z.boolean().optional(),
+  /** Tracks whether the current product selection supplied these fields automatically. */
+  productAutoFilledBrand: z.boolean().optional(),
+  productAutoFilledCategory: z.boolean().optional(),
 });
 
 const schema = z.object({
@@ -424,6 +457,8 @@ const emptyItem = (): z.infer<typeof itemSchema> => ({
   lineTotal: 0,
   prevPurchasePrice: null,
   updatePrice: false,
+  productAutoFilledBrand: false,
+  productAutoFilledCategory: false,
 });
 
 
@@ -532,6 +567,7 @@ export function PurchaseForm() {
   const [confirmExitOpen, setConfirmExitOpen] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [pendingNavigate, setPendingNavigate] = useState<(() => void) | null>(null);
+  const [hasAttemptedSave, setHasAttemptedSave] = useState(false);
   // ID of the draft currently being edited (null = new, unsaved draft)
   const [draftId, setDraftId] = useState<string | null>(() =>
     new URLSearchParams(window.location.search).get("draft")
@@ -812,6 +848,7 @@ export function PurchaseForm() {
   }
 
   function onInvalid(errors: Record<string, any>) {
+    setHasAttemptedSave(true);
     if (errors.supplierId) { scrollAndFocus("field-supplierId"); return; }
     if (errors.purchaseDate) { form.setFocus("purchaseDate"); return; }
     if (errors.items) {
@@ -832,9 +869,9 @@ export function PurchaseForm() {
 
   const handleProductChange = useCallback(
     (index: number, comboVal: string) => {
-      if (comboVal.startsWith(NEW_ITEM_PREFIX)) {
-        // ── Pending-new product: store name, clear auto-fills so user enters them ──
-        form.setValue(`items.${index}.productComboVal`, comboVal, { shouldDirty: true, shouldValidate: true });
+      if (!comboVal) {
+        const current = form.getValues(`items.${index}`);
+        form.setValue(`items.${index}.productComboVal`, "", { shouldDirty: true });
         form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
         form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
         form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
@@ -842,6 +879,32 @@ export function PurchaseForm() {
         form.setValue(`items.${index}.gstPercent`, 0, { shouldDirty: true });
         form.setValue(`items.${index}.prevPurchasePrice`, null, { shouldDirty: true });
         form.setValue(`items.${index}.updatePrice`, false, { shouldDirty: true });
+        if (current.productAutoFilledBrand) {
+          form.setValue(`items.${index}.brandComboVal`, "", { shouldDirty: true });
+          form.setValue(`items.${index}.brandId`, null, { shouldDirty: true });
+          form.setValue(`items.${index}.brandName`, null, { shouldDirty: true });
+        }
+        if (current.productAutoFilledCategory) {
+          form.setValue(`items.${index}.categoryComboVal`, "", { shouldDirty: true });
+          form.setValue(`items.${index}.categoryId`, null, { shouldDirty: true });
+          form.setValue(`items.${index}.categoryName`, null, { shouldDirty: true });
+        }
+        form.setValue(`items.${index}.productAutoFilledBrand`, false, { shouldDirty: true });
+        form.setValue(`items.${index}.productAutoFilledCategory`, false, { shouldDirty: true });
+        return;
+      }
+      if (comboVal.startsWith(NEW_ITEM_PREFIX)) {
+        // ── Pending-new product: store name, clear auto-fills so user enters them ──
+        form.setValue(`items.${index}.productComboVal`, comboVal, { shouldDirty: true });
+        form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
+        form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
+        form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
+        form.setValue(`items.${index}.purchasePrice`, 0, { shouldDirty: true });
+        form.setValue(`items.${index}.gstPercent`, 0, { shouldDirty: true });
+        form.setValue(`items.${index}.prevPurchasePrice`, null, { shouldDirty: true });
+        form.setValue(`items.${index}.updatePrice`, false, { shouldDirty: true });
+        form.setValue(`items.${index}.productAutoFilledBrand`, false, { shouldDirty: true });
+        form.setValue(`items.${index}.productAutoFilledCategory`, false, { shouldDirty: true });
         return;
       }
 
@@ -854,7 +917,7 @@ export function PurchaseForm() {
       const category = allCategories.find((c: { id: number }) => c.id === product.categoryId);
 
       const prevPrice = parseFloat(String(product.purchasePrice ?? 0));
-      form.setValue(`items.${index}.productComboVal`, comboVal, { shouldDirty: true, shouldValidate: true });
+      form.setValue(`items.${index}.productComboVal`, comboVal, { shouldDirty: true });
       form.setValue(`items.${index}.productId`, pid, { shouldDirty: true });
       form.setValue(`items.${index}.currentStock`, product.currentStock ?? 0, { shouldDirty: true });
       form.setValue(`items.${index}.unit`, product.unit ?? "", { shouldDirty: true });
@@ -864,38 +927,49 @@ export function PurchaseForm() {
       form.setValue(`items.${index}.updatePrice`, false, { shouldDirty: true });
       // Auto-fill brand
       const brandCombo = product.brandId ? String(product.brandId) : NO_BRAND;
-      form.setValue(`items.${index}.brandComboVal`, brandCombo, { shouldDirty: true, shouldValidate: true });
+      form.setValue(`items.${index}.brandComboVal`, brandCombo, { shouldDirty: true });
       form.setValue(`items.${index}.brandId`, product.brandId ?? null, { shouldDirty: true });
       form.setValue(`items.${index}.brandName`, brand?.name ?? null, { shouldDirty: true });
+      form.setValue(`items.${index}.productAutoFilledBrand`, true, { shouldDirty: true });
       // Auto-fill category — use name as comboVal (deduplication key)
       const catCombo = category?.name ?? NO_CATEGORY;
-      form.setValue(`items.${index}.categoryComboVal`, catCombo, { shouldDirty: true, shouldValidate: true });
+      form.setValue(`items.${index}.categoryComboVal`, catCombo, { shouldDirty: true });
       form.setValue(`items.${index}.categoryId`, product.categoryId ?? null, { shouldDirty: true });
       form.setValue(`items.${index}.categoryName`, category?.name ?? null, { shouldDirty: true });
+      form.setValue(`items.${index}.productAutoFilledCategory`, true, { shouldDirty: true });
     },
     [allProducts, allBrands, allCategories, form]
   );
 
   const handleBrandChange = useCallback(
     (index: number, comboVal: string) => {
+      if (!comboVal) {
+        form.setValue(`items.${index}.brandComboVal`, "", { shouldDirty: true });
+        form.setValue(`items.${index}.brandId`, null, { shouldDirty: true });
+        form.setValue(`items.${index}.brandName`, null, { shouldDirty: true });
+        form.setValue(`items.${index}.productAutoFilledBrand`, false, { shouldDirty: true });
+        return;
+      }
       if (comboVal.startsWith(NEW_ITEM_PREFIX)) {
         // Pending-new brand: store the name, leave brandId null (resolved on save)
         const name = comboVal.slice(NEW_ITEM_PREFIX.length);
-        form.setValue(`items.${index}.brandComboVal`, comboVal, { shouldDirty: true, shouldValidate: true });
+        form.setValue(`items.${index}.brandComboVal`, comboVal, { shouldDirty: true });
         form.setValue(`items.${index}.brandId`, null, { shouldDirty: true });
         form.setValue(`items.${index}.brandName`, name, { shouldDirty: true });
+        form.setValue(`items.${index}.productAutoFilledBrand`, false, { shouldDirty: true });
       } else {
         const bid = comboVal === NO_BRAND ? null : Number(comboVal) || null;
         const brand = allBrands.find((b: { id: number }) => b.id === bid);
-        form.setValue(`items.${index}.brandComboVal`, comboVal, { shouldDirty: true, shouldValidate: true });
+        form.setValue(`items.${index}.brandComboVal`, comboVal, { shouldDirty: true });
         form.setValue(`items.${index}.brandId`, bid, { shouldDirty: true });
         form.setValue(`items.${index}.brandName`, brand?.name ?? null, { shouldDirty: true });
+        form.setValue(`items.${index}.productAutoFilledBrand`, false, { shouldDirty: true });
       }
       // Category stays untouched. Only clear product if it's an existing selection
       // (a pending-new product is being described by the brand the user just set, so keep it).
       const currentProductVal = form.getValues(`items.${index}.productComboVal`);
       if (!currentProductVal.startsWith(NEW_ITEM_PREFIX)) {
-        form.setValue(`items.${index}.productComboVal`, "", { shouldDirty: true, shouldValidate: true });
+        form.setValue(`items.${index}.productComboVal`, "", { shouldDirty: true });
         form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
         form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
         form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
@@ -908,15 +982,24 @@ export function PurchaseForm() {
 
   const handleCategoryChange = useCallback(
     (index: number, comboVal: string) => {
-      form.setValue(`items.${index}.categoryComboVal`, comboVal, { shouldDirty: true, shouldValidate: true });
+      if (!comboVal) {
+        form.setValue(`items.${index}.categoryComboVal`, "", { shouldDirty: true });
+        form.setValue(`items.${index}.categoryId`, null, { shouldDirty: true });
+        form.setValue(`items.${index}.categoryName`, null, { shouldDirty: true });
+        form.setValue(`items.${index}.productAutoFilledCategory`, false, { shouldDirty: true });
+        return;
+      }
+      form.setValue(`items.${index}.categoryComboVal`, comboVal, { shouldDirty: true });
       if (comboVal.startsWith(NEW_ITEM_PREFIX)) {
         // Pending-new category: store the name, leave categoryId null (resolved on save)
         const name = comboVal.slice(NEW_ITEM_PREFIX.length);
         form.setValue(`items.${index}.categoryId`, null, { shouldDirty: true });
         form.setValue(`items.${index}.categoryName`, name, { shouldDirty: true });
+        form.setValue(`items.${index}.productAutoFilledCategory`, false, { shouldDirty: true });
       } else if (comboVal === NO_CATEGORY) {
         form.setValue(`items.${index}.categoryId`, null, { shouldDirty: true });
         form.setValue(`items.${index}.categoryName`, null, { shouldDirty: true });
+        form.setValue(`items.${index}.productAutoFilledCategory`, false, { shouldDirty: true });
       } else {
         // Existing category selected by name — resolve its ID
         form.setValue(`items.${index}.categoryName`, comboVal, { shouldDirty: true });
@@ -926,12 +1009,13 @@ export function PurchaseForm() {
           catsWithName.find((c: { brandId?: number | null }) => (c.brandId ?? null) === currentBrandId) ??
           catsWithName[0];
         form.setValue(`items.${index}.categoryId`, resolvedCat?.id ?? null, { shouldDirty: true });
+        form.setValue(`items.${index}.productAutoFilledCategory`, false, { shouldDirty: true });
       }
       // Brand stays untouched. Only clear product if it's an existing selection
       // (a pending-new product is being described by the category the user just set, so keep it).
       const currentProductVal = form.getValues(`items.${index}.productComboVal`);
       if (!currentProductVal.startsWith(NEW_ITEM_PREFIX)) {
-        form.setValue(`items.${index}.productComboVal`, "", { shouldDirty: true, shouldValidate: true });
+        form.setValue(`items.${index}.productComboVal`, "", { shouldDirty: true });
         form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
         form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
         form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
@@ -1293,30 +1377,17 @@ export function PurchaseForm() {
                       return opts;
                     })();
 
-                    // Product options — filter by brand/category; pending-new brand/category → no filter on that axis
+                    // Product options intentionally remain unfiltered. Brand and category are
+                    // independent selections; choosing either one must not hide products.
                     const productComboVal = item?.productComboVal ?? "";
                     const isPendingNewProduct = productComboVal.startsWith(NEW_ITEM_PREFIX);
-                    const filteredProducts = allProducts.filter((p) => {
-                      const brandOk = isPendingNewBrand || !brandComboVal || (
-                        brandComboVal === NO_BRAND ? !p.brandId : p.brandId === Number(brandComboVal)
-                      );
-                      const catOk = isPendingNewCat || !categoryComboVal || (
-                        categoryComboVal === NO_CATEGORY
-                          ? !p.categoryId
-                          : item?.categoryId
-                            ? p.categoryId === item.categoryId
-                            : allCategories
-                                .filter((c: { name: string }) => c.name === categoryComboVal)
-                                .some((c: { id: number }) => c.id === p.categoryId)
-                      );
-                      return brandOk && catOk;
-                    });
                     // SearchableSelect auto-prepends the pending-new entry when value starts with __new__:
                     // so we only pass existing products here (no duplication)
-                    const productOptions = filteredProducts.map((p) => ({
+                    const productOptions = allProducts.map((p) => ({
                       value: String(p.id),
                       label: p.name,
                     }));
+                    const rowErrors = hasAttemptedSave ? form.formState.errors.items?.[index] : undefined;
 
                     const lineBase =
                       (Number(item?.quantity) || 0) * (Number(item?.purchasePrice) || 0);
@@ -1336,7 +1407,7 @@ export function PurchaseForm() {
                         </td>
                         {/* Brand */}
                         <td className="px-2 py-2"
-                          {...(form.formState.errors.items?.[index]?.brandComboVal ? { "data-field-error": true } : {})}>
+                          {...(rowErrors?.brandComboVal ? { "data-field-error": true } : {})}>
                           <SearchableSelect
                             value={brandComboVal}
                             onValueChange={(v) => handleBrandChange(index, v)}
@@ -1344,19 +1415,19 @@ export function PurchaseForm() {
                             placeholder="Select brand…"
                             searchPlaceholder="Search or add brand…"
                             disabled={!supplierSelected}
-                            buttonClassName={form.formState.errors.items?.[index]?.brandComboVal ? "border-destructive" : ""}
+                            buttonClassName={rowErrors?.brandComboVal ? "border-destructive" : ""}
                             allowCreate
                           />
-                          {form.formState.errors.items?.[index]?.brandComboVal && (
+                          {rowErrors?.brandComboVal && (
                             <p className="text-[10px] text-destructive mt-0.5">
-                              {form.formState.errors.items[index].brandComboVal.message}
+                              {rowErrors.brandComboVal.message}
                             </p>
                           )}
                         </td>
 
                         {/* Category */}
                         <td className="px-2 py-2"
-                          {...(form.formState.errors.items?.[index]?.categoryComboVal ? { "data-field-error": true } : {})}>
+                          {...(rowErrors?.categoryComboVal ? { "data-field-error": true } : {})}>
                           <SearchableSelect
                             value={categoryComboVal}
                             onValueChange={(v) => handleCategoryChange(index, v)}
@@ -1364,19 +1435,19 @@ export function PurchaseForm() {
                             placeholder="Select category…"
                             searchPlaceholder="Search or add category…"
                             disabled={!supplierSelected}
-                            buttonClassName={form.formState.errors.items?.[index]?.categoryComboVal ? "border-destructive" : ""}
+                            buttonClassName={rowErrors?.categoryComboVal ? "border-destructive" : ""}
                             allowCreate
                           />
-                          {form.formState.errors.items?.[index]?.categoryComboVal && (
+                          {rowErrors?.categoryComboVal && (
                             <p className="text-[10px] text-destructive mt-0.5">
-                              {form.formState.errors.items[index].categoryComboVal.message}
+                              {rowErrors.categoryComboVal.message}
                             </p>
                           )}
                         </td>
 
                         {/* Product */}
                         <td className="px-2 py-2"
-                          {...(form.formState.errors.items?.[index]?.productComboVal ? { "data-field-error": true } : {})}>
+                          {...(rowErrors?.productComboVal ? { "data-field-error": true } : {})}>
                           <SearchableSelect
                             value={productComboVal}
                             onValueChange={(v) => handleProductChange(index, v)}
@@ -1384,12 +1455,12 @@ export function PurchaseForm() {
                             placeholder="Select product…"
                             searchPlaceholder="Search or add product…"
                             disabled={!supplierSelected}
-                            buttonClassName={form.formState.errors.items?.[index]?.productComboVal ? "border-destructive" : ""}
+                            buttonClassName={rowErrors?.productComboVal ? "border-destructive" : ""}
                             allowCreate
                           />
-                          {form.formState.errors.items?.[index]?.productComboVal && (
+                          {rowErrors?.productComboVal && (
                             <p className="text-[10px] text-destructive mt-0.5">
-                              {(form.formState.errors.items[index] as any).productComboVal?.message}
+                              {(rowErrors as any).productComboVal?.message}
                             </p>
                           )}
                         </td>
@@ -1409,8 +1480,8 @@ export function PurchaseForm() {
                         <td className="px-2 py-2">
                           <UnitSelect
                             value={item?.unit ?? ""}
-                            onChange={(u) => form.setValue(`items.${index}.unit`, u, { shouldDirty: true, shouldValidate: true })}
-                            error={form.formState.errors.items?.[index]?.unit?.message}
+                            onChange={(u) => form.setValue(`items.${index}.unit`, u, { shouldDirty: true })}
+                            error={rowErrors?.unit?.message}
                             compact
                             disabled={!supplierSelected || (!isPendingNewProduct && productComboVal !== "")}
                           />
