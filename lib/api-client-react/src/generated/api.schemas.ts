@@ -818,6 +818,12 @@ export interface PurchaseItem {
   quantity: number;
   unit: string;
   purchasePrice: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  discountPercent?: number;
+  discountAmount?: number;
   gstPercent: number;
   lineTotal: number;
   gstAmount: number;
@@ -827,6 +833,11 @@ export interface PurchaseItemInput {
   productId: number;
   quantity: number;
   purchasePrice: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  discountPercent?: number;
   gstPercent?: number;
   brandId?: number;
   brandName?: string;

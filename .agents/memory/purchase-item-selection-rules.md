@@ -9,3 +9,7 @@ Brand, category, product, and unit selectors are searchable and independently cl
 **Why:** Purchase entry must support guided product lookup while preserving independent Brand and Category choices when users change or clear fields.
 
 **How to apply:** Keep validation feedback deferred until Save is attempted. New brand/category/product/unit records may be staged inline; existing-product price changes require an explicit update-price choice.
+
+Purchase line-item discounts are percentages from 0–100%; the separate purchase-level discount remains an amount.
+
+**Why:** A line discount should scale with quantity and price, while the bill-level adjustment is a fixed final-bill amount.

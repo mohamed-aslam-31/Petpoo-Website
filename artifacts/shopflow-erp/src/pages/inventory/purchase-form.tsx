@@ -413,7 +413,7 @@ const itemSchema = z.object({
   quantity: z.coerce.number().int().min(1, "Qty must be ≥ 1"),
   unit: z.string().min(1, "Unit required"),
   purchasePrice: z.coerce.number().min(0, "Price required"),
-  itemDiscount: z.coerce.number().min(0).optional(),
+  discountPercent: z.coerce.number().min(0).max(100, "Discount cannot exceed 100%").optional(),
   gstPercent: z.coerce.number().min(0).optional(),
   lineTotal: z.coerce.number().optional(),
   /** Stored purchase price at the time the product was selected (for comparison UI) */
@@ -449,7 +449,7 @@ const emptyItem = (): z.infer<typeof itemSchema> => ({
   quantity: 1,
   unit: "",
   purchasePrice: 0,
-  itemDiscount: 0,
+  discountPercent: 0,
   gstPercent: 0,
   lineTotal: 0,
   prevPurchasePrice: null,
@@ -720,15 +720,18 @@ export function PurchaseForm() {
   }, 0);
 
   const itemDiscountTotal = watchedItems.reduce((acc, item) => {
-    return acc + (Number(item.itemDiscount) || 0);
+    const qty = Number(item.quantity) || 0;
+    const price = Number(item.purchasePrice) || 0;
+    const discountPercent = Number(item.discountPercent) || 0;
+    return acc + (qty * price * discountPercent) / 100;
   }, 0);
 
   const gstTotal = watchedItems.reduce((acc, item) => {
     const qty = Number(item.quantity) || 0;
     const price = Number(item.purchasePrice) || 0;
-    const disc = Number(item.itemDiscount) || 0;
+    const discountPercent = Number(item.discountPercent) || 0;
     const gst = Number(item.gstPercent) || 0;
-    const base = qty * price - disc;
+    const base = qty * price * (1 - discountPercent / 100);
     return acc + base * (gst / 100);
   }, 0);
 
@@ -1292,7 +1295,7 @@ export function PurchaseForm() {
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[80px]">Qty <span className="text-destructive">*</span></th>
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[90px]">Unit <span className="text-destructive">*</span></th>
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[110px]">Price <span className="text-destructive">*</span></th>
-                    <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[90px]">Disc</th>
+                    <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[90px]">Disc %</th>
                     {withGST && <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[70px] text-xs">GST %</th>}
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground min-w-[100px]">Total</th>
                     <th className="w-[40px]"></th>
@@ -1341,8 +1344,9 @@ export function PurchaseForm() {
 
                     const lineBase =
                       (Number(item?.quantity) || 0) * (Number(item?.purchasePrice) || 0);
-                    const lineDisc = Number(item?.itemDiscount) || 0;
-                    const lineTotal = lineBase - lineDisc;
+                    const discountPercent = Number(item?.discountPercent) || 0;
+                    const lineDiscount = lineBase * (discountPercent / 100);
+                    const lineTotal = lineBase - lineDiscount;
                     const gstAmt = lineTotal * ((Number(item?.gstPercent) || 0) / 100);
 
                     return (
@@ -1472,17 +1476,26 @@ export function PurchaseForm() {
                           )}
                         </td>
 
-                        {/* Item Discount */}
+                        {/* Item Discount Percentage */}
                         <td className="px-2 py-2">
-                          <Input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            placeholder="0"
-                            className="h-8 text-xs text-right"
-                            disabled={!supplierSelected}
-                            {...form.register(`items.${index}.itemDiscount`)}
-                          />
+                          <div className="relative">
+                            <Input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step="0.01"
+                              placeholder="0"
+                              className="h-8 pr-5 text-xs text-right"
+                              disabled={!supplierSelected}
+                              {...form.register(`items.${index}.discountPercent`)}
+                            />
+                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">%</span>
+                          </div>
+                          {rowErrors?.discountPercent && (
+                            <p className="text-[10px] text-destructive mt-0.5">
+                              {rowErrors.discountPercent.message}
+                            </p>
+                          )}
                         </td>
 
                         {/* GST % */}

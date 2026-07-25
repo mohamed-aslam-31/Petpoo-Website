@@ -2262,6 +2262,8 @@ components:
         quantity:     { type: integer }
         unit:         { type: string }
         purchasePrice: { type: number }
+        discountPercent: { type: number, minimum: 0, maximum: 100 }
+        discountAmount: { type: number }
         gstPercent:   { type: number }
         lineTotal:    { type: number }
         gstAmount:    { type: number }
@@ -2273,6 +2275,7 @@ components:
         productId:     { type: integer }
         quantity:      { type: integer }
         purchasePrice: { type: number }
+        discountPercent: { type: number, minimum: 0, maximum: 100 }
         gstPercent:    { type: number }
         brandId:       { type: integer }
         brandName:     { type: string }

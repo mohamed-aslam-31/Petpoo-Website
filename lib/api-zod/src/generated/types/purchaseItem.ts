@@ -22,6 +22,12 @@ export interface PurchaseItem {
   quantity: number;
   unit: string;
   purchasePrice: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  discountPercent?: number;
+  discountAmount?: number;
   gstPercent: number;
   lineTotal: number;
   gstAmount: number;

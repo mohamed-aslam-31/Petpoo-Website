@@ -10,6 +10,11 @@ export interface PurchaseItemInput {
   productId: number;
   quantity: number;
   purchasePrice: number;
+  /**
+     * @minimum 0
+     * @maximum 100
+     */
+  discountPercent?: number;
   gstPercent?: number;
   brandId?: number;
   brandName?: string;

@@ -53,6 +53,7 @@ const PurchaseItemSchema = z.object({
   quantity: z.number().int().positive("Quantity must be > 0"),
   unit: z.string().optional(),
   purchasePrice: z.number().nonnegative("Price must be ≥ 0"),
+  discountPercent: z.number().min(0).max(100).optional().default(0),
   gstPercent: z.number().nonnegative().optional(),
   lineTotal: z.number().optional(),
   gstAmount: z.number().optional(),
@@ -150,7 +151,10 @@ router.post("/purchases", async (req, res): Promise<void> => {
       return;
     }
 
-    const lineTotal = item.quantity * item.purchasePrice;
+    const grossLineTotal = item.quantity * item.purchasePrice;
+    const discountPercent = item.discountPercent ?? 0;
+    const discountAmount = grossLineTotal * (discountPercent / 100);
+    const lineTotal = grossLineTotal - discountAmount;
     const gstPct = item.gstPercent ?? parseFloat(String(product.gstPercent)) ?? 0;
     const gstAmt = lineTotal * (gstPct / 100);
 
@@ -169,6 +173,8 @@ router.post("/purchases", async (req, res): Promise<void> => {
       quantity: item.quantity,
       unit: product.unit,
       purchasePrice: item.purchasePrice,
+      discountPercent,
+      discountAmount,
       gstPercent: gstPct,
       lineTotal,
       gstAmount: gstAmt,

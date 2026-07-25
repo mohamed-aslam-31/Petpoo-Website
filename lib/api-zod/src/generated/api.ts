@@ -268,8 +268,8 @@ export const CreateProductBody = zod.object({
   "sku": zod.string(),
   "barcode": zod.string().optional(),
   "hsnCode": zod.string().optional(),
-  "categoryId": zod.number().nullish(),
-  "brandId": zod.number().nullish(),
+  "categoryId": zod.number().optional(),
+  "brandId": zod.number().optional(),
   "purchasePrice": zod.number(),
   "sellingPrice": zod.number(),
   "wholesalePrice": zod.number(),
@@ -348,8 +348,8 @@ export const UpdateProductBody = zod.object({
   "sku": zod.string().optional(),
   "barcode": zod.string().optional(),
   "hsnCode": zod.string().optional(),
-  "categoryId": zod.number().nullish(),
-  "brandId": zod.number().nullish(),
+  "categoryId": zod.number().optional(),
+  "brandId": zod.number().optional(),
   "purchasePrice": zod.number().optional(),
   "sellingPrice": zod.number().optional(),
   "wholesalePrice": zod.number().optional(),
@@ -806,6 +806,11 @@ export const ListPurchasesQueryParams = zod.object({
   "limit": zod.coerce.number().optional()
 })
 
+export const listPurchasesResponseDataItemItemsItemDiscountPercentMin = 0;
+export const listPurchasesResponseDataItemItemsItemDiscountPercentMax = 100;
+
+
+
 export const ListPurchasesResponse = zod.object({
   "data": zod.array(zod.object({
   "id": zod.number(),
@@ -825,6 +830,8 @@ export const ListPurchasesResponse = zod.object({
   "quantity": zod.number(),
   "unit": zod.string(),
   "purchasePrice": zod.number(),
+  "discountPercent": zod.number().min(listPurchasesResponseDataItemItemsItemDiscountPercentMin).max(listPurchasesResponseDataItemItemsItemDiscountPercentMax).optional(),
+  "discountAmount": zod.number().optional(),
   "gstPercent": zod.number(),
   "lineTotal": zod.number(),
   "gstAmount": zod.number()
@@ -849,6 +856,11 @@ export const ListPurchasesResponse = zod.object({
 /**
  * @summary Create a stock purchase (increases stock automatically)
  */
+export const createPurchaseBodyItemsItemDiscountPercentMin = 0;
+export const createPurchaseBodyItemsItemDiscountPercentMax = 100;
+
+
+
 export const CreatePurchaseBody = zod.object({
   "supplierId": zod.number(),
   "purchaseDate": zod.string(),
@@ -856,6 +868,7 @@ export const CreatePurchaseBody = zod.object({
   "productId": zod.number(),
   "quantity": zod.number(),
   "purchasePrice": zod.number(),
+  "discountPercent": zod.number().min(createPurchaseBodyItemsItemDiscountPercentMin).max(createPurchaseBodyItemsItemDiscountPercentMax).optional(),
   "gstPercent": zod.number().optional(),
   "brandId": zod.number().optional(),
   "brandName": zod.string().optional(),
@@ -869,6 +882,11 @@ export const CreatePurchaseBody = zod.object({
   "discount": zod.number().optional(),
   "notes": zod.string().optional()
 })
+
+export const createPurchaseResponseItemsItemDiscountPercentMin = 0;
+export const createPurchaseResponseItemsItemDiscountPercentMax = 100;
+
+
 
 export const CreatePurchaseResponse = zod.object({
   "id": zod.number(),
@@ -888,6 +906,8 @@ export const CreatePurchaseResponse = zod.object({
   "quantity": zod.number(),
   "unit": zod.string(),
   "purchasePrice": zod.number(),
+  "discountPercent": zod.number().min(createPurchaseResponseItemsItemDiscountPercentMin).max(createPurchaseResponseItemsItemDiscountPercentMax).optional(),
+  "discountAmount": zod.number().optional(),
   "gstPercent": zod.number(),
   "lineTotal": zod.number(),
   "gstAmount": zod.number()
@@ -912,6 +932,11 @@ export const GetPurchaseParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const getPurchaseResponseItemsItemDiscountPercentMin = 0;
+export const getPurchaseResponseItemsItemDiscountPercentMax = 100;
+
+
+
 export const GetPurchaseResponse = zod.object({
   "id": zod.number(),
   "purchaseNumber": zod.string(),
@@ -930,6 +955,8 @@ export const GetPurchaseResponse = zod.object({
   "quantity": zod.number(),
   "unit": zod.string(),
   "purchasePrice": zod.number(),
+  "discountPercent": zod.number().min(getPurchaseResponseItemsItemDiscountPercentMin).max(getPurchaseResponseItemsItemDiscountPercentMax).optional(),
+  "discountAmount": zod.number().optional(),
   "gstPercent": zod.number(),
   "lineTotal": zod.number(),
   "gstAmount": zod.number()
