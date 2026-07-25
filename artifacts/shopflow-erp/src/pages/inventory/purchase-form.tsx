@@ -969,83 +969,43 @@ export function PurchaseForm() {
       form.setValue(`items.${index}.brandComboVal`, comboVal, { shouldDirty: true, shouldValidate: true });
       form.setValue(`items.${index}.brandId`, bid, { shouldDirty: true });
       form.setValue(`items.${index}.brandName`, brand?.name ?? null, { shouldDirty: true });
-      // Check if the current category name is still valid for the new brand
-      const currentCatCombo = form.getValues(`items.${index}.categoryComboVal`);
-      const catStillValid = (() => {
-        if (!currentCatCombo) return false;
-        if (currentCatCombo === NO_CATEGORY) return true;
-        // Check if any category with this name belongs to the newly selected brand
-        if (comboVal === NO_BRAND) {
-          return allCategories.some((c: { name: string; brandId: number | null }) => c.name === currentCatCombo && !c.brandId);
-        }
-        return allCategories.some((c: { name: string; brandId: number | null }) => c.name === currentCatCombo && c.brandId === bid);
-      })();
-      if (!catStillValid) {
-        form.setValue(`items.${index}.categoryComboVal`, "", { shouldDirty: true });
-        form.setValue(`items.${index}.categoryId`, null, { shouldDirty: true });
-        form.setValue(`items.${index}.categoryName`, null, { shouldDirty: true });
-      } else if (currentCatCombo && currentCatCombo !== NO_CATEGORY) {
-        // Resolve the specific categoryId for this brand + category name
-        const resolvedCat = allCategories.find((c: { name: string; brandId: number | null }) =>
-          c.name === currentCatCombo && c.brandId === bid
-        );
-        form.setValue(`items.${index}.categoryId`, resolvedCat?.id ?? null, { shouldDirty: true });
-      }
-      // Clear product so user re-selects
+      // Category selection is independent — leave it untouched.
+      // Only clear the product so user re-selects under the new brand.
       form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
       form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
       form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
       form.setValue(`items.${index}.purchasePrice`, 0, { shouldDirty: true });
       form.setValue(`items.${index}.gstPercent`, 0, { shouldDirty: true });
     },
-    [allBrands, allCategories, form]
+    [allBrands, form]
   );
 
   const handleCategoryChange = useCallback(
     (index: number, comboVal: string) => {
       // comboVal is the category NAME (deduplication key), or NO_CATEGORY
       form.setValue(`items.${index}.categoryComboVal`, comboVal, { shouldDirty: true, shouldValidate: true });
-
       if (comboVal === NO_CATEGORY) {
         form.setValue(`items.${index}.categoryId`, null, { shouldDirty: true });
         form.setValue(`items.${index}.categoryName`, null, { shouldDirty: true });
       } else {
         form.setValue(`items.${index}.categoryName`, comboVal, { shouldDirty: true });
-        // Gather all category records with this name and collect their brand IDs
+        // Resolve categoryId: prefer one matching the currently selected brand, else first match
+        const currentBrandId = form.getValues(`items.${index}.brandId`);
         const catsWithName = allCategories.filter((c: { name: string }) => c.name === comboVal);
-        const brandIdsInCat = [...new Set(
-          catsWithName
-            .map((c: { brandId: number | null }) => c.brandId)
-            .filter((id): id is number => id !== null && id !== undefined)
-        )];
-
-        if (brandIdsInCat.length === 1) {
-          // Exactly one brand across all same-name categories — auto-select it
-          const bid = brandIdsInCat[0];
-          const brand = allBrands.find((b: { id: number }) => b.id === bid);
-          form.setValue(`items.${index}.brandComboVal`, String(bid), { shouldDirty: true, shouldValidate: true });
-          form.setValue(`items.${index}.brandId`, bid, { shouldDirty: true });
-          form.setValue(`items.${index}.brandName`, brand?.name ?? null, { shouldDirty: true });
-          // Resolve the specific categoryId now that brand is known
-          const resolvedCat = catsWithName.find((c: { brandId: number | null }) => c.brandId === bid);
-          form.setValue(`items.${index}.categoryId`, resolvedCat?.id ?? null, { shouldDirty: true });
-        } else {
-          // Multiple brands — clear brand so user picks; categoryId resolved later
-          form.setValue(`items.${index}.brandComboVal`, "", { shouldDirty: true, shouldValidate: true });
-          form.setValue(`items.${index}.brandId`, null, { shouldDirty: true });
-          form.setValue(`items.${index}.brandName`, null, { shouldDirty: true });
-          form.setValue(`items.${index}.categoryId`, null, { shouldDirty: true });
-        }
+        const resolvedCat =
+          catsWithName.find((c: { brandId: number | null }) => c.brandId === currentBrandId) ??
+          catsWithName[0];
+        form.setValue(`items.${index}.categoryId`, resolvedCat?.id ?? null, { shouldDirty: true });
       }
-
-      // Clear product so user re-selects
+      // Brand selection is independent — leave it untouched.
+      // Only clear the product so user re-selects under the new category.
       form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
       form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
       form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
       form.setValue(`items.${index}.purchasePrice`, 0, { shouldDirty: true });
       form.setValue(`items.${index}.gstPercent`, 0, { shouldDirty: true });
     },
-    [allCategories, allBrands, form]
+    [allCategories, form]
   );
 
   // ── Inline brand/category creation ───────────────────────────────────────────
@@ -1070,7 +1030,20 @@ export function PurchaseForm() {
         pendingRowRef.current = -1;
         toast.success(`Category "${cat.name}" created`);
         queryClient.invalidateQueries({ queryKey: getListCategoriesQueryKey() });
-        if (idx >= 0) handleCategoryChange(idx, cat.name);
+        if (idx >= 0) {
+          // Set values directly from the fresh mutation response — don't go through
+          // handleCategoryChange, which reads allCategories from the React Query cache
+          // that hasn't refreshed yet (new entry missing → brand gets wrongly cleared).
+          form.setValue(`items.${idx}.categoryComboVal`, cat.name, { shouldDirty: true, shouldValidate: true });
+          form.setValue(`items.${idx}.categoryId`, cat.id, { shouldDirty: true });
+          form.setValue(`items.${idx}.categoryName`, cat.name, { shouldDirty: true });
+          // Clear product so user re-selects; brand stays untouched.
+          form.setValue(`items.${idx}.productId`, 0, { shouldDirty: true });
+          form.setValue(`items.${idx}.currentStock`, 0, { shouldDirty: true });
+          form.setValue(`items.${idx}.unit`, "", { shouldDirty: true });
+          form.setValue(`items.${idx}.purchasePrice`, 0, { shouldDirty: true });
+          form.setValue(`items.${idx}.gstPercent`, 0, { shouldDirty: true });
+        }
       },
       onError: (e: any) => { pendingRowRef.current = -1; toast.error(e?.message ?? "Failed to create category"); },
     },
@@ -1237,40 +1210,26 @@ export function PurchaseForm() {
                     const brandComboVal = item?.brandComboVal ?? "";
                     const categoryComboVal = item?.categoryComboVal ?? "";
 
-                    // Brand options: when a category name is selected, collect all category
-                    // records with that name and show the union of their brands.
-                    const brandsForCategory = (() => {
-                      if (!categoryComboVal || categoryComboVal === NO_CATEGORY) return allBrands;
-                      const catsWithName = allCategories.filter((c: { name: string }) => c.name === categoryComboVal);
-                      const brandIdsInCat = new Set(
-                        catsWithName
-                          .map((c: { brandId: number | null }) => c.brandId)
-                          .filter((id): id is number => id !== null && id !== undefined)
-                      );
-                      return allBrands.filter((b: { id: number }) => brandIdsInCat.has(b.id));
-                    })();
+                    // Brand options — show ALL brands regardless of category selection.
+                    // Cross-filtering was removed: selecting a brand/category only filters products.
                     const brandOptions = [
                       { value: NO_BRAND, label: "No Brand" },
-                      ...brandsForCategory.map((b) => ({ value: String(b.id), label: b.name })),
+                      ...allBrands.map((b) => ({ value: String(b.id), label: b.name })),
                     ];
 
-                    // Category options — deduplicated by name; filter by brand when brand is selected
-                    const filteredCatNames = (() => {
-                      let cats = allCategories;
-                      if (brandComboVal === NO_BRAND) cats = allCategories.filter((c) => !c.brandId);
-                      else if (brandComboVal) cats = allCategories.filter((c) => c.brandId === Number(brandComboVal));
-                      // Deduplicate by name — each name appears only once
+                    // Category options — show ALL categories (deduplicated by name), regardless of brand.
+                    const categoryOptions = (() => {
                       const seen = new Set<string>();
-                      return cats.filter((c) => {
+                      const deduped = allCategories.filter((c) => {
                         if (seen.has(c.name)) return false;
                         seen.add(c.name);
                         return true;
                       });
+                      return [
+                        { value: NO_CATEGORY, label: "No Category" },
+                        ...deduped.map((c) => ({ value: c.name, label: c.name })),
+                      ];
                     })();
-                    const categoryOptions = [
-                      { value: NO_CATEGORY, label: "No Category" },
-                      ...filteredCatNames.map((c) => ({ value: c.name, label: c.name })),
-                    ];
 
                     // Product options — filter by brand and/or category
                     // categoryComboVal is now a name; use resolved categoryId when available,
