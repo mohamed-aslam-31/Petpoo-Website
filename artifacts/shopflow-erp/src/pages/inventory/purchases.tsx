@@ -28,9 +28,30 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Search, Trash2, Eye, ShoppingBag, FileText, Pencil, X } from "lucide-react";
+import { Plus, Search, Trash2, Eye, ShoppingBag, Pencil } from "lucide-react";
 
-const PURCHASE_DRAFT_KEY = "shopflow_purchase_draft";
+export const PURCHASE_DRAFT_KEY = "shopflow_purchase_draft";
+
+type DraftMeta = {
+  date: string;
+  supplierName: string;
+  itemCount: number;
+};
+
+function readDraftMeta(): DraftMeta | null {
+  try {
+    const raw = localStorage.getItem(PURCHASE_DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { values?: { purchaseDate?: string; items?: unknown[]; supplierName?: string } };
+    return {
+      date: parsed.values?.purchaseDate ?? "—",
+      supplierName: parsed.values?.supplierName ?? "—",
+      itemCount: parsed.values?.items?.length ?? 0,
+    };
+  } catch {
+    return null;
+  }
+}
 
 function formatCurrency(v: number) {
   return `₹${v.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -42,15 +63,24 @@ export function Purchases() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [hasDraft, setHasDraft] = useState(false);
+  const [discardDraftOpen, setDiscardDraftOpen] = useState(false);
+  const [draft, setDraft] = useState<DraftMeta | null>(null);
 
   useEffect(() => {
-    setHasDraft(!!localStorage.getItem(PURCHASE_DRAFT_KEY));
+    setDraft(readDraftMeta());
   }, []);
 
-  const discardDraft = () => {
+  const handleNewPurchase = () => {
+    // Always open a blank form — clear any existing draft first
     localStorage.removeItem(PURCHASE_DRAFT_KEY);
-    setHasDraft(false);
+    setDraft(null);
+    setLocation("/inventory/purchases/new");
+  };
+
+  const confirmDiscardDraft = () => {
+    localStorage.removeItem(PURCHASE_DRAFT_KEY);
+    setDraft(null);
+    setDiscardDraftOpen(false);
     toast.success("Draft discarded");
   };
 
@@ -71,6 +101,8 @@ export function Purchases() {
   const total = data?.total ?? 0;
   const totalPages = Math.ceil(total / 20);
 
+  const showEmptyState = !isLoading && purchases.length === 0 && !draft;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -81,42 +113,11 @@ export function Purchases() {
             Record supplier stock purchases — inventory is updated automatically.
           </p>
         </div>
-        <Button onClick={() => setLocation("/inventory/purchases/new")} className="gap-2">
+        <Button onClick={handleNewPurchase} className="gap-2">
           <Plus className="h-4 w-4" />
           New Purchase
         </Button>
       </div>
-
-      {/* Draft banner */}
-      {hasDraft && (
-        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-950/40">
-          <div className="flex items-center gap-3">
-            <FileText className="h-4 w-4 text-amber-600 shrink-0" />
-            <span className="text-amber-800 dark:text-amber-200 font-medium">
-              You have an unsaved purchase draft
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5 border-amber-300 bg-white text-amber-800 hover:bg-amber-100 dark:bg-transparent dark:text-amber-200 dark:border-amber-700"
-              onClick={() => setLocation("/inventory/purchases/new")}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              Resume Draft
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="text-amber-700 hover:text-amber-900 hover:bg-amber-100 dark:text-amber-400"
-              onClick={discardDraft}
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* Search */}
       <div className="relative max-w-sm">
@@ -151,61 +152,108 @@ export function Purchases() {
                   Loading purchases…
                 </TableCell>
               </TableRow>
-            ) : purchases.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-12">
-                  <div className="flex flex-col items-center gap-3">
-                    <ShoppingBag className="h-10 w-10 text-muted-foreground/40" />
-                    <p className="text-muted-foreground">No purchases yet</p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setLocation("/inventory/purchases/new")}
-                    >
-                      Record your first purchase
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
             ) : (
-              purchases.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-mono font-medium text-primary">
-                    {p.purchaseNumber}
-                  </TableCell>
-                  <TableCell>{p.purchaseDate}</TableCell>
-                  <TableCell>{p.supplierName}</TableCell>
-                  <TableCell className="text-center">
-                    <Badge variant="secondary">{p.items.length}</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">{formatCurrency(p.subtotal)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(p.gstTotal)}</TableCell>
-                  <TableCell className="text-right font-semibold">
-                    {formatCurrency(p.grandTotal)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setLocation(`/inventory/purchases/${p.id}`)}
-                        title="View details"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => setDeleteId(p.id)}
-                        title="Delete (reverses stock)"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
+              <>
+                {/* Draft row — always first */}
+                {draft && (
+                  <TableRow className="bg-amber-50/60 dark:bg-amber-950/20 hover:bg-amber-50 dark:hover:bg-amber-950/30">
+                    <TableCell>
+                      <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-400 font-mono">
+                        DRAFT
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{draft.date}</TableCell>
+                    <TableCell className="text-muted-foreground">{draft.supplierName}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="secondary">{draft.itemCount}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">—</TableCell>
+                    <TableCell className="text-right text-muted-foreground">—</TableCell>
+                    <TableCell className="text-right text-muted-foreground">—</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 h-7 text-xs border-amber-300 text-amber-700 hover:bg-amber-100 dark:text-amber-400 dark:border-amber-700"
+                          onClick={() => setLocation("/inventory/purchases/new")}
+                        >
+                          <Pencil className="h-3 w-3" />
+                          Continue
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={() => setDiscardDraftOpen(true)}
+                          title="Discard draft"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+
+                {/* Saved purchases */}
+                {purchases.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-mono font-medium text-primary">
+                      {p.purchaseNumber}
+                    </TableCell>
+                    <TableCell>{p.purchaseDate}</TableCell>
+                    <TableCell>{p.supplierName}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="secondary">{p.items.length}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right">{formatCurrency(p.subtotal)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(p.gstTotal)}</TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {formatCurrency(p.grandTotal)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setLocation(`/inventory/purchases/${p.id}`)}
+                          title="View details"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDeleteId(p.id)}
+                          title="Delete (reverses stock)"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+
+                {/* Empty state */}
+                {showEmptyState && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-12">
+                      <div className="flex flex-col items-center gap-3">
+                        <ShoppingBag className="h-10 w-10 text-muted-foreground/40" />
+                        <p className="text-muted-foreground">No purchases yet</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleNewPurchase}
+                        >
+                          Record your first purchase
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </>
             )}
           </TableBody>
         </Table>
@@ -226,7 +274,7 @@ export function Purchases() {
         </div>
       )}
 
-      {/* Delete confirm */}
+      {/* Delete purchase confirm */}
       <AlertDialog open={deleteId !== null} onOpenChange={(o) => !o && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -243,6 +291,27 @@ export function Purchases() {
               onClick={() => deleteId !== null && deleteMutation.mutate({ id: deleteId })}
             >
               {deleteMutation.isPending ? "Deleting…" : "Delete & Reverse Stock"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Discard draft confirm */}
+      <AlertDialog open={discardDraftOpen} onOpenChange={setDiscardDraftOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard Draft?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete your unsaved purchase draft. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep Draft</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={confirmDiscardDraft}
+            >
+              Discard
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

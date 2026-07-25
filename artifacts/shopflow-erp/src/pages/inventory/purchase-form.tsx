@@ -404,11 +404,14 @@ export function PurchaseForm() {
     return registerNavigationGuard(requestExit, location);
   }, [location, registerNavigationGuard, requestExit]);
 
+  const buildDraftPayload = () => {
+    const values = form.getValues();
+    const supplierName = suppliers.find((s) => s.id === Number(values.supplierId))?.name ?? "—";
+    return JSON.stringify({ values: { ...values, supplierName }, withGST });
+  };
+
   const saveDraftAndLeave = () => {
-    localStorage.setItem(
-      PURCHASE_DRAFT_KEY,
-      JSON.stringify({ values: form.getValues(), withGST }),
-    );
+    localStorage.setItem(PURCHASE_DRAFT_KEY, buildDraftPayload());
     toast.success("Purchase moved to drafts");
     if (pendingNavigation && pendingNavigate) finishNavigation(pendingNavigation, pendingNavigate);
   };
@@ -419,10 +422,7 @@ export function PurchaseForm() {
   };
 
   const saveDraft = () => {
-    localStorage.setItem(
-      PURCHASE_DRAFT_KEY,
-      JSON.stringify({ values: form.getValues(), withGST }),
-    );
+    localStorage.setItem(PURCHASE_DRAFT_KEY, buildDraftPayload());
     toast.success("Purchase saved as draft");
     navigateWithoutGuard(() => setLocation("/inventory/purchases"));
   };
