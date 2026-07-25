@@ -503,7 +503,7 @@ const itemSchema = z.object({
   categoryName: z.string().nullable().optional(),
   currentStock: z.coerce.number().optional(),
   quantity: z.coerce.number().int().min(1, "Qty must be ≥ 1"),
-  unit: z.string().optional(),
+  unit: z.string().min(1, "Unit required"),
   purchasePrice: z.coerce.number().min(0, "Price required"),
   itemDiscount: z.coerce.number().min(0).optional(),
   gstPercent: z.coerce.number().min(0).optional(),
@@ -1223,7 +1223,7 @@ export function PurchaseForm() {
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[140px]">Category <span className="text-destructive">*</span></th>
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground min-w-[160px]">Product <span className="text-destructive">*</span></th>
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[80px]">Qty <span className="text-destructive">*</span></th>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[70px]">Unit</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground w-[90px]">Unit <span className="text-destructive">*</span></th>
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[110px]">Price <span className="text-destructive">*</span></th>
                     <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[90px]">Disc</th>
                     {withGST && <th className="text-right px-3 py-2 font-medium text-muted-foreground w-[70px] text-xs">GST %</th>}
@@ -1392,13 +1392,13 @@ export function PurchaseForm() {
                           />
                         </td>
 
-                        {/* Unit — read-only; auto-filled from selected product */}
+                        {/* Unit — editable combobox; auto-filled from product, user can override */}
                         <td className="px-2 py-2">
-                          <Input
+                          <UnitSelect
                             value={item?.unit ?? ""}
-                            readOnly
-                            className="h-8 text-xs bg-muted/40 text-muted-foreground"
-                            tabIndex={-1}
+                            onChange={(u) => form.setValue(`items.${index}.unit`, u, { shouldDirty: true, shouldValidate: true })}
+                            error={form.formState.errors.items?.[index]?.unit?.message}
+                            compact
                           />
                         </td>
 
