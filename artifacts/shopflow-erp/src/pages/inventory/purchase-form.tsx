@@ -711,7 +711,7 @@ export function PurchaseForm() {
     toRemove.forEach((i) => remove(i));
     setSelectedIds(new Set());
   };
-  const watchedCharges = form.watch(["packingCharges", "transportCharges", "loadingCharges", "otherCharges", "discount"]);
+  const watchedCharges = form.watch(["packingCharges", "transportCharges", "loadingCharges", "otherCharges"]);
 
   const [withGST, setWithGST] = useState(true);
   const isDirty = form.formState.isDirty || withGST !== true;
@@ -802,9 +802,9 @@ export function PurchaseForm() {
   const transportCharges = Number(watchedCharges[1]) || 0;
   const loadingCharges = Number(watchedCharges[2]) || 0;
   const otherCharges = Number(watchedCharges[3]) || 0;
-  const discount = Number(watchedCharges[4]) || 0;
   const additionalCharges = packingCharges + transportCharges + loadingCharges + otherCharges;
-  const afterDiscount = subtotal - itemDiscountTotal - discount;
+  const itemDiscountPct = subtotal > 0 ? (itemDiscountTotal / subtotal) * 100 : 0;
+  const afterDiscount = subtotal - itemDiscountTotal;
   const afterGST = afterDiscount + (withGST ? gstTotal : 0);
   const grandTotal = afterGST + additionalCharges;
 
@@ -1656,62 +1656,58 @@ export function PurchaseForm() {
                   <Input type="number" min={0} step="0.01" placeholder="0.00" className="text-right" disabled={!supplierSelected} {...form.register("otherCharges")} />
                 </div>
               </div>
-              <div className="space-y-1">
-                <Label className="text-sm">Discount</Label>
-                <Input type="number" min={0} step="0.01" placeholder="0.00" className="text-right" disabled={!supplierSelected} {...form.register("discount")} />
-              </div>
             </div>
 
             {/* Summary */}
             <div className="rounded-lg border bg-card shadow-sm p-6 space-y-3">
               <h2 className="font-semibold text-base">Summary</h2>
               <div className="space-y-2 text-sm">
-                {/* Step 1 — Subtotal */}
+                {/* Subtotal */}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal</span>
                   <span className="font-medium">{fmt(subtotal)}</span>
                 </div>
 
-                {/* Step 2 — Discount */}
-                {discount > 0 && (
-                  <>
-                    <div className="flex justify-between text-green-600">
-                      <span>Discount</span>
-                      <span>− {fmt(discount)}</span>
-                    </div>
-                    <div className="flex justify-between bg-muted/40 rounded px-2 py-1">
-                      <span className="text-muted-foreground text-xs">After Discount</span>
-                      <span className="font-medium">{fmt(afterDiscount)}</span>
-                    </div>
-                  </>
+                {/* Total Discount — read-only, derived from item discounts */}
+                {itemDiscountTotal > 0 && (
+                  <div className="flex justify-between text-orange-600 dark:text-orange-400">
+                    <span>Total Discount ({itemDiscountPct.toFixed(1)}%)</span>
+                    <span>− {fmt(itemDiscountTotal)}</span>
+                  </div>
                 )}
 
-                {/* Step 3 — GST */}
-                {withGST && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">GST Total</span>
-                      <span className="font-medium">+ {fmt(gstTotal)}</span>
-                    </div>
-                    <div className="flex justify-between bg-muted/40 rounded px-2 py-1">
-                      <span className="text-muted-foreground text-xs">After GST</span>
-                      <span className="font-medium">{fmt(afterGST)}</span>
-                    </div>
-                  </>
+                {/* GST */}
+                {withGST && gstTotal > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">GST Total</span>
+                    <span className="font-medium">+ {fmt(gstTotal)}</span>
+                  </div>
                 )}
 
-                {/* Step 4 — Additional Charges */}
-                {additionalCharges > 0 && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Additional Charges</span>
-                      <span className="font-medium">+ {fmt(additionalCharges)}</span>
-                    </div>
-                    <div className="flex justify-between bg-muted/40 rounded px-2 py-1">
-                      <span className="text-muted-foreground text-xs">After Charges</span>
-                      <span className="font-medium">{fmt(grandTotal)}</span>
-                    </div>
-                  </>
+                {/* Individual additional charges — shown only when entered */}
+                {packingCharges > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Packing Charges</span>
+                    <span className="font-medium">+ {fmt(packingCharges)}</span>
+                  </div>
+                )}
+                {transportCharges > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Transport Charges</span>
+                    <span className="font-medium">+ {fmt(transportCharges)}</span>
+                  </div>
+                )}
+                {loadingCharges > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Loading / Unloading</span>
+                    <span className="font-medium">+ {fmt(loadingCharges)}</span>
+                  </div>
+                )}
+                {otherCharges > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Other Charges</span>
+                    <span className="font-medium">+ {fmt(otherCharges)}</span>
+                  </div>
                 )}
 
                 <Separator />
