@@ -420,9 +420,6 @@ const itemSchema = z.object({
   prevPurchasePrice: z.coerce.number().nullable().optional(),
   /** When true, update the product's stored purchase price on save */
   updatePrice: z.boolean().optional(),
-  /** Tracks whether the current product selection supplied these fields automatically. */
-  productAutoFilledBrand: z.boolean().optional(),
-  productAutoFilledCategory: z.boolean().optional(),
 });
 
 const schema = z.object({
@@ -457,8 +454,6 @@ const emptyItem = (): z.infer<typeof itemSchema> => ({
   lineTotal: 0,
   prevPurchasePrice: null,
   updatePrice: false,
-  productAutoFilledBrand: false,
-  productAutoFilledCategory: false,
 });
 
 
@@ -870,7 +865,8 @@ export function PurchaseForm() {
   const handleProductChange = useCallback(
     (index: number, comboVal: string) => {
       if (!comboVal) {
-        const current = form.getValues(`items.${index}`);
+        // Clearing Product is intentionally independent: keep any Brand and
+        // Category values the user selected or that Product previously filled.
         form.setValue(`items.${index}.productComboVal`, "", { shouldDirty: true });
         form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
         form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
@@ -879,18 +875,6 @@ export function PurchaseForm() {
         form.setValue(`items.${index}.gstPercent`, 0, { shouldDirty: true });
         form.setValue(`items.${index}.prevPurchasePrice`, null, { shouldDirty: true });
         form.setValue(`items.${index}.updatePrice`, false, { shouldDirty: true });
-        if (current.productAutoFilledBrand) {
-          form.setValue(`items.${index}.brandComboVal`, "", { shouldDirty: true });
-          form.setValue(`items.${index}.brandId`, null, { shouldDirty: true });
-          form.setValue(`items.${index}.brandName`, null, { shouldDirty: true });
-        }
-        if (current.productAutoFilledCategory) {
-          form.setValue(`items.${index}.categoryComboVal`, "", { shouldDirty: true });
-          form.setValue(`items.${index}.categoryId`, null, { shouldDirty: true });
-          form.setValue(`items.${index}.categoryName`, null, { shouldDirty: true });
-        }
-        form.setValue(`items.${index}.productAutoFilledBrand`, false, { shouldDirty: true });
-        form.setValue(`items.${index}.productAutoFilledCategory`, false, { shouldDirty: true });
         return;
       }
       if (comboVal.startsWith(NEW_ITEM_PREFIX)) {
@@ -903,8 +887,6 @@ export function PurchaseForm() {
         form.setValue(`items.${index}.gstPercent`, 0, { shouldDirty: true });
         form.setValue(`items.${index}.prevPurchasePrice`, null, { shouldDirty: true });
         form.setValue(`items.${index}.updatePrice`, false, { shouldDirty: true });
-        form.setValue(`items.${index}.productAutoFilledBrand`, false, { shouldDirty: true });
-        form.setValue(`items.${index}.productAutoFilledCategory`, false, { shouldDirty: true });
         return;
       }
 
@@ -930,13 +912,11 @@ export function PurchaseForm() {
       form.setValue(`items.${index}.brandComboVal`, brandCombo, { shouldDirty: true });
       form.setValue(`items.${index}.brandId`, product.brandId ?? null, { shouldDirty: true });
       form.setValue(`items.${index}.brandName`, brand?.name ?? null, { shouldDirty: true });
-      form.setValue(`items.${index}.productAutoFilledBrand`, true, { shouldDirty: true });
       // Auto-fill category — use name as comboVal (deduplication key)
       const catCombo = category?.name ?? NO_CATEGORY;
       form.setValue(`items.${index}.categoryComboVal`, catCombo, { shouldDirty: true });
       form.setValue(`items.${index}.categoryId`, product.categoryId ?? null, { shouldDirty: true });
       form.setValue(`items.${index}.categoryName`, category?.name ?? null, { shouldDirty: true });
-      form.setValue(`items.${index}.productAutoFilledCategory`, true, { shouldDirty: true });
     },
     [allProducts, allBrands, allCategories, form]
   );
@@ -947,7 +927,6 @@ export function PurchaseForm() {
         form.setValue(`items.${index}.brandComboVal`, "", { shouldDirty: true });
         form.setValue(`items.${index}.brandId`, null, { shouldDirty: true });
         form.setValue(`items.${index}.brandName`, null, { shouldDirty: true });
-        form.setValue(`items.${index}.productAutoFilledBrand`, false, { shouldDirty: true });
         return;
       }
       if (comboVal.startsWith(NEW_ITEM_PREFIX)) {
@@ -956,26 +935,14 @@ export function PurchaseForm() {
         form.setValue(`items.${index}.brandComboVal`, comboVal, { shouldDirty: true });
         form.setValue(`items.${index}.brandId`, null, { shouldDirty: true });
         form.setValue(`items.${index}.brandName`, name, { shouldDirty: true });
-        form.setValue(`items.${index}.productAutoFilledBrand`, false, { shouldDirty: true });
       } else {
         const bid = comboVal === NO_BRAND ? null : Number(comboVal) || null;
         const brand = allBrands.find((b: { id: number }) => b.id === bid);
         form.setValue(`items.${index}.brandComboVal`, comboVal, { shouldDirty: true });
         form.setValue(`items.${index}.brandId`, bid, { shouldDirty: true });
         form.setValue(`items.${index}.brandName`, brand?.name ?? null, { shouldDirty: true });
-        form.setValue(`items.${index}.productAutoFilledBrand`, false, { shouldDirty: true });
       }
-      // Category stays untouched. Only clear product if it's an existing selection
-      // (a pending-new product is being described by the brand the user just set, so keep it).
-      const currentProductVal = form.getValues(`items.${index}.productComboVal`);
-      if (!currentProductVal.startsWith(NEW_ITEM_PREFIX)) {
-        form.setValue(`items.${index}.productComboVal`, "", { shouldDirty: true });
-        form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
-        form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
-        form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
-        form.setValue(`items.${index}.purchasePrice`, 0, { shouldDirty: true });
-        form.setValue(`items.${index}.gstPercent`, 0, { shouldDirty: true });
-      }
+      // Brand changes are independent and never clear or auto-select Product.
     },
     [allBrands, form]
   );
@@ -986,7 +953,6 @@ export function PurchaseForm() {
         form.setValue(`items.${index}.categoryComboVal`, "", { shouldDirty: true });
         form.setValue(`items.${index}.categoryId`, null, { shouldDirty: true });
         form.setValue(`items.${index}.categoryName`, null, { shouldDirty: true });
-        form.setValue(`items.${index}.productAutoFilledCategory`, false, { shouldDirty: true });
         return;
       }
       form.setValue(`items.${index}.categoryComboVal`, comboVal, { shouldDirty: true });
@@ -995,11 +961,9 @@ export function PurchaseForm() {
         const name = comboVal.slice(NEW_ITEM_PREFIX.length);
         form.setValue(`items.${index}.categoryId`, null, { shouldDirty: true });
         form.setValue(`items.${index}.categoryName`, name, { shouldDirty: true });
-        form.setValue(`items.${index}.productAutoFilledCategory`, false, { shouldDirty: true });
       } else if (comboVal === NO_CATEGORY) {
         form.setValue(`items.${index}.categoryId`, null, { shouldDirty: true });
         form.setValue(`items.${index}.categoryName`, null, { shouldDirty: true });
-        form.setValue(`items.${index}.productAutoFilledCategory`, false, { shouldDirty: true });
       } else {
         // Existing category selected by name — resolve its ID
         form.setValue(`items.${index}.categoryName`, comboVal, { shouldDirty: true });
@@ -1009,19 +973,8 @@ export function PurchaseForm() {
           catsWithName.find((c: { brandId?: number | null }) => (c.brandId ?? null) === currentBrandId) ??
           catsWithName[0];
         form.setValue(`items.${index}.categoryId`, resolvedCat?.id ?? null, { shouldDirty: true });
-        form.setValue(`items.${index}.productAutoFilledCategory`, false, { shouldDirty: true });
       }
-      // Brand stays untouched. Only clear product if it's an existing selection
-      // (a pending-new product is being described by the category the user just set, so keep it).
-      const currentProductVal = form.getValues(`items.${index}.productComboVal`);
-      if (!currentProductVal.startsWith(NEW_ITEM_PREFIX)) {
-        form.setValue(`items.${index}.productComboVal`, "", { shouldDirty: true });
-        form.setValue(`items.${index}.productId`, 0, { shouldDirty: true });
-        form.setValue(`items.${index}.currentStock`, 0, { shouldDirty: true });
-        form.setValue(`items.${index}.unit`, "", { shouldDirty: true });
-        form.setValue(`items.${index}.purchasePrice`, 0, { shouldDirty: true });
-        form.setValue(`items.${index}.gstPercent`, 0, { shouldDirty: true });
-      }
+      // Category changes are independent and never clear or auto-select Product.
     },
     [allCategories, form]
   );
@@ -1350,9 +1303,6 @@ export function PurchaseForm() {
                     const item = watchedItems[index];
                     const brandComboVal = item?.brandComboVal ?? "";
                     const categoryComboVal = item?.categoryComboVal ?? "";
-
-                    const isPendingNewBrand = brandComboVal.startsWith(NEW_ITEM_PREFIX);
-                    const isPendingNewCat = categoryComboVal.startsWith(NEW_ITEM_PREFIX);
 
                     // Brand options — ALL brands. SearchableSelect auto-prepends the pending-new
                     // entry itself, so do NOT add it here (would cause a duplicate with two ticks).
